@@ -1,9 +1,44 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `notas-tablero` · S10 hecha, tests en verde (79 pasan, 2 omitidos): vista «Todos los proyectos» (`vistaTodos`, `resumenProyecto`, `abrirProyecto` en `plantilla.html`; `todos` es un flag aparte de `P`, `#p=todos`); probada por CDP con copia de `datos/` (clic en tarjeta/enlaces, hash, recarga, sin guardado). H5 completa. PR #7 (base `busqueda-favoritos`). Pendiente: que el usuario la pruebe (`node generar.mjs --abrir`).
+- 2026-10-04 · rama `notas-tablero` · S9 hecha, tests en verde (79 pasan, 2 omitidos): bloque «Gastos» en Bitácora (`grafTiempo`, `grafRamas`, `grafModelos` en `plantilla.html`, SVG en línea, paleta dataviz slots 1-3 validada, tooltip, tabla accesible); nota 3 respondida. Revisado con captura headless. Siguiente: S10.
+- 2026-10-04 · rama `notas-tablero` · S8 hecha, tests en verde (79 pasan, 2 omitidos): `bitacora.mjs` con `ramaDeTranscripcion` (cache por mtime), `sidsPorProyecto(…, rutas)` llena sid→.jsonl, `asociar(bit, mapa, rutas)` añade `rama` a cada fila, `agregar(registro, { por })` → `{ grupos, excluidas }`, `semanaISO`, `normalizarModelo`. Pendiente: probar S7 en el navegador. Siguiente: S9 (cargar skill `dataviz`).
+- 2026-10-04 · rama `notas-tablero` (sale de `busqueda-favoritos`) · S7 hecha, tests en verde (76 pasan, 2 omitidos): `estasAqui` salta a la siguiente no hecha (IEP → S6), `segmentos` pinta los `###`, proyecto persistente por id (`#p=` + `tablero.proyecto`). Notas 1 y 2 respondidas. Pendiente: probar en el navegador (`node generar.mjs --abrir`; IEP → Resumen y refrescar). Siguiente: S8.
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H5 — Notas del usuario y vista general
+
+Plan: `~/.claude/plans/quiero-que-planes-las-compressed-duckling.md`. Rama `notas-tablero` (sale de `busqueda-favoritos`). Todas las sesiones en **Sonnet**.
+
+### S7 — Arreglos de Resumen y proyecto persistente · **Sonnet** · rama `notas-tablero`
+`generar.mjs`, `generar.test.mjs`, `plantilla.html`.
+- [x] `estasAqui`: si la sección a la que apunta (con `sig` o sin él) ya está `hecho`, pasar a la siguiente no hecha; test con el Estado de `BACKLOG_H4` («S5c hecha … Siguiente: **S5c**» → S6)
+- [x] `segmentos(b)` usa `aplanar(b.estructura)`: los `###` salen como subsegmentos (S2b/S5b/S5c) y el `actual` coincide con `b.aqui`
+- [x] `lineaAqui` y el Mapa resaltan bien con `aqui` en un `###` (cadena H4 → S6 en IEP)
+- [x] Proyecto persistente: `tablero.proyecto` (id) en `guardar()`/`leer()` y `location.hash` `#p=iep` (el hash manda); restaurar al cargar; la actualización en vivo busca por id
+- [x] Responder notas 1 y 2 en `NOTAS_TABLERO.md` y moverlas a «Respondidas»
+
+### S8 — Datos de la bitácora para los gráficos · **Sonnet** · rama `notas-tablero`
+`bitacora.mjs`, `bitacora.test.mjs`, `generar.mjs`, fixtures.
+- [x] Rama por sesión: `sidsPorProyecto` guarda la ruta del `.jsonl`; primer `gitBranch` no vacío en las ~50 primeras líneas; cache por sid y mtime; cada fila con `rama` (o `null`)
+- [x] `agregar(registro, { por: 'dia'|'semana'|'mes'|'rama'|'modelo' })` → `[{ clave, costo, minutos, sesiones }]`; semana ISO, modelo normalizado, fechas incompletas y costos «?» excluidos y contados aparte
+- [x] Tests con fixture de transcripciones (`TABLERO_TRANSCRIPCIONES`) con `gitBranch`
+
+### S9 — Gráficos en la pestaña Bitácora · **Sonnet** · rama `notas-tablero`
+`plantilla.html`, README. Cargar antes la skill `dataviz`.
+- [x] Bloque «Gastos» con SVG en línea (sin librerías, funciona en `file://`) y colores del tema: costo por día/semana/mes (selector, duración en tooltip), costo por feature (rama, top 10 + «otras») y reparto por modelo
+- [x] Respetan el filtro «este proyecto / todas»; cada gráfico con tabla accesible o `aria-label`
+- [x] Responder la nota 3 y moverla a «Respondidas»
+
+### S10 — Vista general de todos los proyectos · **Sonnet** · rama `notas-tablero`
+`plantilla.html`, README (y `generar.mjs` solo si falta algún dato).
+- [x] Opción «Todos los proyectos» primera en `#proyecto`; vista por defecto sin proyecto guardado; se recuerda con el mecanismo de S7 (`#p=todos`)
+- [x] Una tarjeta por proyecto: progreso y «estás aquí», rama/cambios/PRs, notas abiertas y bitácora pendiente (enlazan a su pestaña), costo de 7 días y última actividad
+- [x] Clic en la tarjeta abre el Resumen del proyecto; fila de totales globales
+- [x] Prueba en navegador por CDP con una copia de `datos/` y PR de `notas-tablero`
 
 ## H4 — Búsqueda y favoritos
 

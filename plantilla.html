@@ -64,6 +64,9 @@ nav#pestanas button[aria-current="page"] { color: var(--texto); border-bottom-co
 .cuenta { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 4px; border-radius: 9px; background: var(--peligro); color: var(--fondo); font-size: 12px; text-align: center; font-weight: 600; }
 
 main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; min-width: 0; }
+.tarjeta-proy { cursor: pointer; }
+.tarjeta-proy:hover { border-color: var(--acento); }
+.chips-proy { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-top: 8px; }
 .rejilla { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
 .tarjeta { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 16px; min-width: 0; }
 .tarjeta h2 { font: 600 1rem/1.3 var(--titulos); margin: 0 0 10px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; min-width: 0; }
@@ -302,6 +305,24 @@ a.chip-ext:hover { border-color: var(--azul); }
 .estrella { background: none; border: 0; padding: 0 2px; cursor: pointer; color: var(--suave); font: inherit; line-height: 1; }
 .estrella.on { color: var(--aviso); } .estrella:hover:not(:disabled) { color: var(--aviso); } .estrella:disabled { cursor: default; opacity: .6; }
 .bit-filtros { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0 0 10px; font-size: .9em; }
+/* Gráficos: serie 1-3 de la paleta validada (dataviz), claro/oscuro */
+:root { --g1: light-dark(#2a78d6, #3987e5); --g2: light-dark(#eb6834, #d95926); --g3: light-dark(#1baf7a, #199e70); }
+.graf-rej { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 22px 28px; }
+.graf-cab { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 14px; }
+.graf h3 { margin: 0; font-size: 1em; }
+.graf-sel { display: flex; gap: 12px; font-size: .9em; }
+.graf svg { width: 100%; height: auto; display: block; margin-top: 6px; overflow: visible; }
+.graf .eje { fill: var(--suave); font: 11px var(--mono); }
+.graf .eje.val { fill: var(--texto); }
+.graf .rej { stroke: var(--borde); stroke-width: 1; opacity: .6; }
+.graf .barra { cursor: default; }
+.graf .barra:hover, .graf .barra:focus-visible { opacity: .8; outline: none; stroke: var(--texto); stroke-width: 1; }
+.graf-nota { margin: 4px 0 0; font-size: .85em; }
+.graf-ley { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; font-size: .9em; }
+.graf-ley i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.graf-tabla { margin-top: 6px; font-size: .9em; } .graf-tabla summary { cursor: pointer; color: var(--suave); }
+#graf-tip { position: fixed; z-index: 50; pointer-events: none; white-space: pre; padding: 5px 8px; font-size: 12px; background: var(--panel); color: var(--texto); border: 1px solid var(--borde); box-shadow: 0 2px 8px #0003; }
+#graf-tip[hidden] { display: none; }
 .bit-tabla { overflow-x: auto; }
 .bit-tabla table { border-collapse: collapse; width: 100%; font-size: .85em; }
 .bit-tabla th, .bit-tabla td { text-align: left; vertical-align: top; padding: 5px 8px; border-top: 1px solid var(--borde); }
@@ -417,7 +438,7 @@ const CASILLA = () => ['[ ]', '[x]'];
 const GLIFO_SEG = { hecho: '██', 'en-curso': '▒▒', pendiente: '░░' };
 const ESTADO_PR = (pr) => pr.isDraft && pr.state === 'OPEN' ? ['DRAFT', 'borrador'] : [pr.state, { MERGED: 'mergeado', OPEN: 'abierto', CLOSED: 'cerrado' }[pr.state]];
 
-let P = null, pestana = leer('tablero.pestana') || 'resumen', sel = {}, ramaFoco = null;
+let P = null, todos = false, pestana = leer('tablero.pestana') || 'resumen', sel = {}, ramaFoco = null;
 let modo = { backlogs: 'mapa', planes: 'mapa' };
 try { Object.assign(modo, JSON.parse(leer('tablero.modo') || '{}')); } catch {}
 const abiertos = new Map(); // «archivo#sección» → abierta/cerrada por el usuario
@@ -669,7 +690,7 @@ function mapaPlan(doc) {
 
 // ---------- Resumen: mapa en miniatura ----------
 function segmentos(b) {
-  const secs = b.estructura.filter((s) => s.estado !== 'doc');
+  const secs = aplanar(b.estructura).filter((s) => s.estado !== 'doc');
   return `<div class="segmentos" aria-label="Avance por sección">${secs.map((s) => `<button class="seg est-${s.estado}${s.id === b.aqui ? ' actual' : ''}" style="--p:${pct(s.hechas, s.total)}%" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${s.id}"
       title="${esc(plano(s.titulo))} · ${s.hechas}/${s.total}" aria-label="${esc(s.clave || plano(s.titulo))}: ${ETIQUETA[s.estado]}, ${s.hechas} de ${s.total}"><span class="bloque" aria-hidden="true">${GLIFO_SEG[s.estado]}</span><span class="clave" aria-hidden="true">${esc(s.clave || '·')}</span></button>`).join('')}</div>`;
 }
@@ -751,8 +772,8 @@ function avisar(texto, error) {
   clearTimeout(avisar.t); avisar.t = setTimeout(() => { el.textContent = ''; }, error ? 8000 : 3000);
 }
 function recargarDatos(nuevos) {
-  const i = DATOS.proyectos.indexOf(P);
-  DATOS = nuevos; P = DATOS.proyectos[Math.max(0, i)];
+  const id = P?.id;
+  DATOS = nuevos; P = DATOS.proyectos.find((p) => p.id === id) || DATOS.proyectos[0];
 }
 async function guardarEdicion(form, forzar) {
   const ruta = form.dataset.ruta, texto = form.querySelector('textarea').value, boton = form.querySelector('[type=submit]');
@@ -970,7 +991,7 @@ function vistaBitacora() {
     return `<tr${f.pendiente ? ' class="pend"' : ''} data-sid="${esc(f.sid || '')}"><td class="n">${esc(f.fecha)}</td><td>${esc(f.tarea)}${f.proyecto && f.proyecto !== P.id ? ` <span class="suave">(${esc(f.proyecto)})</span>` : ''}</td><td class="n">${esc(f.modelo)}</td><td class="n">${esc(f.duracion)}</td><td class="n">${esc(f.costoTxt)}</td><td class="n">${esc(ctx)}</td>
       ${edit ? celdaEdit(f) : `<td>${f.pendiente ? '<span class="etq DRAFT">pendiente</span>' : esc(f.calidad)}</td><td>${f.pendiente ? '' : esc(f.seguridad)}</td><td>${f.pendiente && f.sid && !f.proyecto ? '<span class="suave">sin proyecto</span> ' : ''}${esc(f.pendiente && f.notas === PENDIENTE_TXT ? '' : f.notas)}${f.pendiente && !f.sid ? ' <span class="suave">sin sid: no editable</span>' : ''}</td>`}</tr>`;
   };
-  return `<section class="tarjeta"><h2><span>${esc(b.ruta.split('/').pop())}</span><small>${hace(b.modificado)}</small></h2>
+  return `${bloqueGastos(base)}<section class="tarjeta"><h2><span>${esc(b.ruta.split('/').pop())}</span><small>${hace(b.modificado)}</small></h2>
     <div class="bit-totales"><span><b>${base.length}</b> sesiones</span><span><b>$${nf.format(costo)}</b> costo</span><span><b>${horas}</b> duración</span><span><b>${conCtx.length ? Math.round(100 * rojas / conCtx.length) : 0}%</b> con contexto 🔴</span></div>
     <div class="bit-filtros"><label><input type="checkbox" data-bit-filtro="todas"${bitFiltro.todas ? ' checked' : ''}> Todas las sesiones (no solo este proyecto)</label><label><input type="checkbox" data-bit-filtro="pendientes"${bitFiltro.pendientes ? ' checked' : ''}> Solo pendientes</label><span>${acciones(b.ruta)}</span></div>
     ${!editable() && bitPendientes() ? '<p class="suave">Para completar filas aquí abre el tablero con Tablero.app (o <code>node generar.mjs --abrir</code>).</p>' : ''}
@@ -979,6 +1000,104 @@ function vistaBitacora() {
     ${b.semanal?.filas?.length ? `<section class="tarjeta" style="margin-top:18px"><h2><span>Resumen semanal</span></h2><div class="bit-tabla" role="region" aria-label="Resumen semanal" tabindex="0"><table><thead><tr>${b.semanal.columnas.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${b.semanal.filas.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>` : ''}
     ${b.lecciones?.length ? `<section class="tarjeta" style="margin-top:18px"><h2><span>Lecciones aprendidas</span><small>${b.lecciones.length}</small></h2>${b.lecciones.map((l) => `<div class="fila"><span>${inline(l.texto)}</span><span class="suave">${esc(l.fecha)}</span></div>`).join('')}</section>` : ''}`;
 }
+// ---- Gráficos de gastos (SVG en línea; la agregación replica `agregar` de bitacora.mjs) ----
+const semanaISO = (fecha) => {
+  const d = new Date(`${fecha}T00:00:00Z`), dia = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dia);
+  return `${d.getUTCFullYear()}-W${String(Math.ceil(((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7)).padStart(2, '0')}`;
+};
+const modeloBase = (m) => String(m ?? '').trim().replace(/[\s-]*v?\d+(?:[.,]\d+)*.*$/, '') || null;
+function agregarBit(registro, por) {
+  const tiempo = { dia: (f) => f, semana: semanaISO, mes: (f) => f.slice(0, 7) }[por];
+  const grupos = new Map();
+  let excluidas = 0;
+  for (const f of registro) {
+    const fecha = (String(f.fecha).match(/^\d{4}-\d{2}-\d{2}/) || [])[0];
+    const clave = tiempo ? (fecha && tiempo(fecha)) : por === 'rama' ? f.rama : modeloBase(f.modelo);
+    if (!clave || f.costo == null) { excluidas++; continue; }
+    const g = grupos.get(clave) || { clave, costo: 0, minutos: 0, sesiones: 0 };
+    g.costo += f.costo; g.minutos += f.minutos ?? 0; g.sesiones++;
+    grupos.set(clave, g);
+  }
+  const lista = [...grupos.values()];
+  lista.sort(tiempo ? (a, b) => a.clave.localeCompare(b.clave) : (a, b) => b.costo - a.costo);
+  return { grupos: lista, excluidas };
+}
+let bitGraf = { por: 'dia' };
+const MODELO_COLOR = { Opus: 'var(--g1)', Sonnet: 'var(--g2)', Haiku: 'var(--g3)' }; // el color sigue a la entidad, no al rango
+const usd = (n) => `$${nf.format(n)}`;
+const dur = (m) => (m >= 60 ? `${nf.format(m / 60)} h` : `${nf.format(m)} min`);
+const marca = (g, extra) => `data-tip="${esc(`${g.clave}\n${usd(g.costo)} · ${dur(g.minutos)} · ${g.sesiones} ses.${extra || ''}`)}" tabindex="0"`;
+function tablaGraf(titulo, grupos, total) {
+  return `<details class="graf-tabla"><summary>Ver como tabla</summary><div class="bit-tabla"><table><caption class="sr">${esc(titulo)}</caption><thead><tr><th>Clave</th><th>Costo</th><th>Duración</th><th>Sesiones</th></tr></thead><tbody>${grupos.map((g) => `<tr><td>${esc(g.clave)}</td><td class="n">${usd(g.costo)}</td><td class="n">${dur(g.minutos)}</td><td class="n">${g.sesiones}</td></tr>`).join('')}</tbody></table></div></details>`;
+}
+const notaExcl = (n) => (n ? `<p class="suave graf-nota">${n} fila${n === 1 ? '' : 's'} sin dato (costo «?», fecha incompleta o sin rama) no se grafica${n === 1 ? '' : 'n'}.</p>` : '');
+function grafTiempo(base) {
+  const por = bitGraf.por, tope = { dia: 30, semana: 16, mes: 12 }[por];
+  const { grupos: todos, excluidas } = agregarBit(base, por), grupos = todos.slice(-tope);
+  const titulo = `Costo por ${por === 'dia' ? 'día' : por}`;
+  const radios = ['dia', 'semana', 'mes'].map((p) => `<label><input type="radio" name="graf-por" data-graf-por="${p}"${p === por ? ' checked' : ''}> ${p === 'dia' ? 'Día' : p === 'semana' ? 'Semana' : 'Mes'}</label>`).join('');
+  if (!grupos.length) return `<div class="graf"><div class="graf-cab"><h3>${titulo}</h3><span class="graf-sel">${radios}</span></div><p class="suave">Sin costos con fecha para graficar.</p>${notaExcl(excluidas)}</div>`;
+  const W = 640, H = 190, mi = 44, md = 8, ms = 10, mb = 26, max = Math.max(...grupos.map((g) => g.costo)) || 1;
+  const paso = (W - mi - md) / grupos.length, ancho = Math.max(3, Math.min(28, paso - 2));
+  const y = (v) => ms + (H - ms - mb) * (1 - v / max);
+  const etq = (c) => (por === 'dia' ? c.slice(5) : por === 'semana' ? c.slice(5) : c);
+  const cada = Math.ceil(grupos.length / 8);
+  const barras = grupos.map((g, i) => {
+    const x = mi + i * paso + (paso - ancho) / 2, top = y(g.costo), h = Math.max(1, H - mb - top), r = Math.min(4, ancho / 2, h);
+    return `<path class="barra" ${marca(g)} d="M${x},${H - mb}V${top + r}Q${x},${top} ${x + r},${top}H${x + ancho - r}Q${x + ancho},${top} ${x + ancho},${top + r}V${H - mb}Z" fill="var(--acento)"/>${i % cada === 0 || i === grupos.length - 1 ? `<text x="${x + ancho / 2}" y="${H - 8}" text-anchor="middle" class="eje">${esc(etq(g.clave))}</text>` : ''}`;
+  }).join('');
+  const marcas = [0, max / 2, max].map((v) => `<line x1="${mi}" x2="${W - md}" y1="${y(v)}" y2="${y(v)}" class="rej"/><text x="${mi - 6}" y="${y(v) + 4}" text-anchor="end" class="eje">${usd(Math.round(v * 100) / 100)}</text>`).join('');
+  const total = grupos.reduce((a, g) => a + g.costo, 0);
+  return `<div class="graf"><div class="graf-cab"><h3>${titulo}</h3><span class="graf-sel" role="radiogroup" aria-label="Agrupar por">${radios}</span></div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${titulo}: ${grupos.length} periodos, total ${usd(total)}, máximo ${usd(max)}`)}">${marcas}${barras}</svg>
+    <p class="suave graf-nota">Últimos ${grupos.length} · ${usd(total)} en total</p>${notaExcl(excluidas)}${tablaGraf(titulo, grupos)}</div>`;
+}
+function grafBarrasH(titulo, grupos, excluidas, color, vacio) {
+  if (!grupos.length) return `<div class="graf"><div class="graf-cab"><h3>${titulo}</h3></div><p class="suave">${vacio}</p>${notaExcl(excluidas)}</div>`;
+  const max = Math.max(...grupos.map((g) => g.costo)) || 1, fila = 22, W = 640, mi = 170, md = 70, H = grupos.length * fila + 4;
+  const barras = grupos.map((g, i) => {
+    const w = Math.max(2, (W - mi - md) * g.costo / max), yy = 2 + i * fila, r = Math.min(4, w / 2);
+    const nombre = g.clave.length > 24 ? `${g.clave.slice(0, 23)}…` : g.clave;
+    return `<text x="${mi - 8}" y="${yy + 14}" text-anchor="end" class="eje">${esc(nombre)}</text><path class="barra" ${marca(g)} d="M${mi},${yy + 2}H${mi + w - r}Q${mi + w},${yy + 2} ${mi + w},${yy + 2 + r}V${yy + 14 - r}Q${mi + w},${yy + 14} ${mi + w - r},${yy + 14}H${mi}Z" fill="${color(g)}"/><text x="${mi + w + 6}" y="${yy + 13}" class="eje val">${usd(g.costo)}</text>`;
+  }).join('');
+  return `<div class="graf"><div class="graf-cab"><h3>${titulo}</h3></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${titulo}: ${grupos.map((g) => `${g.clave} ${usd(g.costo)}`).join(', ')}`)}">${barras}</svg>${notaExcl(excluidas)}${tablaGraf(titulo, grupos)}</div>`;
+}
+function grafRamas(base) {
+  const { grupos, excluidas } = agregarBit(base, 'rama');
+  let lista = grupos;
+  if (grupos.length > 10) {
+    const resto = grupos.slice(10);
+    lista = [...grupos.slice(0, 10), { clave: `otras (${resto.length})`, costo: resto.reduce((a, g) => a + g.costo, 0), minutos: resto.reduce((a, g) => a + g.minutos, 0), sesiones: resto.reduce((a, g) => a + g.sesiones, 0), otras: true }];
+  }
+  return grafBarrasH('Costo por feature (rama)', lista, excluidas, (g) => (g.otras ? 'var(--suave)' : 'var(--acento)'), 'Ninguna sesión con rama conocida.');
+}
+function grafModelos(base) {
+  const { grupos, excluidas } = agregarBit(base, 'modelo');
+  const total = grupos.reduce((a, g) => a + g.costo, 0);
+  const col = (g) => MODELO_COLOR[g.clave] || 'var(--suave)';
+  if (!grupos.length || !total) return `<div class="graf"><div class="graf-cab"><h3>Reparto por modelo</h3></div><p class="suave">Sin costos por modelo.</p>${notaExcl(excluidas)}</div>`;
+  const W = 640, H = 22;
+  let x = 0;
+  const segs = grupos.map((g) => {
+    const w = W * g.costo / total, s = `<rect class="barra" ${marca(g, ` · ${Math.round(100 * g.costo / total)} %`)} x="${x + 1}" y="0" width="${Math.max(1, w - 2)}" height="${H}" rx="3" fill="${col(g)}"/>`;
+    x += w; return s;
+  }).join('');
+  const leyenda = grupos.map((g) => `<li><i style="background:${col(g)}"></i>${esc(g.clave)} <b>${usd(g.costo)}</b> <span class="suave">${Math.round(100 * g.costo / total)} % · ${g.sesiones} ses.</span></li>`).join('');
+  return `<div class="graf"><div class="graf-cab"><h3>Reparto por modelo</h3></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`Reparto por modelo: ${grupos.map((g) => `${g.clave} ${Math.round(100 * g.costo / total)} %`).join(', ')}`)}">${segs}</svg><ul class="graf-ley">${leyenda}</ul>${notaExcl(excluidas)}${tablaGraf('Reparto por modelo', grupos)}</div>`;
+}
+const bloqueGastos = (base) => `<section class="tarjeta graficos" style="margin-bottom:18px"><h2><span>Gastos</span><small>${bitFiltro.todas ? 'todas las sesiones' : 'este proyecto'}</small></h2><div class="graf-rej">${grafTiempo(base)}${grafRamas(base)}${grafModelos(base)}</div></section>`;
+// Tooltip único: sigue al ratón y al foco de teclado.
+const tip = document.createElement('div'); tip.id = 'graf-tip'; tip.hidden = true; document.body.appendChild(tip);
+const verTip = (el, ev) => {
+  const t = el.dataset.tip; if (!t) return;
+  tip.textContent = t; tip.hidden = false;
+  const r = el.getBoundingClientRect(), x = ev?.clientX ?? r.left + r.width / 2, y = ev?.clientY ?? r.top;
+  tip.style.left = `${Math.min(innerWidth - tip.offsetWidth - 8, Math.max(8, x + 12))}px`; tip.style.top = `${Math.max(8, y - tip.offsetHeight - 10)}px`;
+};
+document.addEventListener('mousemove', (e) => { const el = e.target.closest?.('[data-tip]'); if (el) verTip(el, e); else tip.hidden = true; });
+document.addEventListener('focusin', (e) => { if (e.target.dataset?.tip) verTip(e.target); });
+document.addEventListener('focusout', () => { tip.hidden = true; });
 const PENDIENTE_TXT = '_pendiente_';
 async function alternarFav(titulo, boton) {
   const poner = !favoritos().has(titulo);
@@ -1127,7 +1246,58 @@ function filaPR(pr, sinFila) {
   return sinFila ? `<span style="display:inline-flex;gap:8px;justify-content:space-between;width:calc(100% - 20px)">${dentro}</span>` : `<div class="fila">${dentro}</div>`;
 }
 
+// ---------- Vista «Todos los proyectos» ----------
+const hoyMenos = (d) => new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
+function resumenProyecto(p) {
+  const bl = p.backlogs.filter((b) => !b.esPlan);
+  const hechas = bl.reduce((a, b) => a + b.hechas, 0), total = bl.reduce((a, b) => a + b.total, 0);
+  const principal = bl.find((b) => b.aqui) || bl[0];
+  const aqui = principal && aplanar(principal.estructura || []).find((s) => s.id === principal.aqui);
+  const hijo = aqui?.vinculo && p.backlogs.find((b) => b.archivo === aqui.vinculo);
+  const sub = hijo && aplanar(hijo.estructura || []).find((s) => s.id === hijo.aqui);
+  const g = p.git;
+  const propias = (p.bitacora?.registro || []).filter((f) => f.proyecto === p.id);
+  const desde = hoyMenos(7);
+  const costo7 = propias.filter((f) => typeof f.costo === 'number' && /^\d{4}-\d\d-\d\d/.test(f.fecha || '') && f.fecha >= desde).reduce((a, f) => a + f.costo, 0);
+  const fechas = [...p.backlogs.map((b) => b.modificado), p.notas?.modificado, g?.commits?.[0]?.fecha, ...propias.map((f) => /^\d{4}-\d\d-\d\d$/.test(f.fecha || '') ? f.fecha : null)].filter(Boolean);
+  const ultima = fechas.sort((a, b) => new Date(b) - new Date(a))[0];
+  return { p, hechas, total, principal, aqui, sub, g, prs: (g?.prs || []).filter((x) => x.state === 'OPEN').length, sinPush: g?.sinPush?.length || 0,
+    notas: p.notas?.abiertas.length || 0, bit: propias.filter((f) => f.pendiente && f.sid).length, costo7, ultima };
+}
+function vistaTodos() {
+  const rs = DATOS.proyectos.map(resumenProyecto);
+  const suma = (k) => rs.reduce((a, r) => a + r[k], 0);
+  const ir = (r, pest, txt, cls = 'enlace') => `<button class="${cls}" data-proy="${esc(r.p.id)}" data-pest="${pest}">${txt}</button>`;
+  const tarjeta = (r) => `<section class="tarjeta tarjeta-proy" data-proy="${esc(r.p.id)}" aria-label="${esc(r.p.nombre)}">
+      <h2><button class="enlace" data-proy="${esc(r.p.id)}" data-pest="resumen">${esc(r.p.nombre)}</button><small>${r.ultima ? hace(r.ultima) : 'sin actividad'}</small></h2>
+      ${r.total ? `<div>${barra(r.hechas, r.total, 20)}</div><div class="suave">${r.hechas} de ${r.total} tareas</div>` : '<div class="suave">Sin backlog</div>'}
+      ${r.aqui ? `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> ${esc(corto(plano(r.aqui.titulo), 70))}${r.sub ? ` <span class="suave">→</span> ${esc(corto(plano(r.sub.titulo), 50))}` : ''}</p>` : ''}
+      <div class="chips-proy">
+        ${r.g?.rama ? `<span class="etq" title="Rama actual">⎇ ${esc(r.g.rama)}</span>` : ''}
+        ${r.sinPush ? `<span class="etq DRAFT">↑ ${r.sinPush} sin subir</span>` : ''}
+        ${r.g ? ir(r, 'github', `⊙ ${r.prs} PR abiertos`) : ''}
+        ${ir(r, 'notas', `✉ ${r.notas} nota${r.notas === 1 ? '' : 's'}`)}
+        ${r.p.bitacora ? ir(r, 'bitacora', `✎ ${r.bit} pendiente${r.bit === 1 ? '' : 's'}`) : ''}
+        <span class="suave" title="Costo de los últimos 7 días (bitácora)">${usd(r.costo7)} · 7 d</span>
+      </div></section>`;
+  return `<div class="bit-totales" aria-label="Totales globales"><span><b>${rs.length}</b> proyectos</span><span><b>${suma('hechas')}/${suma('total')}</b> tareas</span><span><b>${suma('prs')}</b> PR abiertos</span><span><b>${suma('notas')}</b> notas abiertas</span><span><b>${suma('bit')}</b> bitácora pendiente</span><span><b>${usd(suma('costo7'))}</b> costo 7 d</span></div>
+    <div class="rejilla" style="margin-top:14px">${rs.map(tarjeta).join('')}</div>`;
+}
+function abrirProyecto(id, pest) {
+  const p = buscarProyecto(id);
+  if (!p) return;
+  soltarEditor(); todos = false; P = p; sel = {}; ramaFoco = null; previas.clear();
+  pestana = pest || 'resumen'; guardar('tablero.pestana', pestana);
+  recordarProyecto(); pintar(); alInicio();
+}
+
 function pintar() {
+  if (todos) {
+    $('#pestanas').innerHTML = ''; $('#rama-cab').innerHTML = '';
+    $('#barra-estado').innerHTML = `<span class="${enVivo ? 'vivo' : 'manual'}">${enVivo ? '● en vivo' : '◌ manual'}</span><span class="derecha opcional">Actualizado ${esc(fecha(DATOS.generado))}</span>`;
+    $('#contenido').innerHTML = '<div class="prompt" aria-hidden="true"><b>❯</b> tablero --todos</div>' + vistaTodos();
+    return;
+  }
   pintarNavegacion();
   if (pestana === 'bitacora' && !P.bitacora) pestana = 'resumen';
   $('#contenido').innerHTML = promptLinea() + (VISTAS[pestana] || VISTAS.resumen)();
@@ -1213,6 +1383,7 @@ document.addEventListener('click', (e) => {
     });
     return;
   }
+  if (b.dataset.proy) { abrirProyecto(b.dataset.proy, b.dataset.pest); return; }
   if (b.dataset.fav) { alternarFav(b.dataset.fav, b); return; }
   if (b.dataset.guardarBit) { guardarBitacora(b.dataset.guardarBit, b); return; }
   if (b.dataset.rama) { e.preventDefault(); irRama(b.dataset.rama); return; }
@@ -1236,6 +1407,10 @@ document.addEventListener('click', (e) => {
     if (b.dataset.sec) saltar(idPaso(b.dataset.sel, b.dataset.sec));
     else alInicio();
   }
+});
+document.addEventListener('click', (e) => {
+  const t = todos && e.target.closest('.tarjeta-proy');
+  if (t && !e.target.closest('button, a')) abrirProyecto(t.dataset.proy);
 });
 document.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1271,6 +1446,7 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   const r = e.target;
   if ('soloFav' in (r.dataset || {})) { soloFav = r.checked; pintar(); $('[data-solo-fav]')?.focus(); return; }
+  if (r.dataset?.grafPor) { bitGraf.por = r.dataset.grafPor; pintar(); $(`[data-graf-por=${r.dataset.grafPor}]`)?.focus(); return; }
   if (r.dataset?.bitFiltro) { bitFiltro[r.dataset.bitFiltro] = r.checked; pintar(); $(`[data-bit-filtro=${r.dataset.bitFiltro}]`)?.focus(); return; }
   if (r.dataset?.bit && r.closest('tr')?.dataset.sid) bitBorrador.set(r.closest('tr').dataset.sid, { ...bitBorrador.get(r.closest('tr').dataset.sid), [r.dataset.bit]: r.value });
   if (r.type === 'radio' && r.name.startsWith('lado:')) { const c = r.closest('.accion')?.querySelector('input[name=accion]'); if (c) c.checked = true; }
@@ -1286,9 +1462,26 @@ $('#tema').addEventListener('change', (e) => {
   guardar('tablero.tema', e.target.value);
 });
 
-$('#proyecto').innerHTML = DATOS.proyectos.map((p, i) => `<option value="${i}">${esc(p.nombre)}</option>`).join('');
-$('#proyecto').addEventListener('change', (e) => { soltarEditor(); P = DATOS.proyectos[e.target.value]; sel = {}; ramaFoco = null; previas.clear(); pintar(); });
-P = DATOS.proyectos[0];
+// El proyecto activo se recuerda por id: #p=<id> en la URL manda sobre localStorage.
+const idEnHash = () => decodeURIComponent((location.hash.match(/[#&]p=([^&]*)/) || [])[1] || '');
+const buscarProyecto = (id) => DATOS.proyectos.find((p) => p.id === id);
+function recordarProyecto() {
+  const id = todos ? 'todos' : P.id;
+  guardar('tablero.proyecto', id);
+  try { history.replaceState(null, '', `#p=${encodeURIComponent(id)}`); } catch {}
+  $('#proyecto').value = id;
+}
+$('#proyecto').innerHTML = `<option value="todos">Todos los proyectos</option>` + DATOS.proyectos.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');
+$('#proyecto').addEventListener('change', (e) => { soltarEditor(); todos = e.target.value === 'todos'; if (!todos) P = buscarProyecto(e.target.value); sel = {}; ramaFoco = null; previas.clear(); recordarProyecto(); pintar(); });
+window.addEventListener('hashchange', () => {
+  if (idEnHash() === 'todos') { if (!todos) { soltarEditor(); todos = true; recordarProyecto(); pintar(); } return; }
+  const p = buscarProyecto(idEnHash());
+  if (p && (p !== P || todos)) { soltarEditor(); todos = false; P = p; sel = {}; ramaFoco = null; previas.clear(); recordarProyecto(); pintar(); }
+});
+const idInicial = idEnHash() || leer('tablero.proyecto') || 'todos';
+todos = idInicial === 'todos' || !buscarProyecto(idInicial);
+P = buscarProyecto(idInicial) || DATOS.proyectos[0];
+if (P) recordarProyecto();
 if (P) pintar(); else $('#contenido').innerHTML = '<div class="vacio">No hay proyectos en proyectos.json.</div>';
 </script>
 </body>
