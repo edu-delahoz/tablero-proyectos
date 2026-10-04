@@ -1,17 +1,17 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
-- 2026-10-04 · rama `backlog-mejoras` (sale de `integraciones`) · Paso 0 hecho: backlog nuevo con H1–H3. Siguiente: S1.
+- 2026-10-04 · rama `mejoras-ui` (sale de `backlog-mejoras`) · S1 hecha (alturas con `--alto-barra`, grafo con carriles fijos main/develop, cabecera de carriles, badges). Siguiente: S2 en la misma rama.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
 
 ## H1 — Ajustes visuales
 
 ### S1 — Alturas y grafo legible · **Sonnet** · rama `mejoras-ui`
-Solo `plantilla.html`. Causa probable del corte: `.panel-falta` (`max-height: calc(100dvh - 40px)`) y `.gh-grafo` (`calc(100dvh - 56px)`) son `sticky` y no descuentan la barra de estado sticky (`#barra-estado`) ni el rótulo que sube `-.8em`. Confirmar en el navegador.
-- [ ] Variable `--alto-barra` (medida con un `ResizeObserver` sobre `#barra-estado`) y `max-height` de `.panel-falta` y `.gh-grafo` = `100dvh − top − --alto-barra − margen del rótulo`; comprobar en el navegador que no se cortan (escritorio y ventana baja)
-- [ ] Grafo: `main`/`master` siempre en el carril 0 con color fijo (acento) y `develop` en el carril 1 con su color fijo; el resto rota la paleta (`svgGrafo`, `color(col)`)
-- [ ] Cabecera de carriles sobre el SVG: el nombre de cada rama en su carril y su color, para leer qué línea es cuál sin buscar la etiqueta ⎇
-- [ ] `badgeRama`: `main` y `develop` con estilo propio (relleno + icono); la rama actual resaltada; leyenda que liste rama → color en vez del texto genérico de `vistaGrafo`
+Solo `plantilla.html`. Causa probable del corte: `.panel-falta` (`max-height: calc(100dvh - 40px)`) y `.gh-grafo` (`calc(100dvh - 56px)`) son `sticky` y no descuentan la barra de estado sticky (`#barra-estado`) ni el rótulo que sube `-.8em`. Confirmado: el rótulo `-.8em` quedaba cortado por el `overflow` del panel sticky; ahora baja dentro del borde. Nota: main/develop se fijan por color de su carril según el `refs` de cada commit (no se tocó `generar.mjs`).
+- [x] Variable `--alto-barra` (medida con un `ResizeObserver` sobre `#barra-estado`) y `max-height` de `.panel-falta` y `.gh-grafo` = `100dvh − top − --alto-barra − margen del rótulo`; comprobar en el navegador que no se cortan (escritorio y ventana baja)
+- [x] Grafo: `main`/`master` siempre en el carril 0 con color fijo (acento) y `develop` en el carril 1 con su color fijo; el resto rota la paleta (`svgGrafo`, `color(col)`)
+- [x] Cabecera de carriles sobre el SVG: el nombre de cada rama en su carril y su color, para leer qué línea es cuál sin buscar la etiqueta ⎇
+- [x] `badgeRama`: `main` y `develop` con estilo propio (relleno + icono); la rama actual resaltada; leyenda que liste rama → color en vez del texto genérico de `vistaGrafo`
 
 ### S2 — Barra de estado, favicon y actualización en vivo · **Sonnet** · misma rama `mejoras-ui`
 `plantilla.html`, `generar.mjs`, `servidor.test.mjs`, README. PR de `mejoras-ui` al terminar.

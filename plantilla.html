@@ -28,6 +28,7 @@
   --azul: light-dark(#1f6fb2, #61afef); --cian: light-dark(#0f7a7a, #56b6c2);
   --barra: light-dark(#d9d0c0, #3a3731); --codigo: light-dark(#e9e2d4, #25231f); --sel: light-dark(#e8dccb, #2c2925);
   --estado-fondo: light-dark(#005fb8, #007acc);
+  --alto-barra: 28px; --margen-rotulo: 14px;
   --prosa: var(--mono); --titulos: var(--mono); --tam: 14px; --radio: 0;
 }
 :root[data-theme="light"] { color-scheme: light; }
@@ -128,7 +129,7 @@ details summary { cursor: pointer; }
 .mapa-interior { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); align-items: start; }
 @container (min-width: 880px) {
   .mapa-interior { grid-template-columns: minmax(0, 1fr) 300px; }
-  .panel-falta { position: sticky; top: 12px; max-height: calc(100dvh - 40px); overflow: auto; }
+  .panel-falta { position: sticky; top: 12px; max-height: calc(100dvh - 12px - var(--alto-barra) - var(--margen-rotulo)); overflow: auto; }
 }
 ol.linea { list-style: none; margin: 0; padding: 0; counter-reset: paso; }
 .paso { counter-increment: paso; scroll-margin-top: 16px; min-width: 0; }
@@ -196,7 +197,14 @@ ul.tareas ul.tareas { margin-left: 0; }
 button.rama { cursor: pointer; font-family: var(--mono); }
 button.rama:hover { background: color-mix(in srgb, var(--rama, var(--aviso)) 26%, transparent); }
 .cab-paso .rama { margin-left: 8px; }
-.rama-actual { font-size: .95em; padding: 2px .7em; }
+.rama-main { --rama: var(--acento); background: var(--acento); color: var(--sobre-acento); border-color: var(--acento); }
+.rama-dev { --rama: var(--azul); background: var(--azul); color: var(--sobre-acento); border-color: var(--azul); }
+button.rama-main:hover { background: color-mix(in srgb, var(--acento) 80%, var(--texto)); }
+button.rama-dev:hover { background: color-mix(in srgb, var(--azul) 80%, var(--texto)); }
+.rama-actual { font-size: .95em; padding: 2px .7em; box-shadow: 0 0 0 2px var(--fondo), 0 0 0 3.5px var(--rama, var(--aviso)); }
+.cab-carriles { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 10px; }
+.cab-carriles .carril { display: inline-flex; align-items: center; gap: .4em; }
+.cab-carriles .carril i { width: 14px; height: 3px; background: var(--rama); }
 .rama-actual .punto { width: .5em; height: .5em; border-radius: 50%; background: currentColor; flex: none; }
 .titulo-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
 
@@ -244,7 +252,7 @@ ul.items { list-style: "- "; }
 @media (min-width: 980px) {
   .gh-rejilla { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-areas: "ramas grafo" "prs prs"; }
   .gh-ramas { grid-area: ramas; }
-  .gh-grafo { grid-area: grafo; position: sticky; top: 12px; max-height: calc(100dvh - 56px); overflow: auto; }
+  .gh-grafo { grid-area: grafo; position: sticky; top: 12px; max-height: calc(100dvh - 12px - var(--alto-barra) - var(--margen-rotulo)); overflow: auto; }
   .gh-prs { grid-area: prs; }
 }
 @container (max-width: 520px) { .grafo-fila .cuando { display: none; } }
@@ -313,6 +321,9 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
 .tarjeta > h2:first-child > * { background: var(--fondo); padding: 0 6px; pointer-events: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tarjeta > h2:first-child > span:first-child { color: var(--acento); }
 .tarjeta > h2:first-child > span:first-child::before { content: "─ "; color: var(--borde); }
+/* Los paneles sticky tienen overflow: el rótulo no puede sobresalir por arriba sin cortarse; baja dentro del borde. */
+@media (min-width: 980px) { .gh-grafo { padding-top: 30px; } .gh-grafo > h2:first-child { top: 6px; } }
+@container (min-width: 880px) { .panel-falta { padding-top: 30px; } .mapa-interior .panel-falta > .rotulo:first-child { top: 6px; } }
 .rotulo { text-transform: none; letter-spacing: 0; }
 .rotulo::before { content: "# "; color: var(--acento); }
 .panel-falta > .rotulo:first-child, .mapa-cab > .rotulo:first-child { position: absolute; top: -.8em; left: 10px; margin: 0; background: var(--fondo); padding: 0 6px; color: var(--acento); }
@@ -434,7 +445,11 @@ const porSincronizar = () => (P.integraciones || []).reduce((a, x) => a + (x.pen
 // ---------- Ramas: badge + vínculos con backlogs, planes y PRs ----------
 const COLORES = ['var(--acento)', 'var(--azul)', 'var(--ok)', 'var(--morado)', 'var(--aviso)', 'var(--cian)', 'var(--peligro)'];
 const color = (i) => COLORES[i % COLORES.length];
-const badgeRama = (nombre, extra = '', estiloColor = '') => `<button class="rama ${extra}" data-rama="${esc(nombre)}" title="Ver la rama ${esc(nombre)} en GitHub"${estiloColor ? ` style="--rama:${estiloColor}"` : ''}><span aria-hidden="true">⎇</span>${esc(nombre)}</button>`;
+const ROTATIVOS = COLORES.filter((c) => c !== 'var(--acento)' && c !== 'var(--azul)');
+const esMain = (n) => n === 'main' || n === 'master';
+const claseRama = (n) => (esMain(n) ? 'rama-main' : n === 'develop' ? 'rama-dev' : '') + (n === P.git?.rama ? ' rama-actual' : '');
+const iconoRama = (n) => esMain(n) ? '★' : n === 'develop' ? '◆' : '⎇';
+const badgeRama = (nombre, extra = '', estiloColor = '') => `<button class="rama ${claseRama(nombre)} ${extra}" data-rama="${esc(nombre)}" title="Ver la rama ${esc(nombre)} en GitHub"${estiloColor && !claseRama(nombre).match(/rama-(main|dev)/) ? ` style="--rama:${estiloColor}"` : ''}><span aria-hidden="true">${iconoRama(nombre)}</span>${esc(nombre)}</button>`;
 function sesionesDeRama(nombre) {
   return P.backlogs.flatMap((b) => aplanar(b.estructura || []).filter((s) => s.meta?.rama === nombre).map((s) => ({ b, s })));
 }
@@ -703,7 +718,24 @@ const limpiarRef = (r) => r.replace(/^HEAD -> /, '').replace(/^origin\//, '').re
 function refsDe(c) {
   return [...new Set((c.refs || '').split(', ').filter((r) => r && r !== 'origin/HEAD' && r !== 'HEAD').map(limpiarRef))];
 }
-function svgGrafo(filas, H) {
+// Carril → nombre de rama (main/develop tienen prioridad) y color fijo: main = acento, develop = azul, el resto rota.
+function carrilesGrafo(filas, commits) {
+  const nombres = new Map();
+  filas.forEach((f, i) => {
+    for (const r of refsDe(commits[i])) {
+      const actual = nombres.get(f.col);
+      if (!actual || ((esMain(r) || r === 'develop') && !(esMain(actual) || actual === 'develop'))) nombres.set(f.col, r);
+    }
+  });
+  const colores = new Map(); let k = 0;
+  const lanes = [...new Set(filas.flatMap((f) => [...f.antes, ...f.despues, f.col]))].sort((a, b) => a - b);
+  for (const l of lanes) {
+    const n = nombres.get(l);
+    colores.set(l, esMain(n) ? 'var(--acento)' : n === 'develop' ? 'var(--azul)' : ROTATIVOS[k++ % ROTATIVOS.length]);
+  }
+  return { nombres, color: (l) => colores.get(l) || color(l), lanes };
+}
+function svgGrafo(filas, H, color) {
   const X = (i) => 9 + i * 16, ancho = X(Math.max(1, ...filas.flatMap((f) => [...f.antes, ...f.despues, f.col]))) + 10;
   const curva = (x1, y1, x2, y2) => x1 === x2 ? `M${x1} ${y1}V${y2}` : `M${x1} ${y1}C${x1} ${(y1 + y2) / 2} ${x2} ${(y1 + y2) / 2} ${x2} ${y2}`;
   const lineas = [], puntos = [];
@@ -725,6 +757,9 @@ function svgGrafo(filas, H) {
 function vistaGrafo(g) {
   const H = 30, filas = (g.grafo || []).map((f, i) => ({ ...f, merge: g.commits[i].padres.length > 1, padres: g.commits[i].padres.length }));
   if (!filas.length) return '<div class="suave">Sin commits.</div>';
+  const car = carrilesGrafo(filas, g.commits);
+  const vistos = new Set();
+  const cabecera = car.lanes.map((l) => car.nombres.has(l) && !vistos.has(car.nombres.get(l)) && vistos.add(car.nombres.get(l)) ? `<span class="carril" style="--rama:${car.color(l)}"><i></i>${badgeRama(car.nombres.get(l), '', car.color(l))}</span>` : '').join('');
   const prDe = new Map();
   for (const pr of g.prs) for (const c of pr.commits) if (!prDe.has(c.oid) || pr.baseRefName !== 'main') prDe.set(c.oid, pr);
   const filasHtml = g.commits.map((c, i) => {
@@ -733,11 +768,12 @@ function vistaGrafo(g) {
     const foco = ramaFoco && refs.includes(ramaFoco);
     const tit = mpr ? `<span class="tit merge">⑂ merge de ${badgeRama(mpr[2], '', 'var(--suave)')}${pr ? ` → ${esc(pr.baseRefName)}` : ''}</span>` : `<span class="tit" title="${esc(c.titulo)}">${esc(c.titulo)}</span>`;
     return `<li class="grafo-fila${foco ? ' foco' : ''}"${foco ? ' id="foco-grafo"' : ''}><a class="hash" href="${esc(g.url)}/commit/${c.oid}">${c.oid.slice(0, 7)}</a>
-      ${refs.map((r) => badgeRama(r, '', color(filas[i].col))).join('')}${tit}
+      ${refs.map((r) => badgeRama(r, '', car.color(filas[i].col))).join('')}${tit}
       ${pr ? `<a class="hash" href="${esc(pr.url)}">#${pr.number}</a>` : ''}${g.sinPush.includes(c.oid) ? '<span class="etq DRAFT">sin subir</span>' : ''}<span class="cuando">${hace(c.fecha)}</span></li>`;
   }).join('');
-  return `<div class="leyenda"><span>● commit</span><span>○ merge (PR)</span><span>cada color es un carril; la etiqueta ⎇ marca dónde está cada rama</span></div>
-    <div class="tabla-scroll"><div class="grafo">${svgGrafo(filas, H)}<ol class="grafo-filas">${filasHtml}</ol></div></div>`;
+  return `<div class="cab-carriles" aria-label="Carriles del grafo">${cabecera}</div>
+    <div class="leyenda"><span>● commit</span><span>○ merge (PR)</span><span>★ main · ◆ develop · cada línea de color es la rama de su etiqueta</span></div>
+    <div class="tabla-scroll"><div class="grafo">${svgGrafo(filas, H, car.color)}<ol class="grafo-filas">${filasHtml}</ol></div></div>`;
 }
 function filaRama(r, g) {
   const prs = prsDeRama(r.nombre), ses = sesionesDeRama(r.nombre), pls = planesDeRama(r.nombre);
@@ -1008,6 +1044,13 @@ function irRama(nombre) {
   const fg = document.getElementById('foco-grafo'), cont = fg?.closest('.gh-grafo');
   if (cont) cont.scrollTo({ top: Math.max(0, fg.offsetTop - cont.clientHeight / 3), behavior: movimientoReducido() ? 'auto' : 'smooth' });
   if (el) { desplazar(el); el.querySelector('button')?.focus({ preventScroll: true }); } else alInicio();
+}
+
+// Altura real de la barra de estado sticky: los paneles sticky la descuentan para no cortarse.
+{
+  const barra = $('#barra-estado');
+  const medir = () => document.documentElement.style.setProperty('--alto-barra', barra.offsetHeight + 'px');
+  if (barra) { medir(); if (window.ResizeObserver) new ResizeObserver(medir).observe(barra); }
 }
 
 document.addEventListener('click', (e) => {
