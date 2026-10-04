@@ -55,13 +55,13 @@ Prompt de arranque S31 (Opus, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S31) y trabaja solo esa sesión en la rama `integraciones-vista`. Paso 0: tests y commit de los cambios pendientes. Escribe primero los tests de `generar.test.mjs` y míralos fallar. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 
 ### S32 — Tarjeta «Para retomar» y «Qué se busca» en «En curso» · **Sonnet** · `plantilla.html`, `servidor.test.mjs`
-- [ ] **Test primero** en `servidor.test.mjs` (plantilla trae `tarjetaRetomar`, «Para retomar», «Qué se busca», `data-retomar`); ver fallar
-- [ ] `tarjetaRetomar(p)` al inicio del Resumen (antes de la guía y de «En curso») y compacta en «Todos» para el proyecto más reciente: «Para retomar · hace N días»; párrafo 1 = `b.retomar.texto` (si falta: «Nadie dejó un resumen al cerrar la última sesión; esto es lo que se ve:»); párrafo 2 = hechos en frases («La última vez trabajaste el <fecha> en la rama X; la última sesión de Claude se llamó “…”. Lo siguiente es “<sub-sesión siguiente>” con N pasos pendientes. Hay M PR abiertos / N commits sin subir.»); claves solo entre paréntesis al final
-- [ ] Botones «Copiar prompt de la siguiente sesión» (reutiliza `destacado`) y «Ver en backlog»; plegable «Detalle técnico» con el `Estado` actual
-- [ ] Plegada si `diasSinActividad < 2`; preferencia por proyecto en `localStorage` (try/catch)
-- [ ] `tarjetaEnCurso`: bloque «Qué se busca» con `hito.historia || hito.descripcion || plan.contexto` (≤ 3 líneas, «más» si recorta); en la compacta solo la primera frase
-- [ ] `estadoResumido` (plantilla.html:631) toma la primera línea no vacía del Estado: que salte la viñeta «Para retomar» y sus líneas sangradas (igual que `estasAqui`) (añadido en S31)
-- [ ] Mobile sin tablas ni chips largos. Chrome headless con `datos/` de prueba (con/sin `Para retomar`, con/sin `Historia:`), `node --test 2>&1 | tail -40`, commit
+- [x] **Test primero** en `servidor.test.mjs` (plantilla trae `tarjetaRetomar`, «Para retomar», «Qué se busca», `data-retomar`); ver fallar
+- [x] `tarjetaRetomar(p)` al inicio del Resumen (antes de la guía y de «En curso») y compacta en «Todos» para el proyecto más reciente: «Para retomar · hace N días»; párrafo 1 = `b.retomar.texto` (si falta: «Nadie dejó un resumen al cerrar la última sesión; esto es lo que se ve:»); párrafo 2 = hechos en frases («La última vez trabajaste el <fecha> en la rama X; la última sesión de Claude se llamó “…”. Lo siguiente es “<sub-sesión siguiente>” con N pasos pendientes. Hay M PR abiertos / N commits sin subir.»); claves solo entre paréntesis al final
+- [x] Botones «Copiar prompt de la siguiente sesión» (reutiliza `destacado`) y «Ver en backlog»; plegable «Detalle técnico» con el `Estado` actual
+- [x] Plegada si `diasSinActividad < 2`; preferencia por proyecto en `localStorage` (try/catch)
+- [x] `tarjetaEnCurso`: bloque «Qué se busca» con `hito.historia || hito.descripcion || plan.contexto` (≤ 3 líneas, «más» si recorta); en la compacta solo la primera frase
+- [x] `estadoResumido` (plantilla.html:631) toma la primera línea no vacía del Estado: que salte la viñeta «Para retomar» y sus líneas sangradas (igual que `estasAqui`) (añadido en S31)
+- [x] Mobile sin tablas ni chips largos. Chrome headless con `datos/` de prueba (con/sin `Para retomar`, con/sin `Historia:`), `node --test 2>&1 | tail -40`, commit
 
 Prompt de arranque S32 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S32) y trabaja solo esa sesión en la rama `integraciones-vista`. Test de plantilla primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.

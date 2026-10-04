@@ -628,10 +628,21 @@ function panelFalta(fuente, enOtra) {
         <ul>${falta.map((t) => `<li>${inline(corto(t.texto, 140))}</li>`).join('')}${nHijo ? `<li class="suave">＋ ${nHijo} en <button class="enlace" data-ir="backlogs" data-sel="${esc(hijo.archivo)}">${esc(hijo.archivo)}</button></li>` : ''}</ul></div>`;
     }).join('')}</aside>`;
 }
+// El Estado sin la viñeta «Para retomar (fecha): …» ni sus líneas sangradas (esa va en su propia tarjeta).
+function estadoSinRetomar(txt) {
+  const sal = []; let dentro = false;
+  for (const l of String(txt || '').split('\n')) {
+    if (/^[-*]\s+\**\s*Para retomar\b/i.test(l)) { dentro = true; continue; }
+    if (dentro && /^\s+\S/.test(l)) continue;
+    dentro = false; sal.push(l);
+  }
+  return sal.join('\n');
+}
 function estadoResumido(txt) {
   if (!txt) return '';
-  const prim = txt.split('\n').find((l) => l.trim()) || '';
-  return `<div class="estado-res">${md(prim)}${txt.trim() !== prim.trim() ? `<details><summary class="suave">Estado completo</summary>${md(txt)}</details>` : ''}</div>`;
+  const resto = estadoSinRetomar(txt);
+  const prim = resto.split('\n').find((l) => l.trim()) || '';
+  return `<div class="estado-res">${md(prim)}${resto.trim() !== prim.trim() ? `<details><summary class="suave">Estado completo</summary>${md(txt)}</details>` : ''}</div>`;
 }
 // «❯ estás aquí: H4 — … → S3 — …» (si la sección tiene mini backlog, se encadena su «aquí»).
 // fuera = el botón navega al mapa en vez de saltar dentro de la página (Resumen).
@@ -1470,7 +1481,7 @@ const VISTAS = {
     const favs = P.backlogs.flatMap((b) => aplanar(b.estructura || []).filter(esFavorita).map((s) => ({ b, s })));
     const sesActual = g?.rama ? sesionesDeRama(g.rama) : [];
     const ec = enCurso(P);
-    return `${tarjetaGuia(P)}${tarjetaEnCurso(P)}${botonEditarProyecto()}<div class="rejilla"${ec ? ' style="margin-top:14px"' : ''}>
+    return `${tarjetaRetomar(P)}${tarjetaGuia(P)}${tarjetaEnCurso(P)}${botonEditarProyecto()}<div class="rejilla"${ec ? ' style="margin-top:14px"' : ''}>
       ${(P.integraciones || []).filter((i) => i.estado === 'conectado' && (i.items || []).length).map(avanceIntegracion).join('')}
       ${bl.map((b) => `<section class="tarjeta">
         <h2><span>${esc(b.archivo)}</span><small>${hace(b.modificado)}</small></h2>
@@ -1621,6 +1632,38 @@ function enCurso(p) {
   const planDe = plan && act?.planDe || null;
   return { backlog: b, hito, sesiones, aqui, tarea, siguiente, falta, plan, planDe, prompts, destacado, rama, gasto, completo: hito.estado === 'hecho' };
 }
+// «Para retomar»: lo que dejó escrito quien cerró la última sesión + los hechos de git/Claude en frases.
+const diaLargo = (iso) => iso ? new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' }) : '';
+const primeraFrase = (t) => (String(t || '').match(/^.*?[.!?](?=\s|$)/s) || [String(t || '')])[0];
+function tarjetaRetomar(p, compacta = false) {
+  const h = p.retomar, b = resumenProyecto(p).principal;
+  if (!h || (!b && !h.ultimaActividad)) return '';
+  const dias = h.diasSinActividad, titulo = dias == null ? 'Para retomar' : `Para retomar · ${dias < 1 ? 'hoy' : dias === 1 ? 'hace 1 día' : `hace ${dias} días`}`;
+  const nat = b?.retomar?.texto;
+  const p1 = nat ? esc(nat) : 'Nadie dejó un resumen al cerrar la última sesión; esto es lo que se ve:';
+  if (compacta) return `<section class="tarjeta" aria-label="Para retomar" data-retomar="${esc(p.id)}"><h2><span>${esc(titulo)}</span><small>${esc(p.nombre)}</small></h2>
+    <p>${p1}</p><p><button class="boton" data-proy="${esc(p.id)}" data-pest="resumen">Abrir proyecto</button></p></section>`;
+  const f = [];
+  if (h.ultimaActividad) f.push(`La última vez trabajaste el ${diaLargo(h.ultimaActividad)}${h.rama ? ` en la rama ${esc(h.rama)}` : ''}${h.ultimaSesionClaude?.titulo ? `; la última sesión de Claude se llamó “${esc(h.ultimaSesionClaude.titulo)}”` : ''}.`);
+  if (h.siguiente) f.push(`Lo siguiente es “${esc(plano(h.siguiente.titulo))}”${h.pendientesSiguiente ? ` con ${h.pendientesSiguiente} paso${h.pendientesSiguiente === 1 ? '' : 's'} pendiente${h.pendientesSiguiente === 1 ? '' : 's'}` : ''}${h.siguiente.clave ? ` (${esc(h.siguiente.clave)})` : ''}.`);
+  const git = [h.prsAbiertos ? `${h.prsAbiertos} PR abierto${h.prsAbiertos === 1 ? '' : 's'}` : '', h.commitsSinSubir ? `${h.commitsSinSubir} commit${h.commitsSinSubir === 1 ? '' : 's'} sin subir` : ''].filter(Boolean);
+  if (git.length) f.push(`Hay ${git.join(' y ')}.`);
+  const dest = enCurso(p)?.destacado;
+  const pref = leer(`tablero.retomar.${p.id}`);
+  const abierta = pref ? pref === 'abierta' : !(dias != null && dias < 2);
+  return `<section class="tarjeta" aria-label="Para retomar" data-retomar="${esc(p.id)}"><details${abierta ? ' open' : ''} data-retomar-det="${esc(p.id)}">
+    <summary><h2 style="display:inline"><span>${esc(titulo)}</span></h2></summary>
+    <p>${p1}</p>${f.length ? `<p>${f.join(' ')}</p>` : ''}
+    <p>${dest ? `<span class="prompt-copiable"><button class="boton" type="button" data-copiar>Copiar prompt de la siguiente sesión</button><pre hidden>${esc(dest.texto)}</pre></span> ` : ''}${b ? `<button class="boton" data-ir="backlogs" data-sel="${esc(b.archivo)}">Ver en backlog</button>` : ''}</p>
+    ${b?.estado ? `<details class="grupo"><summary class="suave">Detalle técnico</summary>${md(b.estado)}</details>` : ''}</details></section>`;
+}
+function queSeBusca(hito, plan, compacta) {
+  const t = String(hito.historia || hito.descripcion || (plan && plan.contexto) || '').trim();
+  if (!t) return '';
+  if (compacta) return `<p class="que-busca"><b>Qué se busca:</b> ${esc(primeraFrase(t))}</p>`;
+  const lineas = t.split(/\n+/).filter(Boolean), largo = t.length > 280 || lineas.length > 3;
+  return `<div class="que-busca"><div class="rotulo">Qué se busca</div>${largo ? `<p>${esc(corto(t, 280))}</p><details><summary class="suave">más</summary><p>${esc(t)}</p></details>` : `<p>${esc(t)}</p>`}</div>`;
+}
 function tarjetaEnCurso(p, compacta = false) {
   const c = enCurso(p);
   if (!c) return '';
@@ -1635,6 +1678,7 @@ function tarjetaEnCurso(p, compacta = false) {
   return `<section class="tarjeta en-curso" aria-label="Plan en curso">
     <h2><span>${c.completo ? `✓ ${esc(titulo)} completo` : `▶ En curso · ${esc(titulo)}`}</span><small>${plan ? hace(plan.modificado) : hace(b.modificado)}</small></h2>
     <div class="chips-proy">${compacta ? `<span class="etq">${esc(p.nombre)}</span>` : ''}${c.rama ? `<span class="etq" title="Rama">⎇ ${esc(c.rama)}</span>` : ''}${plan ? `<span class="etq" title="${esc(plan.nombre)}">Plan${c.planDe ? ` (de ${esc(c.planDe)})` : ''}: ${esc(corto(plan.titulo.replace(/^Plan\s*[:—–-]\s*/i, ''), 60))}</span>` : ''}${chips({ modelo: aqui.meta?.modelo || destacado?.modelo })}</div>
+    ${queSeBusca(hito, plan, compacta)}
     ${segmentos(b, sesiones, c.completo || siguiente ? null : aqui.id)}
     <div>${barra(hito.hechas, hito.total, 20)}</div>
     <div class="suave">${hechas}/${sesiones.length} sesiones${siguiente?.total ? ` · ${esc(siguiente.clave)} ${siguiente.hechas}/${siguiente.total}` : ''}${tarea ? ` · ${tarea.hechas}/${tarea.total} casillas de la tarea` : ''} · ${hito.hechas}/${hito.total} tareas${gasto ? ` · ${usd(gasto.costo)} en la rama (${gasto.sesionesTotal} ses.)` : ''}</div>
@@ -1681,7 +1725,7 @@ function vistaTodos() {
       </div></section>`;
   const reciente = rs.filter((r) => enCurso(r.p)).sort((a, b) => new Date(b.ultima || 0) - new Date(a.ultima || 0))[0];
   return `<div class="bit-totales" aria-label="Totales globales"><span><b>${rs.length}</b> proyectos</span><span><b>${totalAsignadas()}</b> asignadas a mí</span><span><b>${suma('hechas')}/${suma('total')}</b> tareas</span><span><b>${suma('prs')}</b> PR abiertos</span><span><b>${suma('notas')}</b> notas abiertas</span><span><b>${suma('bit')}</b> bitácora pendiente</span><span><b>${usd(suma('costo7'))}</b> costo 7 d</span></div>
-    ${reciente ? tarjetaEnCurso(reciente.p, true) : ''}
+    ${reciente ? tarjetaRetomar(reciente.p, true) + tarjetaEnCurso(reciente.p, true) : ''}
     <div class="rejilla" style="margin-top:14px">${rs.map(tarjeta).join('')}</div>`;
 }
 // ---------- Vista «Mis tareas» ----------
@@ -1804,6 +1848,10 @@ if (editable()) {
   sondear();
 }
 
+document.addEventListener('toggle', (e) => {
+  const id = e.target?.dataset?.retomarDet;
+  if (id) guardar(`tablero.retomar.${id}`, e.target.open ? 'abierta' : 'plegada');
+}, true);
 document.addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;

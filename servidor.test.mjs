@@ -487,6 +487,11 @@ test('vista: la plantilla trae «Mis tareas» (#p=mias), los bloques y el contad
   for (const marca of ['value="mias"', 'Mis tareas', 'function vistaMias', 'id="mis-asignadas"', 'id="mis-siguientes"', 'Asignadas a mí', 'Siguientes pasos en mis backlogs', 'asignadas a mí', "=== 'mias'"]) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
 })
 
+test('vista: la plantilla trae la tarjeta «Para retomar» y «Qué se busca» en «En curso»', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['function tarjetaRetomar', 'Para retomar', 'Qué se busca', 'data-retomar', 'tablero.retomar.', 'Copiar prompt de la siguiente sesión', 'Detalle técnico', 'Nadie dejó un resumen', 'hito.historia', 'plan.contexto', 'function estadoSinRetomar']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
 test('crear proyecto: previa sin escribir, id inválido o duplicado y rutas inexistentes → 400, mtime viejo → 409', async () => {
   const docsNuevo = join(dir, 'docs-nuevo')
   mkdirSync(docsNuevo)
