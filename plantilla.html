@@ -304,6 +304,14 @@ a.chip-ext:hover { border-color: var(--azul); }
 .chip-tipo { color: var(--azul); }
 .filtro-integ { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; font-size: .9em; border: 0; padding: 0; }
 .tipos-fi { display: flex; flex-wrap: wrap; gap: 4px 14px; border: 0; padding: 0; margin: 0 0 8px; }
+.fila-carpeta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.fila-carpeta > input { flex: 1 1 14em; min-width: 0; }
+.selector-carpeta { margin: 6px 0; padding: 8px; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--codigo); }
+.lista-carpetas { list-style: none; margin: 6px 0 0; padding: 0; max-height: 18em; overflow: auto; display: grid; gap: 2px; }
+.lista-carpetas button { width: 100%; min-height: 44px; text-align: left; padding: 6px 8px; background: var(--superficie); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio); font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.lista-carpetas button:hover, .lista-carpetas button:focus-visible { border-color: var(--acento, currentColor); }
+.casillas-docs { border: 0; padding: 0; margin: 4px 0; display: grid; gap: 2px; }
+@media (min-width: 700px) { .lista-carpetas button { min-height: 32px; } }
 .campo-fi.marca-fi { display: flex; gap: 6px; align-items: baseline; }
 .campo-fi.marca-fi > span { color: inherit; font-size: 1em; }
 .manual-fi { display: flex; flex-wrap: wrap; gap: 0 16px; }
@@ -2124,7 +2132,10 @@ function pintarCrear() {
   const campoNombre = crear.tipo === 'backlog' || imp ? `<label class="campo-fi" for="cr-nombre"><span>Nombre del backlog${pideNombre ? '' : ' (opcional)'}</span><input id="cr-nombre" data-crear-campo="nombre" value="${esc(crear.campos.nombre)}" placeholder="p. ej. Sprint 3, Soporte, Azure mías" autocomplete="off"${pideNombre ? ' required' : ''}><small class="suave">Se guarda como <code>BACKLOG_&lt;NOMBRE&gt;.md</code> junto al principal, sin tocarlo.${imp ? ` Vacío: <code>BACKLOG_${esc(P.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_'))}.md</code>.` : pideNombre ? '' : ' Vacío: <code>BACKLOG.md</code>.'}</small></label>` : '';
   el.innerHTML = `<form id="form-crear" class="tarjeta" aria-label="${ed ? 'Editar proyecto' : proy ? 'Nuevo proyecto' : imp ? 'Crear backlog desde Azure' : 'Crear backlog'}">
     <h2><span>${ed ? `Editar «${esc(P.nombre)}»` : proy ? 'Nuevo proyecto' : imp ? `Crear backlog local de «${esc(P.nombre)}»` : `Crear backlog de «${esc(P.nombre)}»`}</span></h2>
-    ${proy ? (ed ? CAMPOS_EDITAR : CAMPOS_PROY).map(([k, t, ayuda]) => `<label class="campo-fi" for="cr-${k}"><span>${t}</span><input id="cr-${k}" data-crear-campo="${k}" value="${esc(crear.campos[k])}" autocomplete="off" spellcheck="false"${k === 'id' || k === 'nombre' ? ' required' : ''}>${ayuda ? `<small class="suave">${ayuda}</small>` : ''}</label>`).join('')
+    ${proy ? (ed ? CAMPOS_EDITAR : CAMPOS_PROY).map(([k, t, ayuda]) => {
+        const conBoton = CAMPOS_CARPETA.includes(k);
+        return `<div class="campo-fi"><label for="cr-${k}"><span>${t}</span></label><div class="fila-carpeta"><input id="cr-${k}" data-crear-campo="${k}" value="${esc(crear.campos[k])}" autocomplete="off" spellcheck="false"${conBoton ? ' placeholder="Elige con el botón o pega la ruta"' : ''}${k === 'id' || k === 'nombre' ? ' required' : ''}>${conBoton ? `<button class="boton" type="button" data-elegir-carpeta="${k}" aria-expanded="${crear.sel?.campo === k}">Elegir…</button>` : ''}</div>${ayuda ? `<small class="suave">${ayuda}</small>` : ''}${k === 'docs' && !ed ? casillasDocs() : ''}${crear.sel?.campo === k ? selectorCarpeta() : ''}</div>`;
+      }).join('')
       : imp ? `<p class="suave">Se crea un backlog en la primera carpeta de documentos, con una casilla por ítem de «${esc(integ?.nombre || crear.campos.integracion)}» (agrupadas por estado y tipo, con su vínculo). Nunca sobrescribe un archivo que ya exista ni cambia nada en Azure.</p>
         ${campoNombre}
         <label><input type="checkbox" data-crear-check="soloMias"${crear.campos.soloMias ? ' checked' : ''}${sinMio ? ' disabled' : ''}> Solo las asignadas a mí${sinMio ? ' <span class="suave">(esta integración no dice cuáles son tuyas)</span>' : ''}</label>`
@@ -2135,6 +2146,98 @@ function pintarCrear() {
     <div class="pie">${pr ? `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>${accion}</button>` : `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>Vista previa</button>`}<button class="boton" type="button" data-crear-cerrar>Cancelar</button></div>
   </form>`;
 }
+// ---------- Selector de carpeta (recientes de Claude + explorar; el servidor nunca sale de ~) ----------
+const CAMPOS_CARPETA = ['repo', 'docs', 'notas', 'bitacora'];
+let recientes = null; // { home, sugerencias } de la primera consulta
+const corta = (r, home) => home && r && (r === home || r.startsWith(home + '/')) ? '~' + r.slice(home.length) : r;
+const enlista = (t) => String(t || '').split(',').map((x) => x.trim()).filter(Boolean);
+function casillasDocs() {
+  const cand = crear.propuesta?.docs || []; if (cand.length < 2) return '';
+  const act = enlista(crear.campos.docs);
+  return `<fieldset class="casillas-docs"><legend class="suave">Carpetas candidatas para documentos</legend>${cand.map((d) => `<label><input type="checkbox" data-docs-casilla="${esc(d)}"${act.includes(d) ? ' checked' : ''}> ${esc(d)}</label>`).join('')}</fieldset>`;
+}
+function selectorCarpeta() {
+  const s = crear.sel, home = s.home || recientes?.home;
+  const pest = (k, t) => `<button type="button" role="tab" class="boton${s.pestana === k ? ' primario' : ''}" aria-selected="${s.pestana === k}" data-carpeta-pestana="${k}">${t}</button>`;
+  let cuerpo;
+  if (s.cargando) cuerpo = '<p class="suave" role="status">Cargando…</p>';
+  else if (s.error) cuerpo = `<div class="integ-paso mal" role="alert">${esc(s.error)}</div>`;
+  else if (s.pestana === 'recientes') {
+    const l = recientes?.sugerencias || [];
+    cuerpo = l.length ? `<p class="suave">Tus proyectos recientes</p><ul class="lista-carpetas">${l.map((x) => `<li><button type="button" data-carpeta="${esc(x.ruta)}" data-elige="1"><b>${esc(x.nombre)}</b> <span class="suave">${esc(corta(x.ruta, home))} · ${x.ultimaActividad ? hace(x.ultimaActividad) : ''} · ${x.sesiones} ses.</span>${x.esGit ? ' <span class="chip">git</span>' : ''}</button></li>`).join('')}</ul>` : '<p class="suave">No hay carpetas recientes sin configurar. Usa «Explorar».</p>';
+  } else {
+    const d = s.datos;
+    if (!d) cuerpo = '';
+    else {
+      cuerpo = `<p class="suave migas">${esc(corta(d.ruta, home))}</p>
+        <div class="fila-carpeta"><button type="button" class="boton" data-carpeta="${esc(d.padre || '')}"${d.padre ? '' : ' disabled'}>↑ subir</button><button type="button" class="boton primario" data-carpeta="${esc(d.ruta)}" data-elige="1">Elegir esta carpeta</button><input type="search" data-carpeta-filtro placeholder="Filtrar…" aria-label="Filtrar carpetas" autocomplete="off"></div>
+        ${d.aviso ? `<p class="suave">${esc(d.aviso)}</p>` : ''}<ul class="lista-carpetas">${d.carpetas.map((x) => `<li data-nombre="${esc(x.nombre.toLowerCase())}"><button type="button" data-carpeta="${esc(x.ruta)}">📁 ${esc(x.nombre)}${x.esGit ? ' <span class="chip">git</span>' : ''}${x.tieneBacklog ? ' <span class="chip">backlog</span>' : ''}</button></li>`).join('') || '<li class="suave">Sin subcarpetas.</li>'}</ul>`;
+    }
+  }
+  return `<div class="selector-carpeta" data-selector role="group" aria-label="Elegir carpeta"><div role="tablist" class="fila-carpeta">${pest('recientes', 'Recientes de Claude')}${pest('explorar', 'Explorar')}<button type="button" class="boton" data-carpeta-cerrar>Cerrar</button></div>${cuerpo}</div>`;
+}
+async function abrirSelector(campo) {
+  if (crear.sel?.campo === campo) { cerrarSelector(); return; }
+  crear.sel = { campo, pestana: 'recientes', cargando: !recientes, error: '', datos: null, home: recientes?.home };
+  pintarCrear(); enfocarSelector();
+  if (!recientes) {
+    try { const r = await api('/api/carpetas', {}); recientes = { home: r.home, sugerencias: r.sugerencias || [] }; if (crear?.sel?.campo === campo) { crear.sel.home = r.home; crear.sel.cargando = false; } }
+    catch (e) { if (crear?.sel?.campo === campo) { crear.sel.cargando = false; crear.sel.error = e.message; } }
+    if (crear?.sel?.campo === campo) { pintarCrear(); enfocarSelector(); }
+  }
+}
+function cerrarSelector() { const k = crear.sel?.campo; crear.sel = null; pintarCrear(); document.querySelector(`[data-elegir-carpeta="${k}"]`)?.focus(); }
+const enfocarSelector = () => $('#panel-crear [data-selector] [data-carpeta]')?.focus();
+async function navegarCarpeta(ruta) {
+  const s = crear.sel; s.cargando = true; s.error = ''; pintarCrear();
+  try { const r = await api('/api/carpetas', ruta ? { ruta } : {}); s.datos = r; s.home = r.home; }
+  catch (e) { s.error = e.message; }
+  s.cargando = false; pintarCrear(); enfocarSelector();
+}
+async function elegirCarpeta(ruta) {
+  const s = crear.sel, campo = s.campo, c = crear.campos;
+  let prop = null;
+  try { prop = (await api('/api/carpetas', { ruta })).propuesta; } catch { /* la ruta vale igual: el servidor valida al enviar */ }
+  const ruta2 = corta(ruta, s.home || recientes?.home);
+  if (campo === 'repo') {
+    c.repo = ruta2;
+    if (crear.tipo === 'proyecto' && prop) {
+      crear.propuesta = prop;
+      if (!c.id.trim()) c.id = prop.id;
+      if (!c.nombre.trim()) c.nombre = prop.nombre;
+      if (!c.docs.trim()) c.docs = prop.docs.slice(0, 1).join(', ');
+    }
+  } else if (campo === 'docs') c.docs = [...new Set([...enlista(c.docs), ruta2])].join(', ');
+  else if (campo === 'notas') c.notas = `${ruta2}/${prop?.notas.split('/').pop() || 'NOTAS.md'}`;
+  else c.bitacora = `${ruta2}/BITACORA.md`;
+  crear.previa = null; crear.sel = null; pintarCrear(); document.getElementById(`cr-${campo}`)?.focus();
+}
+document.addEventListener('click', (e) => {
+  if (!crear) return;
+  const t = e.target.closest('[data-elegir-carpeta],[data-carpeta],[data-carpeta-pestana],[data-carpeta-cerrar]'); if (!t) return;
+  const d = t.dataset;
+  if (d.elegirCarpeta) abrirSelector(d.elegirCarpeta);
+  else if ('carpetaCerrar' in d) cerrarSelector();
+  else if (d.carpetaPestana) { crear.sel.pestana = d.carpetaPestana; pintarCrear(); if (d.carpetaPestana === 'explorar' && !crear.sel.datos) navegarCarpeta(''); else enfocarSelector(); }
+  else if ('carpeta' in d) { if (d.elige) elegirCarpeta(d.carpeta); else navegarCarpeta(d.carpeta); }
+});
+document.addEventListener('input', (e) => {
+  if (!e.target.matches?.('[data-carpeta-filtro]')) return;
+  const q = e.target.value.trim().toLowerCase();
+  e.target.closest('[data-selector]').querySelectorAll('li[data-nombre]').forEach((li) => { li.hidden = !!q && !li.dataset.nombre.includes(q); });
+});
+document.addEventListener('change', (e) => {
+  const k = e.target.dataset?.docsCasilla; if (!crear || k == null) return;
+  const act = enlista(crear.campos.docs).filter((x) => x !== k); if (e.target.checked) act.push(k);
+  crear.campos.docs = act.join(', '); crear.previa = null; pintarCrear(); document.querySelector(`[data-docs-casilla="${CSS.escape(k)}"]`)?.focus();
+});
+document.addEventListener('keydown', (e) => {
+  if (!crear?.sel || !e.target.closest?.('[data-selector]')) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarSelector(); return; }
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const bs = [...e.target.closest('[data-selector]').querySelectorAll('[data-carpeta]:not([disabled])')].filter((b) => !b.closest('li')?.hidden), i = bs.indexOf(e.target);
+  if (i < 0 && !bs.length) return; e.preventDefault(); bs[Math.max(0, Math.min(bs.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))]?.focus();
+}, true);
 async function enviarCrear() {
   const c = crear; if (!c || c.ocupado) return;
   const ruta = c.tipo === 'proyecto' ? '/api/proyectos/crear' : c.tipo === 'editar' ? '/api/proyectos/editar' : c.tipo === 'importar' ? '/api/integraciones/importar' : '/api/backlog/crear', previa = !c.previa;

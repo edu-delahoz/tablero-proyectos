@@ -498,6 +498,11 @@ test('vista: la plantilla trae la pestaña «Tablero» (kanban), la franja de Cl
   for (const marca of ["['tablero', 'Tablero']", 'function vistaKanban', "'/api/sesiones'", 'data-kanban-col', 'Claude está trabajando', 'Mover a', 'scroll-snap', 'sin sesión activa', 'data-mover', 'draggable', 'derivada']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
 })
 
+test('vista: la plantilla trae el selector de carpeta (Elegir…, recientes de Claude, explorar)', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ["'/api/carpetas'", 'function selectorCarpeta', 'Tus proyectos recientes', 'data-carpeta', 'Recientes de Claude', 'Explorar', 'Elige con el botón o pega la ruta', 'data-elegir-carpeta']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
 test('crear proyecto: previa sin escribir, id inválido o duplicado y rutas inexistentes → 400, mtime viejo → 409', async () => {
   const docsNuevo = join(dir, 'docs-nuevo')
   mkdirSync(docsNuevo)
