@@ -193,3 +193,31 @@ test('/api/favoritos: guarda por título en datos/favoritos.json, alterna, valid
   assert.deepEqual(c.json.datos.favoritos, ['S2 — Otra'])
   await post('/api/favoritos', { titulo: 'S2 — Otra', favorito: false })
 })
+
+test('robustez: enviar sobre una respuesta destruida o ya enviada no lanza', async () => {
+  const { crearManejador } = await import('./generar.mjs')
+  const m = crearManejador({ puerto, adaptadores: {} })
+  const req = { headers: { host: `127.0.0.1:${puerto}` }, url: '/api/ping', method: 'GET' }
+  const llamadas = []
+  const res = (extra) => ({ writeHead: () => llamadas.push('writeHead'), end: () => llamadas.push('end'), ...extra })
+  await m(req, res({ destroyed: true }))
+  await m(req, res({ headersSent: true }))
+  assert.deepEqual(llamadas, [])
+  await m(req, res({}))
+  assert.deepEqual(llamadas, ['writeHead', 'end'])
+})
+
+test('robustez: un manejador que lanza (o rechaza) se registra y no tumba el proceso', async () => {
+  const { protegerManejador, protegerProceso } = await import('./generar.mjs')
+  const log = []
+  protegerManejador(async () => { throw new Error('boom') }, (m) => log.push(m))({}, {})
+  protegerManejador(() => { throw new Error('sync') }, (m) => log.push(m))({}, {})
+  await new Promise((r) => setTimeout(r, 10))
+  assert.equal(log.length, 2)
+  assert.ok(log.some((l) => /boom/.test(l)) && log.some((l) => /sync/.test(l)))
+  const eventos = new Map()
+  protegerProceso({ on: (e, f) => eventos.set(e, f) }, (m) => log.push(m))
+  eventos.get('uncaughtException')(new Error('x'))
+  eventos.get('unhandledRejection')(new Error('y'))
+  assert.equal(log.length, 4)
+})

@@ -3,12 +3,13 @@
 // en un solo index.html local. Sin dependencias.
 //   node generar.mjs               → regenera index.html
 //   node generar.mjs --abrir       → regenera y abre http://127.0.0.1:47321 (arranca el servidor si hace falta)
+//   node generar.mjs --asegurar-servidor → regenera y, si el servidor no corre, lo arranca (lo usa el hook SessionStart)
 //   node generar.mjs --servir      → servidor local: sirve el tablero fresco y guarda las ediciones de los .md
 //   node generar.mjs --hook-inicio → (SessionStart) imprime contexto para Claude y regenera en segundo plano
 //   node generar.mjs --probar-conexiones → lectura mínima de cada integración (GitHub Projects, Trello, Azure DevOps)
 // Variables opcionales: TABLERO_PROYECTOS (otro proyectos.json), TABLERO_DATOS (otra carpeta datos/), TABLERO_PUERTO,
 // TABLERO_TRANSCRIPCIONES (otra carpeta en lugar de ~/.claude/projects).
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, realpathSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, realpathSync, openSync, closeSync, appendFileSync } from 'node:fs'
 import { execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
@@ -287,17 +288,43 @@ function actualizarHistorial(p, backlogs) {
 // ---------- Planes de Claude (~/.claude/plans), asignados por transcripción ----------
 // «planes» en proyectos.json asigna planes a mano: mandan sobre la transcripción y salen de los demás proyectos.
 const planesAsignados = new Map(proyectos.flatMap((p) => (p.planes || []).map((n) => [n, p.id])))
-function leerPlanes(p) {
-  const usados = new Map((p.planes || []).map((n) => [n, new Set(['(asignado)'])])) // nombre -> Set(carpeta)
-  for (const d of p.transcripciones && existsSync(TRANSCRIPCIONES) ? readdirSync(TRANSCRIPCIONES) : []) {
-    if (!d.startsWith(p.transcripciones)) continue
-    const salida = sh('grep', ['-ohE', 'plans/[A-Za-z0-9_-]+\\.md', '-r', '--include=*.jsonl', join(TRANSCRIPCIONES, d)], undefined, 20000) || ''
-    for (const m of new Set(salida.split('\n').filter(Boolean))) {
-      const nombre = basename(m)
-      if ((planesAsignados.get(nombre) ?? p.id) !== p.id) continue
-      if (!usados.has(nombre)) usados.set(nombre, new Set())
-      usados.get(nombre).add(d.slice(p.transcripciones.length).replace(/^-/, '') || '(raíz)')
+// Plan -> proyecto con más menciones (empate: el primero en proyectos.json). Pura: la usan leerPlanes y los tests.
+// menciones: Map(proyectoId -> Map(nombre -> Map(carpeta -> veces))).
+export function asignarPlanes(menciones, manuales = new Map()) {
+  const dueno = new Map()
+  for (const [id, planes] of menciones) {
+    for (const [nombre, carpetas] of planes) {
+      const total = [...carpetas.values()].reduce((a, b) => a + b, 0)
+      const previo = dueno.get(nombre)
+      if (!previo || total > previo.total) dueno.set(nombre, { id, total })
     }
+  }
+  return new Map([...dueno].map(([nombre, { id }]) => [nombre, manuales.get(nombre) ?? id]))
+}
+function contarMenciones() {
+  const menciones = new Map()
+  for (const p of proyectos) {
+    const planes = new Map()
+    for (const d of p.transcripciones && existsSync(TRANSCRIPCIONES) ? readdirSync(TRANSCRIPCIONES) : []) {
+      if (!d.startsWith(p.transcripciones)) continue
+      const salida = sh('grep', ['-ohE', 'plans/[A-Za-z0-9_-]+\\.md', '-r', '--include=*.jsonl', join(TRANSCRIPCIONES, d)], undefined, 20000) || ''
+      const carpeta = d.slice(p.transcripciones.length).replace(/^-/, '') || '(raíz)'
+      for (const m of salida.split('\n').filter(Boolean)) {
+        const nombre = basename(m)
+        if (!planes.has(nombre)) planes.set(nombre, new Map())
+        planes.get(nombre).set(carpeta, (planes.get(nombre).get(carpeta) || 0) + 1)
+      }
+    }
+    menciones.set(p.id, planes)
+  }
+  return menciones
+}
+function leerPlanes(p, menciones, duenos) {
+  const usados = new Map((p.planes || []).map((n) => [n, new Set(['(asignado)'])])) // nombre -> Set(carpeta)
+  for (const [nombre, carpetas] of menciones.get(p.id) || []) {
+    if (duenos.get(nombre) !== p.id) continue
+    if (!usados.has(nombre)) usados.set(nombre, new Set())
+    for (const c of carpetas.keys()) usados.get(nombre).add(c)
   }
   return [...usados].flatMap(([nombre, carpetas]) => {
     const ruta = join(PLANES, nombre)
@@ -525,6 +552,8 @@ function leerBitacoras() {
 async function recolectar(opciones = {}) {
   mkdirSync(DATOS, { recursive: true })
   const bitacoras = leerBitacoras()
+  const menciones = contarMenciones()
+  const duenos = asignarPlanes(menciones, planesAsignados)
   return Promise.all(proyectos.map(async (p) => {
     let backlogs = leerBacklogs(p)
     let integraciones = await leerIntegraciones(p, backlogs, opciones)
@@ -539,7 +568,7 @@ async function recolectar(opciones = {}) {
       for (const x of integraciones) if (fallos.has(x.id)) Object.assign(x, { estado: 'error', mensaje: fallos.get(x.id) })
     }
     for (const x of integraciones) delete x._auto
-    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial: actualizarHistorial(p, backlogs), planes: leerPlanes(p), git: leerGit(p), notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones }
+    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial: actualizarHistorial(p, backlogs), planes: leerPlanes(p, menciones, duenos), git: leerGit(p), notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones }
   }))
 }
 
@@ -607,6 +636,7 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
   const fresco = async (forzar) => { if (forzar || !cache || Date.now() - cache.t > 15000) cache = { t: Date.now(), ...(await construir(true, { adaptadores })) }; return cache }
   const permitidas = async () => new Set((await fresco()).datos.proyectos.flatMap((p) => [...p.backlogs.map((b) => b.ruta), ...p.planes.map((x) => x.ruta), p.notas?.ruta, p.bitacora?.ruta]).filter(Boolean))
   const enviar = (res, codigo, cuerpo, tipo = 'application/json; charset=utf-8') => {
+    if (res.headersSent || res.destroyed) return
     res.writeHead(codigo, { 'content-type': tipo, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
     res.end(typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo))
   }
@@ -681,20 +711,45 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
     }
   }
 }
+// Registro del servidor: datos/servidor.log (una línea con fecha por evento; se recorta a ~200 KB al arrancar).
+const LOG = join(DATOS, 'servidor.log')
+const LOG_MAX = 200 * 1024
+const registrar = (msg) => { try { mkdirSync(DATOS, { recursive: true }); appendFileSync(LOG, `${new Date().toISOString()} ${String(msg?.stack || msg).replace(/\n/g, '\n    ')}\n`) } catch {} }
+function recortarLog() {
+  try { if (statSync(LOG).size > LOG_MAX) writeFileSync(LOG, readFileSync(LOG, 'utf8').slice(-LOG_MAX / 2).replace(/^[^\n]*\n/, '')) } catch {}
+}
+// Un error en una petición o en cualquier promesa suelta se registra y el servidor sigue vivo.
+export function protegerProceso(proceso = process, log = registrar) {
+  proceso.on('uncaughtException', (e) => log(`uncaughtException: ${e?.stack || e}`))
+  proceso.on('unhandledRejection', (e) => log(`unhandledRejection: ${e?.stack || e}`))
+}
+export function protegerManejador(manejar, log = registrar) {
+  return (req, res) => { Promise.resolve().then(() => manejar(req, res)).catch((e) => log(`manejador: ${e?.stack || e}`)) }
+}
 function servir() {
+  recortarLog()
+  protegerProceso()
   let ultimo = Date.now()
-  createServer(crearManejador({ alUsar: () => { ultimo = Date.now() } })).listen(PUERTO, '127.0.0.1')
-  setInterval(() => { if (Date.now() - ultimo > INACTIVIDAD_MS) process.exit(0) }, 60e3)
+  registrar(`arranque (pid ${process.pid}, puerto ${PUERTO})`)
+  const srv = createServer(protegerManejador(crearManejador({ alUsar: () => { ultimo = Date.now() } })))
+  srv.on('error', (e) => { registrar(`servidor: ${e?.stack || e}`); if (e.code === 'EADDRINUSE') process.exit(0) })
+  srv.listen(PUERTO, '127.0.0.1')
+  setInterval(() => { if (Date.now() - ultimo > INACTIVIDAD_MS) { registrar('cerrado por inactividad'); process.exit(0) } }, 60e3)
+  for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => { registrar(`salida por ${s}`); process.exit(0) })
 }
 async function servidorVivo() {
   try { return (await (await fetch(URL_LOCAL + 'api/ping', { signal: AbortSignal.timeout(600) })).json()).tablero === true } catch { return false }
 }
+// Lanza `--servir` en segundo plano con stdout/stderr hacia datos/servidor.log y espera a que responda.
+async function arrancarServidor() {
+  mkdirSync(DATOS, { recursive: true })
+  const fd = openSync(LOG, 'a')
+  try { spawn(process.execPath, [fileURLToPath(import.meta.url), '--servir'], { detached: true, stdio: ['ignore', fd, fd] }).unref() } finally { closeSync(fd) }
+  for (let i = 0; i < 20 && !(await servidorVivo()); i++) await new Promise((r) => setTimeout(r, 150))
+}
 // Abre el tablero servido (arranca el servidor en segundo plano si no corre); si falla, el archivo.
 async function abrir() {
-  if (!(await servidorVivo())) {
-    spawn(process.execPath, [fileURLToPath(import.meta.url), '--servir'], { detached: true, stdio: 'ignore' }).unref()
-    for (let i = 0; i < 20 && !(await servidorVivo()); i++) await new Promise((r) => setTimeout(r, 150))
-  }
+  if (!(await servidorVivo())) await arrancarServidor()
   sh('open', [(await servidorVivo()) ? URL_LOCAL : join(AQUI, 'index.html')])
 }
 
@@ -705,7 +760,7 @@ function hookInicio() {
   const cwd = entrada.cwd || process.cwd()
   const p = proyectos.find((x) => [x.repo, ...x.docs].filter(Boolean).some((r) => cwd.startsWith(r) || r.startsWith(cwd + '/')))
   // Regenera en segundo plano para no frenar el arranque.
-  spawn(process.execPath, [fileURLToPath(import.meta.url)], { detached: true, stdio: 'ignore' }).unref()
+  spawn(process.execPath, [fileURLToPath(import.meta.url), '--silencioso', '--asegurar-servidor'], { detached: true, stdio: 'ignore' }).unref()
   if (!p) return
   const lineas = [`[Tablero] Proyecto «${p.nombre}» — tablero: ${join(AQUI, 'index.html')}`]
   const todos = leerBacklogs(p)
@@ -744,4 +799,5 @@ else {
     console.log(join(AQUI, 'index.html'))
   }
   if (args.includes('--abrir')) await abrir()
+  else if (args.includes('--asegurar-servidor') && !(await servidorVivo())) await arrancarServidor()
 }

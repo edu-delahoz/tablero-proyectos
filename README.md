@@ -99,10 +99,15 @@ o padre cerrado con hijo abierto).
 ```sh
 node generar.mjs --servir   # http://127.0.0.1:47321
 node generar.mjs --abrir    # regenera y abre el navegador (arranca el servidor si hace falta)
+node generar.mjs --asegurar-servidor   # regenera y, si el servidor no corre, lo arranca (lo lanza el hook SessionStart)
 ```
 
 Con servidor se pueden marcar casillas y añadir notas desde el navegador; abierto
 como `file://` el tablero es de solo lectura.
+
+El servidor registra arranques, salidas y errores en `datos/servidor.log` (se recorta a ~200 KB); un error
+en una petición no lo tumba, y se cierra solo tras 6 h sin uso (queda anotado en el log). Cada sesión de Claude
+lo revive vía `--asegurar-servidor`.
 
 **Actualización en vivo.** Con servidor, el tablero sondea `GET /api/version` cada ~3 s (una huella
 de mtimes de backlogs, planes de `~/.claude/plans`, notas, `.git/HEAD` y `.git/refs`; no lee contenido)

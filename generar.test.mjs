@@ -6,7 +6,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
-import { estructura, analizarTitulo, estasAqui, hitosDePlan, vincular, aplanar, plano, grafoRamas, fusionarRamas, anadirNota } from './generar.mjs'
+import { estructura, analizarTitulo, estasAqui, hitosDePlan, vincular, aplanar, plano, grafoRamas, fusionarRamas, anadirNota, asignarPlanes } from './generar.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const fixture = (f) => readFileSync(join(AQUI, 'fixtures', f), 'utf8')
@@ -254,4 +254,15 @@ test('estructura: «Plan: …/plans/x.md» da `plan` y la etiqueta «S7 — Sonn
   assert.equal(a[1].plan, undefined)
   const p = a[1].prompts[0]
   assert.deepEqual([p.clave, p.modelo], ['S7', 'Sonnet'])
+})
+
+test('asignarPlanes: cada plan va al proyecto con más menciones; la asignación manual manda', () => {
+  const m = new Map([
+    ['iep', new Map([['a.md', new Map([['x', 1]])], ['b.md', new Map([['x', 5]])], ['c.md', new Map([['x', 2]])]])],
+    ['tablero', new Map([['a.md', new Map([['x', 3], ['y', 2]])], ['b.md', new Map([['x', 1]])], ['c.md', new Map([['x', 2]])]])],
+  ])
+  const r = asignarPlanes(m, new Map([['b.md', 'tablero']]))
+  assert.equal(r.get('a.md'), 'tablero') // 5 contra 1
+  assert.equal(r.get('b.md'), 'tablero') // manual, aunque iep tenga más
+  assert.equal(r.get('c.md'), 'iep') // empate: el primero
 })
