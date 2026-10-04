@@ -34,10 +34,12 @@ Plan: `~/.claude/plans/quiero-que-planes-en-vivid-locket.md`. Rama `integracione
 Decisiones y trampas (S16): la ruta de credenciales se inyecta con `TABLERO_CREDENCIALES` (los tests nunca tocan `~/.config/tablero`). `resumenCredenciales` va por tipo (`trello`, `azure-devops`, `github-projects` → `fuente: 'gh'`) y por id con entrada propia; `fin` solo si el valor tiene ≥ 8 caracteres; nunca nombres de campo (el test de `/api/datos` busca «token»). `guardarCredencial` no pisa un `credenciales.json` con JSON roto; campo vacío = borrarlo. `/api/credenciales` acepta como `clave` un tipo o el id de una integración ya configurada. `/probar` responde 502 con el error del conector si la lectura falla (400 si no valida). Editar conserva campos fuera de la lista blanca; renombrar responde `renombrada: true` (la vista debe avisar de marcas huérfanas). `proyectos.json` se reescribe con la sangría detectada (el real usa 2 → `git diff` solo del bloque). `CONFIG` y `credenciales.json` entran en `huella()`.
 
 ### S17 — Descubrir Projects, tableros y columnas · **Sonnet** · rama `integraciones-vista`
-- [ ] GitHub `listar()`: Projects del usuario y sus orgs (`gql` vía `gh`); con `{propietario, numero}` → campos de selección con opciones y campos de texto; tests con `gh` simulado
-- [ ] Trello `listar()`: tableros abiertos; con `tablero` → listas abiertas; tests con `fetch` simulado
-- [ ] ADO `listar()`: proyectos de la organización; con `proyecto` → tipos de work item y estados; tests con `fetch` simulado
-- [ ] `POST /api/integraciones/descubrir` `{ tipo, clave?, consulta }` (timeout 15 s, errores con `traducirError`); test de servidor
+- [x] GitHub `listar()`: Projects del usuario y sus orgs (`gql` vía `gh`); con `{propietario, numero}` → campos de selección con opciones y campos de texto; tests con `gh` simulado
+- [x] Trello `listar()`: tableros abiertos; con `tablero` → listas abiertas; tests con `fetch` simulado
+- [x] ADO `listar()`: proyectos de la organización; con `proyecto` → tipos de work item y estados; tests con `fetch` simulado
+- [x] `POST /api/integraciones/descubrir` `{ tipo, clave?, consulta }` (timeout 15 s, errores con `traducirError`); test de servidor
+
+Decisiones (S17): `listar(cfg, cred, deps)` en cada conector, solo lectura, con la misma `api`/`gql` y `traducirError`. GitHub: `{}` → `{ proyectos: [{propietario, numero, titulo, url}] }` (usuario + orgs, sin cerrados); `{propietario, numero}` → `{ titulo, camposSeleccion: [{nombre, opciones}], camposTexto }`. Trello: `{}` → `{ tableros: [{id (shortLink), nombre, url}] }`; `{tablero}` → `{ titulo, listas }`. ADO: `{organizacion}` → `{ proyectos: [nombre] }` (la `api` omite el proyecto de la URL si no hay); `+ proyecto` → `{ tipos: [{nombre, estados}] }`. `POST /api/integraciones/descubrir` `{ tipo, clave?, consulta }`: solo pasa a `listar` `propietario/numero/tablero/organizacion/proyecto`; credencial por `credencialesPara({id: clave, tipo})` (400 `falta-credencial` + `paso`), 502 con el error traducido, 15 s. Nunca devuelve credenciales.
 
 ### S18 — Formulario en la vista Integraciones · **Sonnet** · rama `integraciones-vista`
 - [ ] «+ Añadir integración»; el estado vacío pasa a ser el formulario (no el texto del README)

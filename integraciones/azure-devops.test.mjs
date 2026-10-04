@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { leer, crear, actualizar, descripcionHtml, traducirError } from './azure-devops.mjs'
+import { leer, crear, actualizar, listar, descripcionHtml, traducirError } from './azure-devops.mjs'
 
 const R = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'integraciones', 'azure-devops.json'), 'utf8'))
 const CFG = { id: 'ado', tipo: 'azure-devops', organizacion: 'org-ejemplo', proyecto: 'proyecto-ejemplo', tipoItem: 'Task' }
@@ -102,4 +102,22 @@ test('errores en español: 401, 203 con HTML de login, 404, timeout, red; ningú
   assert.equal(mRed, 'Sin conexión con Azure DevOps.')
   for (const m of [m401, m203, m404, mTime, mRed]) assert.ok(!/PAT-secreto|UEFULXNlY3JldG8|https?:/.test(m), m)
   assert.match(traducirError({ status: 500, cuerpo: 'a\n b' }), /respondió 500: a b/)
+})
+
+test('listar: proyectos de la organización (sin proyecto en la URL) y tipos con sus estados', async () => {
+  const d = ado({
+    'GET projects': { value: [{ name: 'P1' }, { name: 'P2' }] },
+    'GET wit/workitemtypes': { value: [{ name: 'Task', states: [{ name: 'To Do' }, { name: 'Done' }] }, { name: 'Bug' }, { name: 'Viejo', isDisabled: true, states: [] }] },
+    'GET wit/workitemtypes/Bug/states': { value: [{ name: 'New' }, { name: 'Closed' }] },
+  })
+  const p = await listar({ organizacion: 'org-ejemplo' }, CRED, d)
+  assert.deepEqual(p.proyectos, ['P1', 'P2'])
+  assert.match(d.llamadas[0].url, /^https:\/\/dev\.azure\.com\/org-ejemplo\/_apis\/projects/)
+  const t = await listar({ organizacion: 'org-ejemplo', proyecto: 'P1' }, CRED, d)
+  assert.deepEqual(t.tipos, [{ nombre: 'Task', estados: ['To Do', 'Done'] }, { nombre: 'Bug', estados: ['New', 'Closed'] }])
+})
+
+test('listar: PAT inválido (203) traducido sin filtrar el PAT; exige organización', async () => {
+  await assert.rejects(listar({ organizacion: 'o' }, CRED, ado({ 'GET projects': res('<html>login</html>', 203) })), (e) => /Credencial inválida/.test(e.message) && !/PAT-secreto/.test(e.message))
+  await assert.rejects(listar({}, CRED, ado()), /organización/)
 })

@@ -896,6 +896,19 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         const vinculadas = tareasLocales(ctx.backlog.contenido, limpia.id).filter((t) => t.marca).length
         return enviar(res, 200, { ok: true, titulo: r.titulo || null, url: r.url || null, columnas: r.columnas || [], items: r.items.length, avisos: [...(ctx.aviso ? [ctx.aviso] : []), ...(r.avisos || [])], vinculadas })
       }
+      // Descubrir para los desplegables (solo lectura): `consulta` parcial según el tipo; `clave` = id de una integración con credencial propia.
+      if (ruta === '/api/integraciones/descubrir') {
+        const mod = adaptadores[b.tipo]
+        if (typeof b.tipo !== 'string' || !ADAPTADORES[b.tipo]) return enviar(res, 400, { error: 'Falta el tipo de conector o no existe.' })
+        if (typeof mod?.listar !== 'function') return enviar(res, 400, { error: `El conector «${NOMBRES[b.tipo]}» no permite descubrir opciones.` })
+        const consulta = b.consulta && typeof b.consulta === 'object' && !Array.isArray(b.consulta) ? b.consulta : {}
+        const cfg = {}
+        for (const k of ['propietario', 'numero', 'tablero', 'organizacion', 'proyecto']) if (consulta[k] != null && consulta[k] !== '') cfg[k] = consulta[k]
+        const clave = typeof b.clave === 'string' ? b.clave : undefined
+        const { cred, faltan, paso } = credencialesPara({ id: clave, tipo: b.tipo }, leerCredenciales().datos)
+        if (faltan.length) return enviar(res, 400, { error: `Falta credencial: ${faltan.join(', ')}.`, estado: 'falta-credencial', paso })
+        try { return enviar(res, 200, { ok: true, ...(await conTiempo(mod.listar(cfg, cred, { memo: new Map() }), 15000)) }) } catch (e) { return enviar(res, 502, { error: String(e?.message || e) }) }
+      }
       // Credenciales: se guardan en el archivo (0600) y la respuesta solo trae el resumen, nunca un valor.
       if (ruta === '/api/credenciales') {
         const clave = typeof b.clave === 'string' ? b.clave : ''

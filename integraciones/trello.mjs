@@ -90,3 +90,14 @@ export async function actualizar(cfg, cred, id, cambios, deps = {}) {
   }
   if (Object.keys(cuerpo).length) await api(deps, cfg, cred, 'PUT', `cards/${encodeURIComponent(id)}`, { cuerpo })
 }
+
+// Descubrimiento para el formulario (solo lectura). Sin `tablero`: tableros abiertos del usuario; con él: sus listas abiertas.
+export async function listar(cfg = {}, cred = {}, deps = {}) {
+  if (!cfg.tablero) {
+    const t = await api(deps, cfg, cred, 'GET', 'members/me/boards', { query: { filter: 'open', fields: 'name,url,shortLink' } })
+    return { tableros: t.map((x) => ({ id: x.shortLink || x.id, nombre: x.name, url: x.url })) }
+  }
+  const b = await api(deps, cfg, cred, 'GET', `boards/${encodeURIComponent(cfg.tablero)}`, { query: { fields: 'name' } })
+  const l = await api(deps, cfg, cred, 'GET', `boards/${b.id}/lists`, { query: { filter: 'open' } })
+  return { titulo: b.name, listas: l.map((x) => x.name) }
+}

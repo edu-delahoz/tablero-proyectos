@@ -37,7 +37,9 @@ const falso = {
   async leer() { return { url: 'https://x', titulo: 'Falso', columnas: ['Todo', 'Done'], items: [...fuera.values()] } },
   async crear(cfg, cred, t) { const id = `N${++n}`; fuera.set(id, { id, titulo: t.titulo, hecha: t.hecha, url: `https://x/${id}` }); return { id, url: `https://x/${id}` } },
   async actualizar(cfg, cred, id, c) { Object.assign(fuera.get(id), c) },
+  async listar(cfg, cred) { if (cfg.numero === 99) throw new Error('GitHub Projects: Sin conexión con GitHub.'); return { recibido: cfg, cred, proyectos: [{ propietario: 'u', numero: 5, titulo: 'Falso' }] } },
 }
+const trelloFalso = { async listar(cfg, cred) { return { recibido: cfg, cred, tableros: [] } } }
 
 let srv, puerto, salidas = 0
 before(async () => {
@@ -46,7 +48,7 @@ before(async () => {
   srv = createServer((q, r) => manejador(q, r))
   await new Promise((ok) => srv.listen(0, '127.0.0.1', ok))
   puerto = srv.address().port
-  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso }, codigo: 'c1', alSalir: () => { salidas++ } })
+  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso, trello: trelloFalso }, codigo: 'c1', alSalir: () => { salidas++ } })
 })
 after(() => srv.close())
 
@@ -299,6 +301,34 @@ test('integraciones: probar lee con la config propuesta sin guardar', async () =
   assert.deepEqual([r.json.titulo, r.json.columnas, typeof r.json.items], ['Falso', ['Todo', 'Done'], 'number'])
   assert.equal(readFileSync(CONF, 'utf8'), antes)
   assert.equal((await post('/api/integraciones/probar', { proyecto: 'prueba', integracion: { id: 'x', tipo: 'github-projects', backlog: 'BACKLOG_PRUEBA.md' } })).estado, 400)
+})
+
+test('integraciones: descubrir pasa solo los campos de la consulta, traduce errores y no toca proyectos.json', async () => {
+  const antes = readFileSync(CONF, 'utf8')
+  const r = await post('/api/integraciones/descubrir', { tipo: 'github-projects', consulta: { propietario: 'u', numero: 5, basura: 'x', token: 'no' } })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.deepEqual(r.json.recibido, { propietario: 'u', numero: 5 })
+  assert.equal(r.json.proyectos[0].titulo, 'Falso')
+  assert.deepEqual((await post('/api/integraciones/descubrir', { tipo: 'github-projects' })).json.recibido, {})
+  const mal = await post('/api/integraciones/descubrir', { tipo: 'github-projects', consulta: { propietario: 'u', numero: 99 } })
+  assert.deepEqual([mal.estado, mal.json.error], [502, 'GitHub Projects: Sin conexión con GitHub.'])
+  assert.equal((await post('/api/integraciones/descubrir', { tipo: 'nada' })).estado, 400)
+  assert.equal((await post('/api/integraciones/descubrir', { tipo: 'azure-devops', consulta: { organizacion: 'o' } })).estado, 400, 'sin adaptador con listar')
+  assert.equal((await post('/api/integraciones/descubrir', { tipo: 'github-projects' }, { origin: 'http://evil.com' })).estado, 403)
+  // Trello sin credencial: 400 con el paso a seguir; con ella, el conector la recibe y el JSON no la devuelve al guardarla.
+  const entorno = [process.env.TRELLO_KEY, process.env.TRELLO_TOKEN]
+  delete process.env.TRELLO_KEY; delete process.env.TRELLO_TOKEN
+  try {
+    const sin = await post('/api/integraciones/descubrir', { tipo: 'trello' })
+    assert.deepEqual([sin.estado, sin.json.estado], [400, 'falta-credencial'])
+    assert.ok(sin.json.paso)
+    await post('/api/credenciales', { clave: 'trello', campos: { key: 'k-descubrir-1', token: 't-descubrir-2' } })
+    const con = await post('/api/integraciones/descubrir', { tipo: 'trello', consulta: {} })
+    assert.equal(con.estado, 200, con.json.error)
+    assert.deepEqual(con.json.cred, { key: 'k-descubrir-1', token: 't-descubrir-2' })
+    await post('/api/credenciales', { clave: 'trello', campos: { key: '', token: '' } })
+  } finally { if (entorno[0] !== undefined) process.env.TRELLO_KEY = entorno[0]; if (entorno[1] !== undefined) process.env.TRELLO_TOKEN = entorno[1] }
+  assert.equal(readFileSync(CONF, 'utf8'), antes)
 })
 
 test('credenciales: se guardan en 0600, la respuesta y /api/datos solo traen el resumen, nunca el valor', async () => {

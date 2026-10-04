@@ -134,3 +134,26 @@ export async function actualizar(cfg, cred, id, cambios, deps = {}) {
   }
   if (cambios.hecha !== undefined) await moverA(cfg, deps, p, id, cambios.hecha)
 }
+
+const Q_LISTA = `query{ viewer{ login projectsV2(first:50){ nodes{ number title url closed } }
+  organizations(first:50){ nodes{ login projectsV2(first:50){ nodes{ number title url closed } } } } } }`
+const Q_CAMPOS = `query($owner:String!,$number:Int!){ repositoryOwner(login:$owner){ ... on ProjectV2Owner { projectV2(number:$number){ title
+  fields(first:50){ nodes{ ... on ProjectV2FieldCommon { name dataType } ... on ProjectV2SingleSelectField { options{ name } } } } } } } }`
+
+// Descubrimiento para el formulario (solo lectura). Sin `propietario`+`numero`: los Projects abiertos del usuario y de sus orgs.
+// Con ellos: campos de selección (con opciones) y de texto del proyecto. cfg = { propietario?, numero? }.
+export async function listar(cfg = {}, cred = {}, deps = {}) {
+  if (cfg.propietario == null || cfg.numero == null) {
+    const v = (await gql(deps, cfg, Q_LISTA))?.viewer
+    const grupos = [{ login: v?.login, nodes: v?.projectsV2?.nodes }, ...(v?.organizations?.nodes || []).map((o) => ({ login: o.login, nodes: o.projectsV2?.nodes }))]
+    return { proyectos: grupos.flatMap((g) => (g.nodes || []).filter((x) => x && !x.closed).map((x) => ({ propietario: g.login, numero: x.number, titulo: x.title, url: x.url }))) }
+  }
+  const p = (await gql(deps, cfg, Q_CAMPOS, { owner: cfg.propietario, number: Number(cfg.numero) }))?.repositoryOwner?.projectV2
+  if (!p) throw new Error(`No existe el proyecto ${cfg.propietario}/${cfg.numero} o tu cuenta de gh no tiene acceso.`)
+  const campos = p.fields.nodes.filter((f) => f?.name)
+  return {
+    titulo: p.title,
+    camposSeleccion: campos.filter((f) => f.dataType === 'SINGLE_SELECT').map((f) => ({ nombre: f.name, opciones: (f.options || []).map((o) => o.name) })),
+    camposTexto: campos.filter((f) => f.dataType === 'TEXT').map((f) => f.name),
+  }
+}

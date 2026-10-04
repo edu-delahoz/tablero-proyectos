@@ -23,7 +23,8 @@ const urlItem = (cfg, id) => `https://dev.azure.com/${cfg.organizacion}/${cfg.pr
 // Una llamada REST; `ruta` cuelga de …/{organizacion}/{proyecto}/_apis/. Lanza Error con mensaje ya traducido.
 async function api(deps, cfg, cred, metodo, ruta, { cuerpo, tipo = 'application/json' } = {}) {
   const f = deps.fetch || globalThis.fetch
-  const url = `https://dev.azure.com/${encodeURIComponent(cfg.organizacion)}/${encodeURIComponent(cfg.proyecto)}/_apis/${ruta}${ruta.includes('?') ? '&' : '?'}${API}`
+  const alcance = cfg.proyecto ? `/${encodeURIComponent(cfg.proyecto)}` : '' // sin proyecto: llamadas de la organización
+  const url = `https://dev.azure.com/${encodeURIComponent(cfg.organizacion)}${alcance}/_apis/${ruta}${ruta.includes('?') ? '&' : '?'}${API}`
   const ctl = new AbortController()
   const t = setTimeout(() => ctl.abort(), TIMEOUT_MS)
   try {
@@ -103,4 +104,20 @@ export async function actualizar(cfg, cred, id, cambios, deps = {}) {
   if (cambios.titulo !== undefined) ops.push(op('replace', 'System.Title', cambios.titulo))
   if (cambios.hecha !== undefined) ops.push(op('replace', 'System.State', (cambios.hecha ? n.hecho : n.pendiente)[0]))
   if (ops.length) await api(deps, cfg, cred, 'PATCH', `wit/workitems/${encodeURIComponent(id)}`, { cuerpo: ops, tipo: TIPO_PARCHE })
+}
+
+// Descubrimiento para el formulario (solo lectura). Con `organizacion`: sus proyectos; con `proyecto` además: tipos de work item y sus estados.
+export async function listar(cfg = {}, cred = {}, deps = {}) {
+  if (!cfg.organizacion) throw new Error('Falta la organización de Azure DevOps.')
+  if (!cfg.proyecto) {
+    const r = await api(deps, cfg, cred, 'GET', 'projects?$top=200')
+    return { proyectos: (r.value || []).map((p) => p.name) }
+  }
+  const r = await api(deps, cfg, cred, 'GET', 'wit/workitemtypes')
+  const tipos = []
+  for (const t of (r.value || []).filter((x) => !x.isDisabled)) {
+    const estados = t.states ? t.states.map((s) => s.name) : (await api(deps, cfg, cred, 'GET', `wit/workitemtypes/${encodeURIComponent(t.name)}/states`)).value.map((s) => s.name)
+    tipos.push({ nombre: t.name, estados })
+  }
+  return { tipos }
 }
