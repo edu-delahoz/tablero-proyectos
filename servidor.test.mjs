@@ -469,6 +469,12 @@ test('vista: la plantilla trae modo, filtro Mías/Sin asignar, chips y la primer
   assert.equal(ado.backlog, null)
 })
 
+test('vista: la plantilla trae «Nuevo proyecto», el formulario de crear y «Crear backlog» (pestaña e integraciones)', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['id="nuevo-proyecto"', 'id="panel-crear"', 'id="form-crear"', "'/api/proyectos/crear'", "'/api/backlog/crear'", 'data-crear="backlog"', 'data-crear-campo', 'mtime: DATOS.configMtime']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+  assert.equal(html.split('data-crear="backlog"').length - 1, 2, 'botón en la pestaña Backlogs y en el paso Modo y backlog')
+})
+
 test('crear proyecto: previa sin escribir, id inválido o duplicado y rutas inexistentes → 400, mtime viejo → 409', async () => {
   const docsNuevo = join(dir, 'docs-nuevo')
   mkdirSync(docsNuevo)

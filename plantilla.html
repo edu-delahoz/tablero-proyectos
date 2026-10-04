@@ -413,10 +413,12 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
       <div class="titulo-cab"><h1><span class="logo" aria-hidden="true">✻</span> Tablero de proyectos</h1><span id="rama-cab"></span></div>
       <div class="controles">
         <label>Proyecto <select id="proyecto"></select></label>
+        <button class="boton" type="button" id="nuevo-proyecto" data-crear="proyecto" hidden>＋ Nuevo proyecto</button>
         <label>Tema <select id="tema"></select></label>
       </div>
     </header>
     <nav id="pestanas" aria-label="Secciones"></nav>
+    <div id="panel-crear" aria-live="polite"></div>
     <main id="contenido"></main>
   </div>
   <footer id="barra-estado" aria-label="Barra de estado"></footer>
@@ -1182,7 +1184,7 @@ function formularioInteg() {
     ${c.tipo && cred ? paso(3, 'Destino', pasoDestino(c)) : ''}
     ${f.error ? `<div class="integ-paso mal" role="alert">${esc(f.error)}</div>` : ''}
     ${destino ? paso(4, 'Modo y backlog', `<label class="campo-fi" for="fi-modo"><span>Modo</span><select id="fi-modo" data-fi="modo">${opcion('sincronizar', 'Sincronizar con un backlog', !lectura)}${opcion('lectura', 'Solo lectura (solo se muestra lo de afuera)', lectura)}</select></label>
-      ${lectura ? `<div class="integ-paso">${archivosBacklog().length ? 'Solo lectura:' : 'Este proyecto no tiene backlog:'} solo se mostrará lo de ${esc((TIPOS_INTEG.find(([v]) => v === c.tipo) || [, c.tipo])[1])}. No se crea, cambia ni borra nada afuera, y no se toca ningún backlog.</div>` : selectFi('fi-backlog', 'Archivo', 'backlog', c.backlog, archivosBacklog())}`) : ''}
+      ${lectura ? `<div class="integ-paso">${archivosBacklog().length ? 'Solo lectura:' : 'Este proyecto no tiene backlog:'} solo se mostrará lo de ${esc((TIPOS_INTEG.find(([v]) => v === c.tipo) || [, c.tipo])[1])}. No se crea, cambia ni borra nada afuera, y no se toca ningún backlog.</div>` : archivosBacklog().length ? selectFi('fi-backlog', 'Archivo', 'backlog', c.backlog, archivosBacklog()) : `<div class="integ-paso">Este proyecto no tiene backlog para sincronizar. ${editable() ? '<button class="boton" type="button" data-crear="backlog">＋ Crear backlog</button>' : ''}</div>`}`) : ''}
     ${destino ? paso(5, 'Columnas', pasoColumnas(c)) : ''}
     ${destino ? paso(6, 'Nombre', `${textoFi('fi-id', 'Id', 'id', c.id ?? idPropuesto(c.tipo), 'minúsculas, números y guiones; es el prefijo de las marcas <code>&lt;!-- id:… --&gt;</code> del backlog')}
       <div id="fi-aviso-id">${avisoRenombra(f)}</div>
@@ -1443,7 +1445,7 @@ const VISTAS = {
     </div>`;
   },
   backlogs() {
-    if (!P.backlogs.length) return '<div class="vacio">No hay backlogs en las carpetas configuradas.</div>';
+    if (!P.backlogs.length) return `<div class="vacio">No hay backlogs en las carpetas configuradas.</div>${botonCrearBacklog()}`;
     const actual = P.backlogs.find((b) => b.archivo === sel.backlogs) || P.backlogs[0];
     return `<div class="archivos" aria-label="Archivos">${P.backlogs.map((b) => `<button data-sel="${esc(b.archivo)}" aria-current="${b === actual}">${esc(b.archivo)}${b.total ? `<span class="n">${b.hechas}/${b.total}</span>` : ''}</button>`).join('')}</div>
       ${modo.backlogs !== 'documento' && editando !== actual.ruta ? barraBusqueda('backlogs', true) : ''}
@@ -1807,6 +1809,71 @@ document.addEventListener('change', (e) => {
 });
 // Recuerda qué secciones abrió/cerró el usuario.
 document.addEventListener('toggle', (e) => { const k = e.target.dataset?.k; if (k && !filtrando) abiertos.set(k, e.target.open); }, true);
+
+// ---------- Crear proyecto y backlog (con vista previa; el servidor nunca sobrescribe) ----------
+let crear = null; // { tipo: 'proyecto'|'backlog', campos, previa, error, ocupado }
+const CAMPOS_PROY = [['id', 'Id', 'minúsculas, números y guiones'], ['nombre', 'Nombre', ''], ['repo', 'Carpeta del repo (opcional)', 'ruta absoluta o con ~'], ['docs', 'Carpeta de documentos (opcional)', 'donde vivirá el backlog; ruta absoluta o con ~']];
+function abrirCrear(tipo) {
+  crear = { tipo, campos: tipo === 'proyecto' ? { id: '', nombre: '', repo: '', docs: '' } : {}, previa: null, error: '', ocupado: false };
+  pintarCrear(); $('#panel-crear [data-crear-campo], #panel-crear button')?.focus();
+}
+function cerrarCrear() { const t = crear?.tipo; crear = null; pintarCrear(); document.querySelector(`[data-crear="${t}"]`)?.focus(); }
+function cuerpoCrear(previa) {
+  const c = crear.campos;
+  if (crear.tipo === 'backlog') return { proyecto: P.id, previa };
+  const lista = (t) => String(t || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return { id: c.id.trim(), nombre: c.nombre.trim(), repo: c.repo.trim() || undefined, docs: lista(c.docs).length ? lista(c.docs) : undefined, mtime: DATOS.configMtime ?? undefined, previa };
+}
+function pintarCrear() {
+  const el = $('#panel-crear'); if (!el) return;
+  if (!crear) { el.innerHTML = ''; return; }
+  const pr = crear.previa, proy = crear.tipo === 'proyecto';
+  el.innerHTML = `<form id="form-crear" class="tarjeta" aria-label="${proy ? 'Nuevo proyecto' : 'Crear backlog'}">
+    <h2><span>${proy ? 'Nuevo proyecto' : `Crear backlog de «${esc(P.nombre)}»`}</span></h2>
+    ${proy ? CAMPOS_PROY.map(([k, t, ayuda]) => `<label class="campo-fi" for="cr-${k}"><span>${t}</span><input id="cr-${k}" data-crear-campo="${k}" value="${esc(crear.campos[k])}" autocomplete="off" spellcheck="false"${k === 'id' ? ' required' : ''}>${ayuda ? `<small class="suave">${ayuda}</small>` : ''}</label>`).join('')
+      : '<p class="suave">Se crea <code>BACKLOG.md</code> con una plantilla mínima en la primera carpeta de documentos del proyecto. Nunca sobrescribe un archivo que ya exista.</p>'}
+    ${crear.error ? `<div class="integ-paso mal" role="alert">${esc(crear.error)}</div>` : ''}
+    ${pr ? (proy ? `<div class="integ-paso" role="status">Se añadirá a <code>${esc(pr.archivo)}</code>:<pre>${esc(JSON.stringify(pr.proyecto, null, 2))}</pre></div>`
+      : `<div class="integ-paso" role="status">Se creará <code>${esc(pr.ruta)}</code>:<pre>${esc(pr.contenido)}</pre></div>`) : ''}
+    <div class="pie">${pr ? `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>${proy ? 'Crear proyecto' : 'Crear backlog'}</button>` : `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>Vista previa</button>`}<button class="boton" type="button" data-crear-cerrar>Cancelar</button></div>
+  </form>`;
+}
+async function enviarCrear() {
+  const c = crear; if (!c || c.ocupado) return;
+  const ruta = c.tipo === 'proyecto' ? '/api/proyectos/crear' : '/api/backlog/crear', previa = !c.previa;
+  c.ocupado = true; c.error = ''; pintarCrear();
+  try {
+    const r = await api(ruta, cuerpoCrear(previa));
+    if (previa) { c.previa = r; c.ocupado = false; pintarCrear(); $('#form-crear [type=submit]')?.focus(); return; }
+    crear = null; recargarDatos(r.datos); refrescarSelectorProyectos();
+    if (c.tipo === 'proyecto') { abrirProyecto(r.proyecto.id, 'backlogs'); avisar(`Proyecto «${r.proyecto.nombre}» creado.`); }
+    else {
+      sel.backlogs = r.archivo;
+      if (formInteg) { formInteg.cfg.backlog = r.archivo; formInteg.prueba = null; pintarF(); } // sigue el formulario de integración, con el archivo ya elegido
+      else { pestana = 'backlogs'; guardar('tablero.pestana', pestana); pintar(); }
+      avisar(`${r.archivo} creado.`);
+    }
+    pintarCrear();
+  } catch (e) {
+    c.ocupado = false; c.error = e.estado === 409 && c.tipo === 'proyecto' ? `${e.message} Recarga la página: proyectos.json cambió.` : e.message; c.previa = null; pintarCrear();
+  }
+}
+function refrescarSelectorProyectos() {
+  $('#proyecto').innerHTML = `<option value="todos">Todos los proyectos</option>` + DATOS.proyectos.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');
+  $('#proyecto').value = todos ? 'todos' : P.id;
+}
+const botonCrearBacklog = () => editable() ? '<p><button class="boton primario" type="button" data-crear="backlog">＋ Crear backlog</button></p>' : '';
+$('#nuevo-proyecto').hidden = !editable();
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-crear], [data-crear-cerrar]');
+  if (!b) return;
+  if ('crearCerrar' in b.dataset) cerrarCrear(); else abrirCrear(b.dataset.crear);
+});
+document.addEventListener('input', (e) => {
+  if (crear && e.target.dataset?.crearCampo) { crear.campos[e.target.dataset.crearCampo] = e.target.value; if (crear.previa) { crear.previa = null; pintarCrear(); const el = document.getElementById(e.target.id); el?.focus(); el?.setSelectionRange(el.value.length, el.value.length); } }
+});
+document.addEventListener('submit', (e) => { if (e.target.id === 'form-crear') { e.preventDefault(); enviarCrear(); } });
+document.addEventListener('keydown', (e) => { if (crear && e.key === 'Escape' && e.target.closest?.('#form-crear')) cerrarCrear(); });
 
 // ---------- Controles de cabecera ----------
 const TEMAS = [['auto', 'Auto'], ['light', 'Claro'], ['dark', 'Oscuro']];
