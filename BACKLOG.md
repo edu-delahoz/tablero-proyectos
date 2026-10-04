@@ -44,7 +44,7 @@ Trampas: los tests del servidor comprueban que `datos` no contenga «token», as
 - [x] Pestaña «Bitácora» por proyecto: totales (sesiones, costo, duración, % sesiones 🔴), tabla de filas con filtro «este proyecto / todas» y «solo pendientes», resumen semanal y lecciones (solo lectura)
 - [x] Filas `_pendiente_` editables: selector de Calidad, campo Seguridad y Notas, botón Guardar → `POST /api/bitacora`; manejar 409 con aviso y recarga
 - [x] En la barra de estado: «✎ N filas de bitácora pendientes» que abre la pestaña
-- [ ] Probar en el navegador completando una fila real y verificar el diff de `BITACORA.md` (probado con CDP sobre una **copia**: diff de una sola línea correcto; falta hacerlo a mano sobre la real)
+- [x] Probar en el navegador completando una fila real y verificar el diff de `BITACORA.md` (CDP sobre una copia: diff de una sola línea; el usuario confirmó la pestaña y el guardado en el tablero real)
 
 ## H3 — Integraciones: prueba real
 
