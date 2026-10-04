@@ -642,3 +642,8 @@ test('vista: «Crear backlog local desde Azure» con vista previa, «solo las m�
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
   for (const marca of ['data-crear="importar"', "'/api/integraciones/importar'", 'data-crear-check="soloMias"', 'Crear backlog local desde Azure', 'abrirForm(']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
 })
+
+test('vista: Resumen con el avance de la integración y botón «Mis tareas» en la cabecera', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['function avanceIntegracion', 'id="ir-mias"', 'data-ir-mias', 'Cerrados por semana', 'function pintarBotonMias']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})

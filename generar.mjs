@@ -740,7 +740,7 @@ async function leerIntegraciones(p, backlogs, { adaptadores = ADAPTADORES, aplic
     return {
       ...base, estado: error ? 'error' : 'conectado', mensaje: error, aviso: ctx.aviso, avisos: [...(fuera?.avisos || []), ...(base.auto && primera ? [AVISO_PRIMERA] : [])],
       url: fuera?.url || null, titulo: fuera?.titulo || null, columnas: fuera?.columnas || [],
-      items: (fuera?.items || []).map(({ id, titulo, hecha, columna, url, tipo, asignado, mio }) => ({ id, titulo, hecha, columna, url, tipo, asignado, mio })),
+      items: (fuera?.items || []).map(({ id, titulo, hecha, columna, url, tipo, asignado, mio, actualizado }) => ({ id, titulo, hecha, columna, url, tipo, asignado, mio, actualizado })),
       leidoEn: error ? cache[cfg.id]?.fecha || null : new Date().toISOString(), desdeCache: !!error && !!fuera,
       pendientes: acciones.filter((a) => a.tipo !== 'huerfana').length, porTipo, _auto: auto,
     }

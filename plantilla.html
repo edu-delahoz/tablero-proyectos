@@ -413,6 +413,7 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
       <div class="titulo-cab"><h1><span class="logo" aria-hidden="true">✻</span> Tablero de proyectos</h1><span id="rama-cab"></span></div>
       <div class="controles">
         <label>Proyecto <select id="proyecto"></select></label>
+        <button class="boton" type="button" id="ir-mias" data-ir-mias title="Lo que Azure DevOps (y demás integraciones) tienen asignado a ti">Mis tareas</button>
         <button class="boton" type="button" id="nuevo-proyecto" data-crear="proyecto" hidden>＋ Nuevo proyecto</button>
         <label>Tema <select id="tema"></select></label>
       </div>
@@ -961,6 +962,26 @@ function itemExterno(x) {
   const asig = 'asignado' in x ? (x.asignado ? `<span class="chip-asig" title="${esc(x.asignado.correo || 'Asignado')}">${esc(x.asignado.nombre || x.asignado.correo || String(x.asignado))}</span>` : '<span class="chip-asig sin">Sin asignar</span>') : '';
   return `<li${x.hecha ? ' class="hecha"' : ''}><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a>${x.tipo ? `<span class="chip-tipo">${esc(x.tipo)}</span>` : ''}${asig}</li>`;
 }
+// Avance de todo lo que trae una integración (hecho = columna de hecho): barra, por estado, por tipo, mías y cierres por semana.
+function avanceIntegracion(integ) {
+  const xs = integ.items || [], hechas = xs.filter((x) => x.hecha), mias = xs.filter((x) => x.mio === true);
+  const cuenta = (f) => xs.reduce((m, x) => { const k = f(x); m.set(k, (m.get(k) || 0) + 1); return m; }, new Map());
+  const estados = [...cuenta((x) => x.columna || 'Sin estado')];
+  const tipos = [...new Set(xs.map((x) => x.tipo).filter(Boolean))].map((t) => [t, xs.filter((x) => x.tipo === t)]);
+  const semana = (d) => { const f = new Date(d); f.setHours(0, 0, 0, 0); f.setDate(f.getDate() - ((f.getDay() + 6) % 7)); return f.getTime(); };
+  const cierres = new Map();
+  for (const x of hechas) if (x.actualizado) { const k = semana(x.actualizado); cierres.set(k, (cierres.get(k) || 0) + 1); }
+  const sem = [...cierres].sort((a, b) => b[0] - a[0]).slice(0, 8).reverse(), max = Math.max(1, ...sem.map(([, n]) => n));
+  return `<section class="tarjeta" aria-label="Avance de ${esc(integ.nombre)}">
+    <h2><span>${esc(integ.nombre)} · avance</span><small>${xs.length} ítems</small></h2>
+    <div>${barra(hechas.length, xs.length, 20)}</div><div class="suave">${hechas.length} de ${xs.length} terminados (${pct(hechas.length, xs.length)} %)</div>
+    <div class="rotulo">Por estado</div>
+    ${estados.map(([e, n]) => `<div class="fila"><span>${esc(e)}</span><span class="n">${n}</span></div>`).join('')}
+    ${tipos.length ? `<div class="rotulo" style="margin-top:10px">Por tipo (terminados)</div>${tipos.map(([t, l]) => { const h = l.filter((x) => x.hecha).length; return `<div class="fila"><span>${esc(t)}</span><span class="n">${h} / ${l.length}</span></div>`; }).join('')}` : ''}
+    ${sem.length ? `<div class="rotulo" style="margin-top:10px">Cerrados por semana <span class="suave">(según el último cambio)</span></div>${sem.map(([k, n]) => `<div class="fila"><span class="suave">${new Date(k).toLocaleDateString('es', { day: 'numeric', month: 'short' })}</span><span class="progreso" aria-hidden="true"><i style="width:${Math.round(n / max * 100)}%"></i></span><span class="n">${n}</span></div>`).join('')}` : ''}
+    ${conMio(xs) ? `<p><button class="boton primario" type="button" data-ir-mias>Mis tareas · ${mias.filter((x) => !x.hecha).length} abiertas</button> <button class="boton" type="button" data-ir="integraciones">Ver todos los ítems</button></p>` : '<p><button class="boton" type="button" data-ir="integraciones">Ver todos los ítems</button></p>'}
+  </section>`;
+}
 function tarjetaIntegracion(integ) {
   if (formInteg?.original === integ.id) return formularioInteg();
   const lectura = integ.modo === 'lectura', filtro = filtroInteg.get(integ.id) || 'todas';
@@ -1450,6 +1471,7 @@ const VISTAS = {
     const sesActual = g?.rama ? sesionesDeRama(g.rama) : [];
     const ec = enCurso(P);
     return `${tarjetaGuia(P)}${tarjetaEnCurso(P)}${botonEditarProyecto()}<div class="rejilla"${ec ? ' style="margin-top:14px"' : ''}>
+      ${(P.integraciones || []).filter((i) => i.estado === 'conectado' && (i.items || []).length).map(avanceIntegracion).join('')}
       ${bl.map((b) => `<section class="tarjeta">
         <h2><span>${esc(b.archivo)}</span><small>${hace(b.modificado)}</small></h2>
         <div>${barra(b.hechas, b.total, 20)}</div><div class="suave">${b.hechas} de ${b.total} tareas (${pct(b.hechas, b.total)} %)</div>
@@ -1948,11 +1970,12 @@ async function enviarCrear() {
 }
 function refrescarSelectorProyectos() {
   $('#proyecto').innerHTML = `<option value="todos">Todos los proyectos</option><option value="mias">Mis tareas</option>` + DATOS.proyectos.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');
-  $('#proyecto').value = todos ? (mias ? 'mias' : 'todos') : P.id;
+  $('#proyecto').value = todos ? (mias ? 'mias' : 'todos') : P.id; pintarBotonMias();
 }
 const botonCrearBacklog = () => editable() ? '<p><button class="boton primario" type="button" data-crear="backlog">＋ Crear backlog</button></p>' : '';
 $('#nuevo-proyecto').hidden = !editable();
 document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-ir-mias]')) { const sl = $('#proyecto'); sl.value = 'mias'; sl.dispatchEvent(new Event('change')); return; }
   const b = e.target.closest('[data-crear], [data-crear-cerrar]');
   if (!b) return;
   if ('crearCerrar' in b.dataset) cerrarCrear(); else abrirCrear(b.dataset.crear, b.dataset.integ);
@@ -1977,7 +2000,12 @@ $('#tema').addEventListener('change', (e) => {
 // El proyecto activo se recuerda por id: #p=<id> en la URL manda sobre localStorage.
 const idEnHash = () => decodeURIComponent((location.hash.match(/[#&]p=([^&]*)/) || [])[1] || '');
 const buscarProyecto = (id) => DATOS.proyectos.find((p) => p.id === id);
+function pintarBotonMias() {
+  const n = totalAsignadas(), b = $('#ir-mias'); if (!b) return;
+  b.innerHTML = `Mis tareas${n ? ` <span class="n">${n}</span>` : ''}`; b.classList.toggle('primario', !!mias); b.setAttribute('aria-pressed', String(!!mias));
+}
 function recordarProyecto() {
+  pintarBotonMias();
   const id = todos ? (mias ? 'mias' : 'todos') : P.id;
   guardar('tablero.proyecto', id);
   try { history.replaceState(null, '', `#p=${encodeURIComponent(id)}`); } catch {}
