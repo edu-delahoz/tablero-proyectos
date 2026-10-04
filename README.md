@@ -134,6 +134,17 @@ de la sesión sin marcas de markdown, no su id posicional, así que sobrevive a 
 renombra la sesión, deja de ser favorita. Solo escribe ese archivo (nunca un `.md`) y los títulos se
 comparan en todos los proyectos. Sin servidor las estrellas se ven pero no se pueden cambiar.
 
+**Crear proyecto.** `POST /api/proyectos/crear` `{ id, nombre, repo?, docs?, mtime }` añade una entrada al
+final de `proyectos.json` (el resto queda igual). `id` en `[a-z0-9-]` y único; `repo` y `docs` (texto o
+lista) deben ser carpetas que existan, absolutas o con `~`. `mtime` es `datos.configMtime`: si el archivo
+cambió responde 409. Con `previa: true` devuelve la entrada sin escribir. Solo desde esta máquina.
+
+**Crear backlog.** `POST /api/backlog/crear` `{ proyecto, archivo?, carpeta? }` crea `archivo`
+(por defecto `BACKLOG.md`) con una plantilla mínima (título, `## Estado`, `## S1` con una casilla) en la
+primera carpeta `docs` del proyecto, o en `carpeta` si es una de ellas. Nunca sobrescribe (existe → 409);
+el nombre es simple (sin `/` ni `..`), termina en `.md` y debe cumplir `patronBacklogs`. Sin `docs` → 400.
+Con `previa: true` devuelve el contenido sin escribir.
+
 ## Conectores y credenciales
 
 **Lo normal es hacerlo desde la vista.** Con el tablero abierto con el servidor local (Tablero.app o

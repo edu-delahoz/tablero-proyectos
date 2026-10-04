@@ -468,3 +468,70 @@ test('vista: la plantilla trae modo, filtro Mías/Sin asignar, chips y la primer
   assert.equal(ado.modo, 'lectura')
   assert.equal(ado.backlog, null)
 })
+
+test('crear proyecto: previa sin escribir, id inválido o duplicado y rutas inexistentes → 400, mtime viejo → 409', async () => {
+  const docsNuevo = join(dir, 'docs-nuevo')
+  mkdirSync(docsNuevo)
+  const antes = readFileSync(CONF, 'utf8')
+  const pv = await post('/api/proyectos/crear', { id: 'nuevo', nombre: '  Nuevo   proyecto ', docs: docsNuevo, previa: true })
+  assert.equal(pv.estado, 200, pv.json.error)
+  assert.deepEqual(pv.json.proyecto, { id: 'nuevo', nombre: 'Nuevo proyecto', docs: [docsNuevo] })
+  assert.equal(readFileSync(CONF, 'utf8'), antes)
+  for (const [cuerpo, re] of [
+    [{ id: 'Con Espacios', nombre: 'x' }, /minúsculas/],
+    [{ id: 'prueba', nombre: 'x' }, /Ya hay un proyecto/],
+    [{ id: 'otro', nombre: '' }, /Falta el nombre/],
+    [{ id: 'otro', nombre: 'x', repo: join(dir, 'no-existe') }, /no es una carpeta/],
+    [{ id: 'otro', nombre: 'x', docs: ['relativa/docs'] }, /absoluta/],
+    [{ id: 'otro', nombre: 'x', docs: [BACKLOG] }, /no es una carpeta/],
+  ]) {
+    const r = await post('/api/proyectos/crear', { ...cuerpo, mtime: await mtime() })
+    assert.equal(r.estado, 400, JSON.stringify(cuerpo))
+    assert.match(r.json.error, re)
+  }
+  const m = await mtime()
+  assert.equal((await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Nuevo', docs: docsNuevo, mtime: m - 1000 })).estado, 409)
+  assert.equal((await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Nuevo', docs: docsNuevo })).estado, 400, 'sin mtime no escribe')
+  assert.equal((await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Nuevo', docs: docsNuevo, mtime: m }, { origin: 'http://evil.com' })).estado, 403)
+  assert.equal(readFileSync(CONF, 'utf8'), antes)
+  const r = await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Nuevo', repo: dir, docs: [docsNuevo], mtime: m })
+  assert.equal(r.estado, 200, r.json.error)
+  const conf = JSON.parse(readFileSync(CONF, 'utf8'))
+  assert.deepEqual(conf.slice(0, -1), JSON.parse(antes), 'los proyectos de antes quedan igual')
+  assert.deepEqual(conf.at(-1), { id: 'nuevo', nombre: 'Nuevo', repo: dir, docs: [docsNuevo] })
+  assert.ok(r.json.datos.proyectos.some((p) => p.id === 'nuevo'))
+  assert.equal((await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Otra vez', mtime: await mtime() })).estado, 400)
+})
+
+test('crear backlog: sin docs, nombre con ruta o fuera del patrón → 400; existente → 409 sin tocarlo; previa no escribe', async () => {
+  const docsNuevo = join(dir, 'docs-nuevo')
+  assert.match((await post('/api/backlog/crear', { proyecto: 'eap10' })).json.error, /no tiene carpeta de documentos/)
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nada' })).estado, 404)
+  for (const archivo of ['../BACKLOG.md', 'sub/BACKLOG.md', '/tmp/BACKLOG.md', 'BACKLOG..md', 'NOTAS.md', 'BACKLOG.txt']) {
+    assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', archivo })).estado, 400, archivo)
+  }
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', carpeta: dir })).estado, 400, 'carpeta que no es docs del proyecto')
+  const ex = await post('/api/backlog/crear', { proyecto: 'prueba', archivo: 'BACKLOG_PRUEBA.md' })
+  assert.equal(ex.estado, 409)
+  assert.match(ex.json.error, /nunca sobrescribe/)
+  const antesPrueba = readFileSync(BACKLOG, 'utf8')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'prueba', archivo: 'BACKLOG_PRUEBA.md', previa: true })).estado, 409)
+  assert.equal(readFileSync(BACKLOG, 'utf8'), antesPrueba)
+  const pv = await post('/api/backlog/crear', { proyecto: 'nuevo', previa: true })
+  assert.equal(pv.estado, 200, pv.json.error)
+  assert.equal(pv.json.archivo, 'BACKLOG.md')
+  assert.match(pv.json.contenido, /^# Backlog — Nuevo\n\n## Estado\n- \d{4}-\d{2}-\d{2} · /)
+  assert.match(pv.json.contenido, /\n## S1 — .*\n- \[ \] /)
+  assert.ok(!existsSync(join(docsNuevo, 'BACKLOG.md')))
+  const r = await post('/api/backlog/crear', { proyecto: 'nuevo' })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.equal(readFileSync(join(docsNuevo, 'BACKLOG.md'), 'utf8'), pv.json.contenido)
+  const b = (await get('/api/datos')).json.proyectos.find((p) => p.id === 'nuevo').backlogs
+  assert.deepEqual(b.map((x) => [x.archivo, x.total]), [['BACKLOG.md', 1]])
+  writeFileSync(join(docsNuevo, 'BACKLOG.md'), 'editado a mano\n')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo' })).estado, 409)
+  assert.equal(readFileSync(join(docsNuevo, 'BACKLOG.md'), 'utf8'), 'editado a mano\n')
+  const otro = await post('/api/backlog/crear', { proyecto: 'nuevo', archivo: 'BACKLOG_NUEVO.md' })
+  assert.equal(otro.estado, 200, otro.json.error)
+  assert.ok(existsSync(join(docsNuevo, 'BACKLOG_NUEVO.md')))
+})

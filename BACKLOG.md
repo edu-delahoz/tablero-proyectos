@@ -159,11 +159,11 @@ Prompt de arranque S24b (Sonnet, sin plugins/MCP):
 
 ### S26 — Crear proyecto y backlog desde el tablero (servidor) · **Opus** (escribe archivos)
 Pedido del usuario al cerrar S24: en la vista no puede elegir backlog si el proyecto no tiene ninguno, y no puede añadir un proyecto nuevo sin editar `proyectos.json` a mano (notas abiertas de NOTAS_TABLERO.md: «crear un nuevo proyecto»).
-- [ ] `generar.mjs`: `POST /api/proyectos/crear` `{id, nombre, repo?, docs?}` → valida `id` (`[a-z0-9-]`, único), `repo`/`docs` rutas existentes, escribe `proyectos.json` con control de `mtime` (como `/api/integraciones/guardar`, 409 si cambió); solo local
-- [ ] `generar.mjs`: `POST /api/backlog/crear` `{proyecto, archivo?}` → crea `BACKLOG.md` (o `BACKLOG_<ID>.md`) con plantilla mínima (título, «## Estado», una sección con casilla) dentro de `docs` del proyecto; **nunca sobrescribe** (existe → 409), nombre sin `/` ni `..`, requiere que el proyecto tenga `docs`
-- [ ] Vista previa: ambos endpoints aceptan `{previa: true}` y devuelven lo que escribirían sin escribir
-- [ ] Pruebas en `servidor.test.mjs`: id duplicado → 400, archivo existente → 409, ruta fuera de `docs` → 400, `mtime` viejo → 409; tras crear, `/api/datos` lista el backlog
-- [ ] `node --test 2>&1 | tail -40`, commit
+- [x] (`proyectoNuevo` + `anadirProyecto` en `config.mjs`; `repo`/`docs` se guardan como se escribieron, `~` incluido) `generar.mjs`: `POST /api/proyectos/crear` `{id, nombre, repo?, docs?}` → valida `id` (`[a-z0-9-]`, único), `repo`/`docs` rutas existentes, escribe `proyectos.json` con control de `mtime` (como `/api/integraciones/guardar`, 409 si cambió); solo local
+- [x] (`rutaBacklogNuevo` + `plantillaBacklog`; escribe con `flag: 'wx'`; opcional `carpeta` = una de las `docs`; el nombre debe cumplir `patronBacklogs`) `generar.mjs`: `POST /api/backlog/crear` `{proyecto, archivo?}` → crea `BACKLOG.md` (o `BACKLOG_<ID>.md`) con plantilla mínima (título, «## Estado», una sección con casilla) dentro de `docs` del proyecto; **nunca sobrescribe** (existe → 409), nombre sin `/` ni `..`, requiere que el proyecto tenga `docs`
+- [x] Vista previa: ambos endpoints aceptan `{previa: true}` y devuelven lo que escribirían sin escribir
+- [x] (2 tests nuevos; también Origin ajeno → 403 y sin `mtime` → 400) Pruebas en `servidor.test.mjs`: id duplicado → 400, archivo existente → 409, ruta fuera de `docs` → 400, `mtime` viejo → 409; tras crear, `/api/datos` lista el backlog
+- [x] (129 pasan, 2 omitidos; README documenta ambos endpoints) `node --test 2>&1 | tail -40`, commit
 
 Prompt de arranque S26 (Opus, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S26) y trabaja solo esa sesión en la rama `integraciones-vista`. Prioridad: no sobrescribir nunca archivos ni escribir fuera de `docs`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.

@@ -14,11 +14,11 @@ import { execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
-import { join, dirname, basename } from 'node:path'
+import { join, dirname, basename, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extraerMarcas, tareasLocales, planificarSincronia, aplicarSincronia } from './integraciones/sincronia.mjs'
 import { leerCredenciales, credencialesPara, guardarCredencial, resumenCredenciales, REQUISITOS, RUTA_CREDENCIALES } from './integraciones/credenciales.mjs'
-import { validarIntegracion, aplicarCambio, escribirAtomico, ErrorConfig, CAMPOS, COMUNES } from './integraciones/config.mjs'
+import { validarIntegracion, aplicarCambio, anadirProyecto, escribirAtomico, ErrorConfig, CAMPOS, COMUNES } from './integraciones/config.mjs'
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
@@ -72,6 +72,52 @@ const PLANTILLA_NOTAS = `# Notas para Claude
 ## Respondidas
 
 `
+
+// ---------- Crear proyecto y backlog desde la vista ----------
+// Entrada de proyectos.json para un proyecto nuevo: id [a-z0-9-] único; repo y docs, carpetas que ya existen
+// (se guardan como se escribieron, «~» incluido). Lanza ErrorConfig (400) con todos los errores juntos.
+export function proyectoNuevo(b, existentes) {
+  const errores = []
+  const id = typeof b.id === 'string' ? b.id.trim() : ''
+  const nombre = typeof b.nombre === 'string' ? b.nombre.replace(/\s+/g, ' ').trim() : ''
+  if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(id)) errores.push('El id solo admite minúsculas, números y guiones (hasta 40, sin empezar por guion).')
+  else if (existentes.some((p) => p.id === id)) errores.push(`Ya hay un proyecto con id «${id}».`)
+  if (!nombre || nombre.length > 100) errores.push('Falta el nombre (hasta 100 caracteres).')
+  const carpeta = (v, campo) => {
+    if (typeof v !== 'string' || !v.trim()) return errores.push(`«${campo}» debe ser una ruta.`), null
+    const r = v.trim()
+    if (!isAbsolute(expandir(r))) return errores.push(`«${campo}» debe ser una ruta absoluta (o empezar por ~): ${r}`), null
+    if (!statSync(expandir(r), { throwIfNoEntry: false })?.isDirectory()) return errores.push(`«${campo}» no es una carpeta que exista: ${r}`), null
+    return r
+  }
+  const repo = b.repo == null || b.repo === '' ? undefined : carpeta(b.repo, 'repo')
+  const docs = (b.docs == null || b.docs === '' ? [] : Array.isArray(b.docs) ? b.docs : [b.docs]).map((d) => carpeta(d, 'docs'))
+  if (errores.length) throw Object.assign(new ErrorConfig(errores.join(' ')), { errores })
+  return { id, nombre, ...(repo && { repo }), ...(docs.length && { docs }) }
+}
+
+export const plantillaBacklog = (nombre, fecha) => `# Backlog — ${nombre}
+
+## Estado
+- ${fecha} · backlog creado desde el tablero.
+
+## S1 — Primera sesión
+- [ ] Describe aquí la primera tarea
+`
+
+// Ruta de un backlog nuevo dentro de la carpeta docs elegida: nombre simple (sin / ni ..), .md, que el
+// patrón del proyecto reconozca, y que no exista (409). La carpeta se resuelve con realpath.
+export function rutaBacklogNuevo(p, archivo = 'BACKLOG.md', carpeta) {
+  if (!p.docs?.length) throw new ErrorConfig('Ese proyecto no tiene carpeta de documentos («docs»): añádela antes de crear un backlog.')
+  if (typeof archivo !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.md$/.test(archivo) || archivo.includes('..')) throw new ErrorConfig('El archivo debe ser un nombre simple terminado en .md, sin «/» ni «..».')
+  if (!new RegExp(p.patronBacklogs || '^BACKLOG.*\\.md$', 'i').test(archivo)) throw new ErrorConfig(`«${archivo}» no lo reconocería el tablero como backlog (patrón ${p.patronBacklogs || '^BACKLOG.*\\.md$'}).`)
+  const dir = carpeta === undefined ? p.docs[0] : p.docs.find((d) => d === carpeta)
+  if (!dir) throw new ErrorConfig('Esa carpeta no es una de las «docs» del proyecto.')
+  if (!statSync(dir, { throwIfNoEntry: false })?.isDirectory()) throw new ErrorConfig(`La carpeta de documentos no existe: ${dir}`)
+  const ruta = join(realpathSync(dir), archivo)
+  if (existsSync(ruta)) throw new ErrorConfig(`Ya existe ${archivo}: el tablero nunca sobrescribe un backlog.`, 409)
+  return ruta
+}
 
 // ---------- Backlogs ----------
 function contarCasillas(texto) {
@@ -902,6 +948,30 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         if (typeof b.id !== 'string') throw new ErrorConfig('Falta el id de la integración.')
         escribirConfig(p, { op: 'quitar', id: b.id })
         return enviar(res, 200, { ok: true, datos: (await fresco(true)).datos })
+      }
+      // Proyecto nuevo: solo añade una entrada al final de proyectos.json (409 si cambió). `previa` devuelve la entrada sin escribir.
+      if (ruta === '/api/proyectos/crear') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const nuevo = proyectoNuevo(b, cargarProyectos(true))
+        if (b.previa === true) return enviar(res, 200, { ok: true, previa: true, proyecto: nuevo, archivo: CONFIG })
+        exigirMtime(b)
+        escribirAtomico(CONFIG, anadirProyecto(readFileSync(CONFIG, 'utf8'), nuevo))
+        cargarProyectos(true)
+        return enviar(res, 200, { ok: true, proyecto: nuevo, datos: (await fresco(true)).datos })
+      }
+      // Backlog nuevo: plantilla mínima dentro de una carpeta «docs» del proyecto; nunca sobrescribe (409).
+      if (ruta === '/api/backlog/crear') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const p = integracionDe(b)
+        const destino = rutaBacklogNuevo(p, b.archivo ?? undefined, b.carpeta ?? undefined)
+        const d = new Date(), fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const contenido = plantillaBacklog(p.nombre || p.id, fecha)
+        if (b.previa === true) return enviar(res, 200, { ok: true, previa: true, archivo: basename(destino), ruta: destino, contenido })
+        try { writeFileSync(destino, contenido, { flag: 'wx' }) } catch (e) {
+          if (e.code === 'EEXIST') throw new ErrorConfig(`Ya existe ${basename(destino)}: el tablero nunca sobrescribe un backlog.`, 409)
+          throw e
+        }
+        return enviar(res, 200, { ok: true, archivo: basename(destino), ruta: destino, contenido, datos: (await fresco(true)).datos })
       }
       // Probar sin guardar: una lectura con la config propuesta (lo mismo que --probar-conexiones).
       if (ruta === '/api/integraciones/probar') {

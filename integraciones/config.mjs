@@ -108,8 +108,19 @@ export function aplicarCambio(jsonCrudo, proyectoId, { op, integracion, idOrigin
     }
     p.integraciones = actuales
   } else throw new ErrorConfig(`Operación desconocida «${op}».`)
-  const sangria = (jsonCrudo.match(/^\[\s*\n([ \t]+)/) || [, '  '])[1]
-  return JSON.stringify(lista, null, sangria) + '\n'
+  return serializar(jsonCrudo, lista)
+}
+
+const serializar = (jsonCrudo, lista) => JSON.stringify(lista, null, (jsonCrudo.match(/^\[\s*\n([ \t]+)/) || [, '  '])[1]) + '\n'
+
+// Nuevo texto de proyectos.json con un proyecto añadido al final; nunca reemplaza uno existente.
+export function anadirProyecto(jsonCrudo, proyecto) {
+  let lista
+  try { lista = JSON.parse(jsonCrudo) } catch { throw new ErrorConfig('proyectos.json no es JSON válido: corrígelo a mano antes de editar desde la vista.', 409) }
+  if (!Array.isArray(lista)) throw new ErrorConfig('proyectos.json debe ser una lista de proyectos.', 409)
+  if (lista.some((x) => x?.id === proyecto.id)) throw new ErrorConfig(`Ya hay un proyecto con id «${proyecto.id}».`)
+  lista.push(proyecto)
+  return serializar(jsonCrudo, lista)
 }
 
 // Escritura atómica: temporal en la misma carpeta + rename (nadie lee nunca un archivo a medias).
