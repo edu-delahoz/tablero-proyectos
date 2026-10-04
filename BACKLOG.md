@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `integraciones-vista` · H11–H14 planeados (plan `~/.claude/plans/quiero-que-planes-las-woolly-globe.md`, Fable), sin código: cinco notas de `NOTAS_TABLERO.md` → H11 retomar en lenguaje natural + «Qué se busca» (S31 Opus, S32 Sonnet), H12 pestaña «Tablero» kanban en vivo con `/api/sesiones` y tarjetas que el usuario mueve (S33 Opus, S34 Sonnet), H13 elegir carpeta sin pegar rutas (S35 Opus, S36 Sonnet), H14 `modo: 'participar'` en Azure: asignarme, cambiar estado y CLI para Claude (S37 Opus, S38–S39 Sonnet), S40 cierre. Los cambios sin commit de «＋ Otro backlog» (`archivoDeNombre`, campo nombre, aviso `sesion-sin-casillas`) se intentan commitear en este relevo; si no, S31 paso 0. Siguiente: **S31** (Opus).
 - 2026-10-04 · rama `integraciones-vista` · ajuste tras S25 (pedido del usuario, 139 pasan): tarjeta «Azure DevOps · avance» en el Resumen de cualquier proyecto con integración conectada (`avanceIntegracion`: barra de terminados, por estado, por tipo, cerrados por semana según `actualizado`, botón «Mis tareas») y botón fijo «Mis tareas N» en la cabecera (`#ir-mias`, `data-ir-mias`); `datos.integraciones[].items` ahora lleva `actualizado`. Verificado en Chrome headless con EAP10 real: 164 de 204 terminados; los 37 ítems míos están todos cerrados → «Mis tareas» sale con 0 abiertas (correcto).
 - 2026-10-04 · rama `integraciones-vista` · S25 hecha, tests en verde (138 pasan, 2 omitidos): `POST /api/integraciones/importar` `{proyecto, integracion, soloMias?, archivo?, carpeta?, previa?}` (`importarBacklog` en `generar.mjs`; solo integraciones de solo lectura; `BACKLOG_<ID>.md` en la primera `docs`, `## estado` › `### tipo`, marcas `<!-- ado:ID -->`, título intacto; 409 si existe, 400 sin `docs`; respuesta con `total`/`tipos`) y botón «Crear backlog local desde Azure» en la tarjeta de la integración (panel `#panel-crear` con `tipo: 'importar'`, casilla «solo las asignadas a mí»); al crear abre el formulario de la integración en `sincronizar` con ese backlog y los tipos importados (queda pulsar Guardar). Tests escritos primero (fallaron 1+1). Verificado con la org real solo en vista previa (204 ítems, 37 míos; no se creó ningún archivo). Servidor reiniciado con el código nuevo. Siguiente: **S24b** (tests/PR, Sonnet). Los cambios sin commit de `coherencia*.mjs` no son de H10.
 - 2026-10-04 · rama `integraciones-vista` · S30 hecha, tests en verde (136 pasan, 2 omitidos): vista «Mis tareas» (`#p=mias`, flag `mias` junto a `todos`; opción en el selector; `vistaMias`, `asignadasAMi`, `totalAsignadas` en `plantilla.html`): ítems `mio` no hechos (`!x.hecha`) por proyecto → integración → estado, aviso si una integración no trae `mio`, «Siguientes pasos» con `enCurso(p).falta` + prompt copiable, y contador «N asignadas a mí» en «Todos». Test de plantilla escrito primero (falló 1). Verificado en Chrome headless con datos de prueba y con los reales (sin ítems `mio` en caché). Sin cambios en `generar.mjs`. Siguiente: **S25** (Sonnet). Los cambios sin commit de `coherencia*.mjs` no son de H10.
@@ -32,6 +33,133 @@
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H11 — Retomar en lenguaje natural y «Qué se busca»
+
+Plan: `~/.claude/plans/quiero-que-planes-las-woolly-globe.md` (todo H11–H14 y S40). Rama `integraciones-vista`. Notas 1 y 3 de `NOTAS_TABLERO.md`. Decisión: el texto natural lo escribe quien cierra la sesión (skill `/relevo`) como viñeta `- Para retomar (fecha): …` en `## Estado`; el tablero lo muestra con hechos automáticos en frases. Historia del hito: línea `Historia:|Objetivo:|Para qué:`, si no el primer párrafo bajo el título, si no `## Context` del plan.
+Historia: Como desarrollador que vuelve tras días sin tocar un proyecto, quiero leer en dos párrafos qué estaba haciendo y qué sigue, para retomar sin descifrar claves ni commits.
+
+### S31 — Datos para retomar y la historia · **Opus** · `generar.mjs`, `generar.test.mjs`, `fixtures/`, `README.md`, skill `relevo`
+- [ ] Paso 0: `node --test 2>&1 | tail -20`; si quedan cambios sin commit de «Otro backlog», commitearlos; confirmar que H11–H14 están en este backlog
+- [ ] **Tests primero** (`generar.test.mjs`, ver fallar y anotar cuántos): `estructura()` da `descripcion` (primer párrafo) e `historia` (`Historia:|Objetivo:|Para qué:` gana); `retomarDe(estadoTxt)` → `{ fecha, texto }` de la viñeta más reciente o `null`; `hechosRetomar(p, b)` → `ultimaActividad`, `diasSinActividad`, `rama`, `siguiente`, `pendientesSiguiente`, `ultimoCommit`, `prsAbiertos`, `ultimaSesionClaude` (`customTitle` + fecha del `.jsonl` más reciente, leyendo solo las primeras ~20 líneas) con fixture
+- [ ] `estructura()`: `descripcion` (texto plano ≤ 600, sin casillas/listas/tablas) e `historia`; `cerrarSeccion` las conserva
+- [ ] `leerPlanes`: `contexto` = primer párrafo bajo `## Context|Contexto` (≤ 600)
+- [ ] `recolectar`: `b.retomar = retomarDe(b.estado)` y `p.retomar = hechosRetomar(p, principal)`
+- [ ] `plantillaBacklog`: añade `- Para retomar (fecha): …` en `## Estado` y `Historia: …` en `## S1`
+- [ ] Skill `~/.claude/skills/relevo/SKILL.md` (fuera del repo), paso 2: «**Para retomar:** viñeta `- Para retomar (fecha): …` con 2–4 frases en lenguaje natural, sin claves, commits ni conteos: qué estabas haciendo, qué quedó listo, por dónde seguir, si hay algo roto»; «si el hito nuevo no tiene `Historia:`, añádela»
+- [ ] README (convenciones `Para retomar` e `Historia:`), `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S31 (Opus, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S31) y trabaja solo esa sesión en la rama `integraciones-vista`. Paso 0: tests y commit de los cambios pendientes. Escribe primero los tests de `generar.test.mjs` y míralos fallar. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S32 — Tarjeta «Para retomar» y «Qué se busca» en «En curso» · **Sonnet** · `plantilla.html`, `servidor.test.mjs`
+- [ ] **Test primero** en `servidor.test.mjs` (plantilla trae `tarjetaRetomar`, «Para retomar», «Qué se busca», `data-retomar`); ver fallar
+- [ ] `tarjetaRetomar(p)` al inicio del Resumen (antes de la guía y de «En curso») y compacta en «Todos» para el proyecto más reciente: «Para retomar · hace N días»; párrafo 1 = `b.retomar.texto` (si falta: «Nadie dejó un resumen al cerrar la última sesión; esto es lo que se ve:»); párrafo 2 = hechos en frases («La última vez trabajaste el <fecha> en la rama X; la última sesión de Claude se llamó “…”. Lo siguiente es “<sub-sesión siguiente>” con N pasos pendientes. Hay M PR abiertos / N commits sin subir.»); claves solo entre paréntesis al final
+- [ ] Botones «Copiar prompt de la siguiente sesión» (reutiliza `destacado`) y «Ver en backlog»; plegable «Detalle técnico» con el `Estado` actual
+- [ ] Plegada si `diasSinActividad < 2`; preferencia por proyecto en `localStorage` (try/catch)
+- [ ] `tarjetaEnCurso`: bloque «Qué se busca» con `hito.historia || hito.descripcion || plan.contexto` (≤ 3 líneas, «más» si recorta); en la compacta solo la primera frase
+- [ ] Mobile sin tablas ni chips largos. Chrome headless con `datos/` de prueba (con/sin `Para retomar`, con/sin `Historia:`), `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S32 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S32) y trabaja solo esa sesión en la rama `integraciones-vista`. Test de plantilla primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+## H12 — Pestaña «Tablero»: kanban en vivo
+
+Nota 2. Tarjetas = casillas de primer nivel del backlog (+ ítems de integraciones), 4 columnas: **Por hacer** · **En curso** (Claude toca esa sección ahora, o `[~]`) · **En prueba** (hecha y su rama tiene PR abierto o commits sin fusionar) · **Hecho**. La actividad de Claude **no entra en la huella** de `/api/version`: la vista sondea aparte `GET /api/sesiones` cada 5 s (solo colas de `.jsonl` recientes). El usuario mueve tarjetas y eso escribe `[ ]`/`[~]`/`[x]` en el `.md`.
+Historia: Como desarrollador, quiero ver mi backlog como un tablero que se mueve solo con lo que Claude y git van haciendo, y poder mover yo las tarjetas, para saber de un vistazo qué está en marcha, qué se prueba y qué falta.
+
+### S33 — `/api/sesiones` y columnas del kanban (servidor) · **Opus** · `generar.mjs`, `generar.test.mjs`, `servidor.test.mjs`, `fixtures/transcripciones/`, `README.md`
+- [ ] **Tests primero**: fixture `.jsonl` (`custom-title`, `user` con `cwd`/`gitBranch`/`timestamp`, `assistant` con `tool_use` Edit/Write/Read); `sesionesActivas(proyectos, dir, { ahora, ventanaMs })` → por proyecto `[{ sid, titulo, rama, inicio, ultimo, activa, archivos (últimos 5 Edit/Write), ultimoPrompt ≤ 200 }]`; `columnasKanban(b, p, sesiones)` → `[{ texto, hecha, estado: 'por-hacer'|'en-curso'|'en-prueba'|'hecho'|'movida', seccion, hito, linea, marcas }]` con los 4 casos; ver fallar
+- [ ] `sesionesActivas`: solo `.jsonl` con mtime < 24 h en `transcripciones` (y `<carpeta>-…`), cola de 64 KB + primeras 3 líneas; `activa` = mtime < 5 min; caché por mtime
+- [ ] `columnasKanban`: `en-curso` si la sección es la que edita la sesión activa (sus archivos incluyen el backlog y `frenteActivo`/`historial` apuntan ahí) o `[~]`; `en-prueba` si `hecha` y `seccion.meta.rama` tiene PR `OPEN` o está sin fusionar (`fusionarRamas`); `movida` = `[-]`
+- [ ] `GET /api/sesiones` (Host/Origin; sin red; < 50 ms) y `p.kanban` en `recolectar`; `datos.sesiones` en `construir` para `file://`
+- [ ] README («Tablero»: columnas y origen de cada una, `/api/sesiones`), `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S33 (Opus, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S33) y trabaja solo esa sesión en la rama `integraciones-vista`. Prioridad: `/api/sesiones` barato y nunca en la huella de `/api/version`. Tests primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S34 — Pestaña «Tablero» (kanban) · **Sonnet** · `plantilla.html`, `servidor.test.mjs`
+- [ ] **Test primero**: plantilla trae pestaña `tablero`, `vistaKanban`, `'/api/sesiones'`, `data-kanban-col`, «Claude está trabajando», «Mover a»; ver fallar
+- [ ] Pestaña **Tablero** por proyecto (en `VISTAS`, tras Resumen; acceso desde «Todos»): 4 columnas con contador, tarjeta = casilla (texto, chip `H3 › S3c`, `chipsExternos`, estrella de su sesión); filtro por hito y backlog (`sel.tablero`), «ver movidas»
+- [ ] Franja «● Claude está trabajando en “<titulo>” · rama X · tocando `archivo` · hace 20 s» (de `/api/sesiones`); gris «◌ sin sesión activa; última: hace 3 h». Sondeo cada 5 s solo en esta pestaña y con la pestaña visible
+- [ ] **El usuario mueve las tarjetas** por arrastre (`dragstart/drop`) o menú «Mover a…» accesible: → Hecho escribe `[x]`, → Por hacer `[ ]`, → En curso `[~]`; → En prueba no se admite a mano (derivada, lo explica el `title`). Reutiliza el guardado de casillas existente (`POST /api/guardar`, 409 si cambió). Optimista: la tarjeta se queda y vuelve si falla
+- [ ] Ítems de integraciones como tarjetas con borde propio en las mismas columnas (por `columna`/`hecha`); en `modo: 'participar'` (H14) arrastrarlos cambia el estado vía `/api/integraciones/estado`; en `lectura`, o si H14 no está, solo lectura con `title`
+- [ ] Mobile: columnas con scroll horizontal y `scroll-snap`, tarjetas de una línea expandibles; probar a 390 px
+- [ ] CDP con `datos/` de prueba y un `.jsonl` reciente (`TABLERO_TRANSCRIPCIONES`): franja activa, mover por menú y por arrastre, 409; `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S34 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S34) y trabaja solo esa sesión en la rama `integraciones-vista`. Test de plantilla primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+## H13 — Proyecto nuevo sin pegar rutas
+
+Nota 4. El navegador no expone rutas absolutas, así que el servidor lista carpetas (nunca fuera de `~`). Dos vías: «Tus proyectos recientes de Claude» (carpetas `cwd` de `~/.claude/projects/*/*.jsonl` que no estén en `proyectos.json`) y «Explorar» (migas + subcarpetas con etiquetas git/backlog). Al elegir se proponen `id`, `nombre`, `docs` y `notas`.
+Historia: Como usuario que crea o edita un proyecto, quiero elegir su carpeta con un clic entre mis proyectos recientes o navegando, para no pegar rutas a mano.
+
+### S35 — `/api/carpetas` y sugerencias (servidor) · **Opus** · `generar.mjs`, `servidor.test.mjs`, `generar.test.mjs`, `README.md`
+- [ ] **Tests primero**: `listarCarpetas(ruta, home)` → `{ ruta, padre, carpetas: [{ nombre, ruta, esGit, tieneBacklog }] }` sin ocultas ni `node_modules`, 400 fuera de `home` o inexistente, `~` aceptado; `sugerirProyectos(dir, proyectos)` → `[{ ruta, nombre, ultimaActividad, sesiones, esGit }]` sin los ya configurados, tope 12; `propuestaProyecto(ruta)` → `{ id, nombre, docs, notas }`; ver fallar
+- [ ] `POST /api/carpetas` `{ ruta? }` (sin ruta: `~` + `sugerencias`), solo local, ≤ 200 carpetas con aviso; `cwd` de las primeras líneas de cada `.jsonl` (caché por mtime, compartida con S33 si existe)
+- [ ] `proyectoNuevo`: sin `docs` y con `repo` → `docs = [repo]`; `id` propuesto único (sufijo `-2`)
+- [ ] README («Crear proyecto»: elegir carpeta, sugerencias), `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S35 (Opus, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S35) y trabaja solo esa sesión en la rama `integraciones-vista`. Prioridad: `/api/carpetas` nunca sale de `~` ni lista archivos. Tests primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S36 — Selector de carpeta en Nuevo/Editar proyecto · **Sonnet** · `plantilla.html`, `servidor.test.mjs`
+- [ ] **Test primero**: plantilla trae `'/api/carpetas'`, `selectorCarpeta`, «Tus proyectos recientes», `data-carpeta`; ver fallar
+- [ ] En `pintarCrear` (`proyecto` y `editar`): botón «Elegir…» junto a `repo`, `docs`, `notas`, `bitacora` → `selectorCarpeta(campo)` con pestañas «Recientes de Claude» (nombre, ruta con `~`, «hace N», chip git) y «Explorar» (migas, lista, filtro, «↑ subir»); teclado flechas/Enter/Esc
+- [ ] Al elegir `repo` en `proyecto`: rellenar `id`/`nombre`/`docs`/`notas` solo si están vacíos; `docs` como casillas de subcarpetas candidatas + «otra…»
+- [ ] El campo de texto sigue (pegar ruta vale) con placeholder «Elige con el botón o pega la ruta»
+- [ ] Mobile: filas de 44 px. CDP: crear proyecto desde una sugerencia sin escribir rutas → previa → crear → la guía marca repo/docs; `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S36 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S36) y trabaja solo esa sesión en la rama `integraciones-vista`. Test de plantilla primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+## H14 — Asignarme y cerrar ítems en Azure DevOps, también vía Claude
+
+Nota 5 (el usuario tiene permiso para asignarse). Nuevo `modo: 'participar'`: como `lectura` (sin backlog, nunca `.md`, nunca **crea** ítems) pero permite asignar/desasignar y cambiar el estado de ítems existentes. Identidad por `GET …/_apis/connectionData` (`authenticatedUser.properties.Account.$value` = correo); asignar = JSON-patch `System.AssignedTo`. Los ítems traen `descripcion`, `prioridad`, `iteracion`, `padre` para que Claude recomiende.
+Historia: Como miembro del equipo, quiero asignarme ítems de Azure y marcarlos terminados desde el tablero o pidiéndoselo a Claude, para repartirme el trabajo sin entrar a Azure.
+
+### S37 — Conector y endpoints de participar · **Opus** · `integraciones/azure-devops.mjs`, `azure-devops.test.mjs`, `integraciones/config.mjs`, `config.test.mjs`, `generar.mjs`, `servidor.test.mjs`, `fixtures/integraciones/azure-devops.json`, `README.md`
+- [ ] **Tests primero** (ver fallar, anotar): `quienSoy(cfg, cred, deps)` → `{ id, nombre, correo }`; `asignar(cfg, cred, id, correo|null)` → PATCH `System.AssignedTo` (add/remove); `cambiarEstado(cfg, cred, id, estado)` rechaza estados fuera de `columnas`; `leer` trae `descripcion` (HTML → texto ≤ 600), `prioridad`, `iteracion`, `padre`; `config.mjs`: `MODOS` con `participar`, `backlog` opcional, `auto` rechazado, `'*'` permitido; servidor: `/api/integraciones/asignar` y `/estado` → 400 en `lectura` y `sincronizar`, 200 en `participar`, nunca `crear`, parchean `externo-<p>.json` y responden `datos`
+- [ ] `azure-devops.mjs`: `quienSoy`, `asignar`, `cambiarEstado`; `leer` con `System.Description`, `Microsoft.VSTS.Common.Priority`, `System.IterationPath`, `System.Parent`; `traducirError` para 400 al asignar
+- [ ] `config.mjs`: `modo: 'participar'`; `esLectura` → `noEscribeMd(cfg)` (`lectura|participar`); `contextoIntegracion` en `participar` adaptador con `leer`, `asignar`, `cambiarEstado` (sin `crear`/`actualizar`); `sincronizar()` sigue 400
+- [ ] `POST /api/integraciones/asignar` `{ proyecto, integracion, id, aMi }` (correo por `quienSoy`, caché 1 h en `externo-*.json`) y `POST /api/integraciones/estado` `{ proyecto, integracion, id, estado }`; solo local; 15 s; `servidor.log`
+- [ ] GitHub Projects y Trello: 400 «este conector aún no participa»; documentarlo
+- [ ] README (modo `participar`, scope *Work Items: Read & write*), `proyectos.ejemplo.json`, `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S37 (Opus, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S37) y trabaja solo esa sesión en la rama `integraciones-vista`. Prioridad: en `participar` nunca se crea un work item ni se toca un `.md`; en `lectura` sigue sin escribirse nada. Tests primero con `fetch` simulado, nada de red real. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S38 — Vista: asignarme y cambiar estado · **Sonnet** · `plantilla.html`, `servidor.test.mjs`
+- [ ] **Test primero**: plantilla trae `'/api/integraciones/asignar'`, `'/api/integraciones/estado'`, «Asignarme», `data-asignar`, opción `participar`; ver fallar
+- [ ] Formulario: selector «Modo» con 3 opciones y una frase cada una («Participar: ver el backlog del equipo, asignarme ítems y cambiar su estado; no crea nada»); «Editar» conserva `participar`
+- [ ] `itemExterno` y `vistaMias`: en `participar`, «Asignarme»/«Quitarme» y `<select>` de estado con las `columnas`; confirmación en línea con el título; repintar con `datos` y aviso; en `lectura` sin controles, `title` explica cómo activar participar
+- [ ] «Mis tareas»: «✓ Terminé» = `columnas.hecho[0]`; el ítem sale de la lista al confirmar
+- [ ] «ver descripción» plegable con `descripcion`, prioridad e iteración
+- [ ] CDP con `fetch` de Azure simulado por `--import`: asignarme → PATCH visto → chip con mi nombre; cambiar estado → columna nueva; `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S38 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S38) y trabaja solo esa sesión en la rama `integraciones-vista`. Test de plantilla primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S39 — Pedírselo a Claude: CLI `--tareas`, `--asignarme`, `--estado` y hook · **Sonnet** · `generar.mjs`, `generar.test.mjs`/`servidor.test.mjs`, `README.md`
+- [ ] **Tests primero** (`fetch` simulado o `textoTareas(items, filtro)` exportada): `--tareas eap10 [--sin-asignar|--mias] [--integracion ado]` imprime Markdown por estado (`#id · tipo · prioridad · iteración · asignado · título · descripción corta · url`) con conteos; `--asignarme eap10 123` y `--estado eap10 123 "Doing"` solo en `participar` (si no, cómo activarlo), confirman con el título; ver fallar
+- [ ] Implementar reutilizando `contextoIntegracion` + `asignar`/`cambiarEstado` de S37 (misma ruta que los endpoints)
+- [ ] `hookInicio`: para proyectos con integración (desde `externo-<p>.json`, sin red) «- Azure DevOps `ado`: N sin asignar, M mías abiertas. Para recomendarte una: `node generar.mjs --tareas eap10 --sin-asignar`»
+- [ ] README «Pedírselo a Claude» con prompt ejemplo («Revisa las tareas pendientes de EAP10 con `node generar.mjs --tareas eap10 --sin-asignar`, recomiéndame cuál asignarme según prioridad e iteración y, cuando te confirme, asígnamela con `--asignarme eap10 <id>`»)
+- [ ] `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S39 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S39) y trabaja solo esa sesión en la rama `integraciones-vista`. Tests primero; nada de red real. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S40 — Cierre de H11–H14 · **Sonnet**, con el usuario
+- [ ] `node --test 2>&1 | tail -40` en verde; `node generar.mjs --abrir` y revisar con el usuario: «Para retomar» (IEP y tablero), «Qué se busca», pestaña Tablero con una sesión de Claude abierta en otro proyecto y moviendo tarjetas, crear un proyecto eligiendo carpeta, EAP10 en `participar`: asignarse un ítem real y devolverlo, cambiar estado y volver
+- [ ] Responder las 5 notas en `notas/NOTAS_TABLERO.md` («→ respuesta (fecha)», moverlas a «Respondidas»); mobile y «vincularlo con todo» siguen abiertas
+- [ ] `verificar_backlog.mjs`, actualizar PR #9 o abrir PR de `integraciones-vista` → `develop`
+
+Prompt de arranque S40 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S40) y trabaja solo esa sesión en la rama `integraciones-vista`, con el usuario delante (PAT y navegador). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+Orden recomendado: S31 → S32 → S37 → S38 → S39 → S33 → S34 → S35 → S36 → S40 (H13 y H14 independientes de H11/H12). Ningún plugin/MCP.
 
 ## H8 — Configurar integraciones desde la vista Integraciones
 
