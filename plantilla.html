@@ -459,11 +459,14 @@ function cuerpo(s) {
   if (hecho.length) html += `<details class="grupo"><summary class="rotulo">Hecho · ${hecho.reduce((a, t) => a + cajas(t), 0)}</summary><ul class="tareas">${hecho.map(tarea).join('')}</ul></details>`;
   return html;
 }
+// Coletilla de la metodología: toda sesión cierra con /relevo (salvo que el plan ya lo diga).
+const COLETILLA_RELEVO = 'Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.';
+const conRelevo = (texto) => /\/relevo\b/.test(texto) ? texto : `${texto.trimEnd()}\n\n${COLETILLA_RELEVO}`;
 // Prompts de «Cómo ejecutarlo»: tarjeta con rótulo, modelo, texto y botón Copiar.
 function promptsHtml(prompts = []) {
   return prompts.map((p) => `<div class="prompt-copiable"><div class="prompt-cab"><span class="rotulo">${esc(p.etiqueta)}</span>${chips({ modelo: p.modelo })}
       <button class="boton" type="button" data-copiar aria-label="Copiar ${esc(p.etiqueta)}">Copiar</button></div>
-      <pre tabindex="0" aria-label="${esc(p.etiqueta)}">${esc(p.texto)}</pre></div>`).join('');
+      <pre tabindex="0" aria-label="${esc(p.etiqueta)}">${esc(conRelevo(p.texto))}</pre></div>`).join('');
 }
 async function copiarTexto(texto) {
   try { await navigator.clipboard.writeText(texto); return true; } catch { /* file:// o sin permiso: respaldo */ }
