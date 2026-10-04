@@ -208,8 +208,9 @@ Prompt de arranque S39 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S39) y trabaja solo esa sesión en la rama `integraciones-vista`. Tests primero; nada de red real. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 
 ### S40 — Cierre de H11–H14 · **Sonnet**, con el usuario
-- [ ] `node --test 2>&1 | tail -40` en verde; `node generar.mjs --abrir` y revisar con el usuario: «Para retomar» (IEP y tablero), «Qué se busca», pestaña Tablero con una sesión de Claude abierta en otro proyecto y moviendo tarjetas, crear un proyecto eligiendo carpeta, EAP10 en `participar`: asignarse un ítem real y devolverlo, cambiar estado y volver
-- [ ] Responder las 5 notas en `notas/NOTAS_TABLERO.md` («→ respuesta (fecha)», moverlas a «Respondidas»); mobile y «vincularlo con todo» siguen abiertas
+- [x] `node --test 2>&1 | tail -40` en verde (170 pasan, 2 omitidos); `node generar.mjs --abrir` y revisar con el usuario: «Para retomar» (IEP y tablero), «Qué se busca», pestaña Tablero con una sesión de Claude abierta en otro proyecto y moviendo tarjetas, crear un proyecto eligiendo carpeta, EAP10 en `participar`: asignarse un ítem real y devolverlo, cambiar estado y volver
+- [x] Responder las 5 notas en `notas/NOTAS_TABLERO.md` («→ respuesta (fecha)», moverlas a «Respondidas»); mobile y «vincularlo con todo» siguen abiertas
+- [x] (añadido en S40) Prueba real EAP10: `--asignarme`/`--quitar` y `--estado` OK con #12 (devuelto a New y sin asignar). Hallazgo: Azure reasigna al cambiar el estado → `participar()` recalcula `mio` también en `/estado` (test en `servidor.test.mjs`, falló 1)
 - [ ] `verificar_backlog.mjs`, actualizar PR #9 o abrir PR de `integraciones-vista` → `develop`
 
 Prompt de arranque S40 (Sonnet, sin plugins/MCP):

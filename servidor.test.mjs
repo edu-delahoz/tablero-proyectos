@@ -55,7 +55,7 @@ const adoFalso = {
   // Participar (S37): se registran en `participaciones`; el id 999 simula que Azure rechaza el cambio.
   async quienSoy() { participaciones.push(['quienSoy']); return { id: 'u1', nombre: 'Yo', correo: 'yo@x' } },
   async asignar(cfg, cred, id, correo) { participaciones.push(['asignar', id, correo]); if (id === '999') throw new Error('Azure DevOps rechazó el cambio: TF401320.'); return { id, columna: 'Active', hecha: false, asignado: correo ? { nombre: 'Yo', correo } : null } },
-  async cambiarEstado(cfg, cred, id, estado, deps, opciones) { participaciones.push(['cambiarEstado', id, estado, opciones?.columnas]); return { id, columna: estado, hecha: estado === 'Closed', asignado: null } },
+  async cambiarEstado(cfg, cred, id, estado, deps, opciones) { participaciones.push(['cambiarEstado', id, estado, opciones?.columnas]); return { id, columna: estado, hecha: estado === 'Closed', asignado: id === '2' ? { nombre: 'Yo', correo: 'yo@x' } : null } }, // id 2: Azure reasigna al cambiar el estado
   async crear(...a) { escrituras.push(['crear', ...a]); return { id: 'Z', url: 'https://x/Z' } },
   async actualizar(...a) { escrituras.push(['actualizar', ...a]) },
   async listar(cfg) { return { recibido: cfg, proyectos: ['EAP10'] } },
@@ -785,6 +785,11 @@ test('participar (S37): asignar y estado solo en «participar» (400 en lectura/
   assert.equal(e.estado, 200, e.json.error)
   assert.deepEqual([e.json.item.columna, e.json.item.hecha], ['Closed', true])
   assert.deepEqual(participaciones.at(-1), ['cambiarEstado', '1', 'Closed', ['Active', 'Closed']])
+  // Azure puede reasignar al cambiar el estado: el ítem queda «mío» en la respuesta y en la caché.
+  const re = await post('/api/integraciones/estado', { proyecto: 'part', integracion: 'ado', id: '2', estado: 'Active' })
+  assert.equal(re.estado, 200, re.json.error)
+  assert.equal(re.json.item.mio, true)
+  assert.equal(JSON.parse(readFileSync(join(dir, 'datos', 'externo-part.json'), 'utf8')).ado.items.find((x) => x.id === '2').mio, true)
   // Azure rechaza → 502 con el mensaje y queda en servidor.log.
   const mal = await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: '999', aMi: true })
   assert.equal(mal.estado, 502)

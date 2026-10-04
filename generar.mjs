@@ -951,7 +951,8 @@ export async function participar(p, cfg, { asignar, id, aMi, estado }, adaptador
   } catch (e) { throw Object.assign(e instanceof Error ? e : new Error(String(e)), { remoto: true }) }
   const correoYo = yo?.correo || leerJson(rutaExt, {})[cfg.id]?.yo?.correo
   const cambios = { columna: item.columna, hecha: item.hecha, asignado: item.asignado ?? null }
-  if (asignar) cambios.mio = !!item.asignado && (aMi || (!!correoYo && item.asignado.correo?.toLowerCase() === correoYo.toLowerCase()))
+  // Azure también reasigna al cambiar el estado: `mio` se recalcula en ambos casos.
+  cambios.mio = !!item.asignado && ((asignar && aMi) || (!!correoYo && item.asignado.correo?.toLowerCase() === correoYo.toLowerCase()))
   const ext = leerJson(rutaExt, {})
   ext[cfg.id] = { ...ext[cfg.id], ...(yo ? { yo } : {}) }
   const enCache = ext[cfg.id].items?.find((x) => String(x.id) === id)
