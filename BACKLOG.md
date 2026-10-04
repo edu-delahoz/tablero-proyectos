@@ -37,6 +37,8 @@ Plan: `~/.claude/plans/pasted-content-id-9662-se-callo-harmonic-waffle.md` (secc
 - [x] Sub-sesiones `- **S\d+[a-z]? — …**` dentro de la tarea activa; plan por mención en la tarea o por clave del hito en el título
 - [x] `enCurso`/`tarjetaEnCurso` usan `b.activo` (rama de `p.git` como respaldo); CDP: IEP → H3 › Personas mal migradas, S2 siguiente
 
+Decisiones y trampas: «Personas mal migradas» está anidada (sangría 2) bajo «Revisión H3 en iPhone», así que `linea` va en **todas** las tareas, no solo en las de primer nivel, y se elige la tarea abierta más profunda que tenga hijas. Si la sección tocada ya está hecha pero el hito no, el frente pasa a la primera sección abierta del hito (por eso el tablero muestra S13 y no S12). Con sub-sesiones, el prompt destacado se busca **solo en el plan** (en el backlog, «S2» puede ser de otro hito); si no está, se copia el texto de la viñeta. Los segmentos de sub-sesión comparten el id de la sección: `segmentos()` marca la actual con `s.actual`.
+
 ## H5 — Notas del usuario y vista general
 
 Plan: `~/.claude/plans/quiero-que-planes-las-compressed-duckling.md`. Rama `notas-tablero` (sale de `busqueda-favoritos`). Todas las sesiones en **Sonnet**.
