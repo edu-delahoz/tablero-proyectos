@@ -472,7 +472,8 @@ test('vista: la plantilla trae modo, filtro Mías/Sin asignar, chips y la primer
 test('vista: la plantilla trae «Nuevo proyecto», el formulario de crear y «Crear backlog» (pestaña e integraciones)', async () => {
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
   for (const marca of ['id="nuevo-proyecto"', 'id="panel-crear"', 'id="form-crear"', "'/api/proyectos/crear'", "'/api/backlog/crear'", 'data-crear="backlog"', 'data-crear-campo', 'mtime: DATOS.configMtime']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
-  assert.equal(html.split('data-crear="backlog"').length - 1, 3, 'botón en la pestaña Backlogs, en el paso Modo y backlog y en la guía')
+  assert.equal(html.split('data-crear="backlog"').length - 1, 4, 'botón en la pestaña Backlogs (vacía y «Otro backlog»), en el paso Modo y backlog y en la guía')
+  assert.ok(html.includes('Otro backlog') && html.includes('data-crear-campo="nombre"'), 'backlog secundario con nombre')
 })
 
 test('vista: la plantilla trae «Editar proyecto», la guía de configuración y el contador en «Todos»', async () => {
@@ -551,6 +552,18 @@ test('crear backlog: sin docs, nombre con ruta o fuera del patrón → 400; exis
   const otro = await post('/api/backlog/crear', { proyecto: 'nuevo', archivo: 'BACKLOG_NUEVO.md' })
   assert.equal(otro.estado, 200, otro.json.error)
   assert.ok(existsSync(join(docsNuevo, 'BACKLOG_NUEVO.md')))
+  // Backlog secundario con nombre: archivo derivado, título con el nombre, el principal intacto.
+  const sec = await post('/api/backlog/crear', { proyecto: 'nuevo', nombre: '  Sprint 3 — Diseño ', previa: true })
+  assert.equal(sec.estado, 200, sec.json.error)
+  assert.equal(sec.json.archivo, 'BACKLOG_SPRINT_3_DISENO.md')
+  assert.match(sec.json.contenido, /^# Backlog — Nuevo · Sprint 3 — Diseño\n/)
+  assert.ok(!existsSync(join(docsNuevo, 'BACKLOG_SPRINT_3_DISENO.md')), 'la previa no escribe')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', nombre: 'Sprint 3 — Diseño' })).estado, 200)
+  assert.ok(existsSync(join(docsNuevo, 'BACKLOG_SPRINT_3_DISENO.md')))
+  assert.equal(readFileSync(join(docsNuevo, 'BACKLOG.md'), 'utf8'), 'editado a mano\n', 'el principal no se toca')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', nombre: 'sprint 3 diseño' })).estado, 409, 'mismo nombre → mismo archivo → no sobrescribe')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', nombre: '***' })).estado, 400, 'nombre sin letras ni números')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', nombre: 'x', archivo: 'BACKLOG_Y.md' })).estado, 400, 'nombre o archivo, no ambos')
 })
 
 test('editar proyecto: 404, 400, 409 y previa no escriben; editar deja integraciones y demás proyectos intactos', async () => {
@@ -634,6 +647,12 @@ test('importar a .md: previa no escribe; crea BACKLOG_<ID>.md con marcas ado:; �
   const antes = readFileSync(destino, 'utf8')
   assert.equal((await post('/api/integraciones/importar', base)).estado, 409)
   assert.equal((await post('/api/integraciones/importar', { ...base, previa: true })).estado, 409)
+  assert.equal(readFileSync(destino, 'utf8'), antes)
+  // Con nombre: otro backlog secundario, sin tocar el ya importado.
+  const sec = await post('/api/integraciones/importar', { ...base, nombre: 'Azure mías', soloMias: true })
+  assert.equal(sec.estado, 200, sec.json.error)
+  assert.equal(sec.json.archivo, 'BACKLOG_AZURE_MIAS.md')
+  assert.match(readFileSync(join(docs, 'BACKLOG_AZURE_MIAS.md'), 'utf8'), /^# Backlog — Importa · Azure mías\n/)
   assert.equal(readFileSync(destino, 'utf8'), antes)
   assert.equal(escrituras.length, 0, 'no se escribe nada en Azure')
 })

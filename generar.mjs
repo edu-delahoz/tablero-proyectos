@@ -145,6 +145,19 @@ export const plantillaBacklog = (nombre, fecha) => `# Backlog — ${nombre}
 - [ ] Describe aquí la primera tarea
 `
 
+// Backlog secundario con nombre: «Sprint 3 — Diseño» → BACKLOG_SPRINT_3_DISENO.md (sin tildes; nunca el principal).
+export function archivoDeNombre(nombre) {
+  const base = String(nombre ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60)
+  if (!base) throw new ErrorConfig('El nombre del backlog necesita al menos una letra o número.')
+  return `BACKLOG_${base}.md`
+}
+// Lee { nombre, archivo } del cuerpo: el nombre (si viene) decide el archivo y se añade al título.
+function destinoBacklog(b, porDefecto) {
+  const nombre = typeof b.nombre === 'string' && b.nombre.trim() ? b.nombre.trim().replace(/\s+/g, ' ') : null
+  if (nombre && b.archivo != null) throw new ErrorConfig('Indica el nombre o el archivo del backlog, no ambos.')
+  return { nombre, archivo: nombre ? archivoDeNombre(nombre) : b.archivo ?? porDefecto }
+}
+
 // Ruta de un backlog nuevo dentro de la carpeta docs elegida: nombre simple (sin / ni ..), .md, que el
 // patrón del proyecto reconozca, y que no exista (409). La carpeta se resuelve con realpath.
 export function rutaBacklogNuevo(p, archivo = 'BACKLOG.md', carpeta) {
@@ -1062,9 +1075,10 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
       if (ruta === '/api/backlog/crear') {
         if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
         const p = integracionDe(b)
-        const destino = rutaBacklogNuevo(p, b.archivo ?? undefined, b.carpeta ?? undefined)
+        const elegido = destinoBacklog(b, undefined)
+        const destino = rutaBacklogNuevo(p, elegido.archivo, b.carpeta ?? undefined)
         const d = new Date(), fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-        const contenido = plantillaBacklog(p.nombre || p.id, fecha)
+        const contenido = plantillaBacklog([p.nombre || p.id, elegido.nombre].filter(Boolean).join(' · '), fecha)
         if (b.previa === true) return enviar(res, 200, { ok: true, previa: true, archivo: basename(destino), ruta: destino, contenido })
         try { writeFileSync(destino, contenido, { flag: 'wx' }) } catch (e) {
           if (e.code === 'EEXIST') throw new ErrorConfig(`Ya existe ${basename(destino)}: el tablero nunca sobrescribe un backlog.`, 409)
@@ -1079,12 +1093,13 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         const cfg = (p.integraciones || []).find((x) => x.id === b.integracion)
         if (!cfg) throw new ErrorConfig('Esa integración no está en proyectos.json.', 404)
         if (!esLectura(cfg)) throw new ErrorConfig('Solo se importa desde una integración de solo lectura (las demás ya tienen su backlog).')
-        const destino = rutaBacklogNuevo(p, b.archivo ?? `BACKLOG_${p.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}.md`, b.carpeta ?? undefined)
+        const elegido = destinoBacklog(b, `BACKLOG_${p.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}.md`)
+        const destino = rutaBacklogNuevo(p, elegido.archivo, b.carpeta ?? undefined)
         const ctx = contextoIntegracion(p, cfg, [], adaptadores)
         let fuera
         try { fuera = await conTiempo(ctx.adaptador.leer(), 15000) } catch (e) { return enviar(res, 502, { error: String(e?.message || e) }) }
         const d = new Date(), fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-        const { contenido, total, tipos } = importarBacklog(p.nombre || p.id, cfg.id, fuera.items, fuera.columnas, fecha, b.soloMias === true)
+        const { contenido, total, tipos } = importarBacklog([p.nombre || p.id, elegido.nombre].filter(Boolean).join(' · '), cfg.id, fuera.items, fuera.columnas, fecha, b.soloMias === true)
         const resumen = { archivo: basename(destino), ruta: destino, contenido, total, tipos, avisos: fuera.avisos || [] }
         if (b.previa === true) return enviar(res, 200, { ok: true, previa: true, ...resumen })
         try { writeFileSync(destino, contenido, { flag: 'wx' }) } catch (e) {

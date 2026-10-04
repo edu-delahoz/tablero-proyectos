@@ -1502,7 +1502,7 @@ const VISTAS = {
   backlogs() {
     if (!P.backlogs.length) return `<div class="vacio">No hay backlogs en las carpetas configuradas.</div>${botonCrearBacklog()}`;
     const actual = P.backlogs.find((b) => b.archivo === sel.backlogs) || P.backlogs[0];
-    return `<div class="archivos" aria-label="Archivos">${P.backlogs.map((b) => `<button data-sel="${esc(b.archivo)}" aria-current="${b === actual}">${esc(b.archivo)}${b.total ? `<span class="n">${b.hechas}/${b.total}</span>` : ''}</button>`).join('')}</div>
+    return `<div class="archivos" aria-label="Archivos">${P.backlogs.map((b) => `<button data-sel="${esc(b.archivo)}" aria-current="${b === actual}">${esc(b.archivo)}${b.total ? `<span class="n">${b.hechas}/${b.total}</span>` : ''}</button>`).join('')}${editable() ? '<button class="boton" type="button" data-crear="backlog" title="Crear un backlog secundario con nombre; el principal no se toca">＋ Otro backlog</button>' : ''}</div>
       ${modo.backlogs !== 'documento' && editando !== actual.ruta ? barraBusqueda('backlogs', true) : ''}
       ${editando === actual.ruta ? vistaEditor(actual.ruta) : `${barraVista(actual, 'backlogs')}
       ${modo.backlogs === 'documento' ? `<div class="tarjeta">${md(actual.contenido)}</div>` : vistaMapa(actual)}`}`;
@@ -1906,7 +1906,8 @@ const CAMPOS_EDITAR = [['nombre', 'Nombre', ''], ['repo', 'Carpeta del repo', 'r
 function abrirCrear(tipo, integ) {
   const e = P?.editable || {};
   const campos = tipo === 'proyecto' ? { id: '', nombre: '', repo: '', docs: '' }
-    : tipo === 'importar' ? { integracion: integ, soloMias: false }
+    : tipo === 'importar' ? { integracion: integ, soloMias: false, nombre: '' }
+    : tipo === 'backlog' ? { nombre: '' }
     : tipo === 'editar' ? { nombre: e.nombre ?? P.nombre, repo: e.repo || '', docs: [].concat(e.docs || []).join(', '), notas: e.notas || '', bitacora: e.bitacora || '' } : {};
   crear = { tipo, campos, previa: null, error: '', ocupado: false };
   pintarCrear(); $('#panel-crear [data-crear-campo], #panel-crear button')?.focus();
@@ -1914,8 +1915,9 @@ function abrirCrear(tipo, integ) {
 function cerrarCrear() { const t = crear?.tipo; crear = null; pintarCrear(); document.querySelector(`[data-crear="${t}"]`)?.focus(); }
 function cuerpoCrear(previa) {
   const c = crear.campos;
-  if (crear.tipo === 'backlog') return { proyecto: P.id, previa };
-  if (crear.tipo === 'importar') return { proyecto: P.id, integracion: c.integracion, soloMias: !!c.soloMias, previa };
+  const nombre = c.nombre?.trim() ? { nombre: c.nombre.trim() } : {};
+  if (crear.tipo === 'backlog') return { proyecto: P.id, ...nombre, previa };
+  if (crear.tipo === 'importar') return { proyecto: P.id, integracion: c.integracion, soloMias: !!c.soloMias, ...nombre, previa };
   const lista = (t) => String(t || '').split(',').map((x) => x.trim()).filter(Boolean);
   if (crear.tipo === 'editar') return { id: P.id, cambios: { nombre: c.nombre.trim(), repo: c.repo.trim(), docs: lista(c.docs), notas: c.notas.trim(), bitacora: c.bitacora.trim() }, mtime: DATOS.configMtime ?? undefined, previa };
   return { id: c.id.trim(), nombre: c.nombre.trim(), repo: c.repo.trim() || undefined, docs: lista(c.docs).length ? lista(c.docs) : undefined, mtime: DATOS.configMtime ?? undefined, previa };
@@ -1924,15 +1926,19 @@ function pintarCrear() {
   const el = $('#panel-crear'); if (!el) return;
   if (!crear) { el.innerHTML = ''; return; }
   const pr = crear.previa, ed = crear.tipo === 'editar', imp = crear.tipo === 'importar', proy = crear.tipo === 'proyecto' || ed;
-  const accion = ed ? 'Guardar cambios' : proy ? 'Crear proyecto' : 'Crear backlog';
+  const accion = ed ? 'Guardar cambios' : proy ? 'Crear proyecto' : `Crear ${crear.previa?.archivo || 'backlog'}`;
   const integ = imp ? (P.integraciones || []).find((x) => x.id === crear.campos.integracion) : null;
   const sinMio = imp && !(integ?.items || []).some((x) => x.mio);
+  // Si ya hay backlog, el nuevo es secundario y lleva nombre (BACKLOG_<NOMBRE>.md): nunca reemplaza al principal.
+  const hayBacklog = !proy && (P?.backlogs || []).some((b) => !b.esPlan), pideNombre = crear.tipo === 'backlog' && hayBacklog;
+  const campoNombre = crear.tipo === 'backlog' || imp ? `<label class="campo-fi" for="cr-nombre"><span>Nombre del backlog${pideNombre ? '' : ' (opcional)'}</span><input id="cr-nombre" data-crear-campo="nombre" value="${esc(crear.campos.nombre)}" placeholder="p. ej. Sprint 3, Soporte, Azure mías" autocomplete="off"${pideNombre ? ' required' : ''}><small class="suave">Se guarda como <code>BACKLOG_&lt;NOMBRE&gt;.md</code> junto al principal, sin tocarlo.${imp ? ` Vacío: <code>BACKLOG_${esc(P.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_'))}.md</code>.` : pideNombre ? '' : ' Vacío: <code>BACKLOG.md</code>.'}</small></label>` : '';
   el.innerHTML = `<form id="form-crear" class="tarjeta" aria-label="${ed ? 'Editar proyecto' : proy ? 'Nuevo proyecto' : imp ? 'Crear backlog desde Azure' : 'Crear backlog'}">
     <h2><span>${ed ? `Editar «${esc(P.nombre)}»` : proy ? 'Nuevo proyecto' : imp ? `Crear backlog local de «${esc(P.nombre)}»` : `Crear backlog de «${esc(P.nombre)}»`}</span></h2>
     ${proy ? (ed ? CAMPOS_EDITAR : CAMPOS_PROY).map(([k, t, ayuda]) => `<label class="campo-fi" for="cr-${k}"><span>${t}</span><input id="cr-${k}" data-crear-campo="${k}" value="${esc(crear.campos[k])}" autocomplete="off" spellcheck="false"${k === 'id' || k === 'nombre' ? ' required' : ''}>${ayuda ? `<small class="suave">${ayuda}</small>` : ''}</label>`).join('')
-      : imp ? `<p class="suave">Se crea un <code>BACKLOG_${esc(P.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_'))}.md</code> en la primera carpeta de documentos, con una casilla por ítem de «${esc(integ?.nombre || crear.campos.integracion)}» (agrupadas por estado y tipo, con su vínculo). Nunca sobrescribe un archivo que ya exista ni cambia nada en Azure.</p>
+      : imp ? `<p class="suave">Se crea un backlog en la primera carpeta de documentos, con una casilla por ítem de «${esc(integ?.nombre || crear.campos.integracion)}» (agrupadas por estado y tipo, con su vínculo). Nunca sobrescribe un archivo que ya exista ni cambia nada en Azure.</p>
+        ${campoNombre}
         <label><input type="checkbox" data-crear-check="soloMias"${crear.campos.soloMias ? ' checked' : ''}${sinMio ? ' disabled' : ''}> Solo las asignadas a mí${sinMio ? ' <span class="suave">(esta integración no dice cuáles son tuyas)</span>' : ''}</label>`
-      : '<p class="suave">Se crea <code>BACKLOG.md</code> con una plantilla mínima en la primera carpeta de documentos del proyecto. Nunca sobrescribe un archivo que ya exista.</p>'}
+      : `<p class="suave">${hayBacklog ? 'Se crea un backlog secundario' : 'Se crea el backlog'} con una plantilla mínima en la primera carpeta de documentos del proyecto. Nunca sobrescribe un archivo que ya exista.</p>${campoNombre}`}
     ${crear.error ? `<div class="integ-paso mal" role="alert">${esc(crear.error)}</div>` : ''}
     ${pr ? (proy ? `<div class="integ-paso" role="status">${ed ? 'Quedará en' : 'Se añadirá a'} <code>${esc(pr.archivo)}</code>:<pre>${esc(JSON.stringify(pr.proyecto, null, 2))}</pre></div>`
       : `<div class="integ-paso" role="status">Se creará <code>${esc(pr.ruta)}</code>${imp ? ` con ${pr.total} ítems` : ''}:${(pr.avisos || []).map((a) => `<br><span class="suave">${esc(a)}</span>`).join('')}<pre>${esc(pr.contenido)}</pre></div>`) : ''}
@@ -1965,7 +1971,7 @@ async function enviarCrear() {
     }
     pintarCrear();
   } catch (e) {
-    c.ocupado = false; c.error = e.estado === 409 && c.tipo !== 'backlog' ? `${e.message} Recarga la página: proyectos.json cambió.` : e.message; c.previa = null; pintarCrear();
+    c.ocupado = false; c.error = e.estado === 409 && (c.tipo === 'proyecto' || c.tipo === 'editar') ? `${e.message} Recarga la página: proyectos.json cambió.` : e.message; c.previa = null; pintarCrear();
   }
 }
 function refrescarSelectorProyectos() {
