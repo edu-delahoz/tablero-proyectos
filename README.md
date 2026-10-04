@@ -10,7 +10,11 @@ Cada proyecto tiene estas pestañas:
 
 - **Resumen**: avance global, «estás aquí» y pendientes más cercanos.
 - **Backlogs**: mapa de hitos y sesiones con casillas `[ ]`/`[x]`, avance por sección y subtareas anidadas.
-- **Planes**: los planes de `~/.claude/plans` relacionados con el proyecto, con su esquema.
+  Un campo de búsqueda filtra sesiones y tareas (abre las que coinciden y cuenta las coincidencias); la
+  estrella ☆/★ de cada sesión `S…` la marca como favorita y «★ Solo favoritas» filtra por ellas. El Resumen
+  lista las favoritas.
+- **Planes**: los planes de `~/.claude/plans` relacionados con el proyecto, con su esquema; el campo de
+  búsqueda filtra la lista (título y contenido) y las secciones del plan abierto.
 - **Historial**: qué casillas cambiaron entre una generación y la siguiente.
 - **GitHub**: ramas, grafo de ramas y pull requests (requiere `gh`).
 - **Notas**: notas abiertas para Claude, que ve al iniciar cada sesión.
@@ -114,6 +118,12 @@ Calidad, Seguridad y Notas de la fila de esa sesión (calidad empieza por ✅, �
 línea; notas vacías conservan las que puso el hook; `|` se escapa como `\|`). `hash` es el de la bitácora
 cargada (`datos.proyectos[i].bitacora.hash`): si el archivo cambió —p. ej. cerró otra sesión y el hook
 añadió su fila— responde 409. Solo acepta la ruta declarada en `bitacora`.
+
+**Favoritos.** `POST /api/favoritos` `{ titulo, favorito }` (booleano) añade o quita una sesión de
+`datos/favoritos.json` (`{ "favoritos": ["S1 — Título", …] }`, ignorado por git). La clave es el **título**
+de la sesión sin marcas de markdown, no su id posicional, así que sobrevive a reordenar el backlog; si se
+renombra la sesión, deja de ser favorita. Solo escribe ese archivo (nunca un `.md`) y los títulos se
+comparan en todos los proyectos. Sin servidor las estrellas se ven pero no se pueden cambiar.
 
 ## Conectores y credenciales
 

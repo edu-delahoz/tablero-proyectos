@@ -540,8 +540,21 @@ async function recolectar(opciones = {}) {
   }))
 }
 
+// Sesiones favoritas: títulos (sin marcas de markdown) en datos/favoritos.json; la clave es el título, no el id posicional.
+const rutaFavoritos = () => join(DATOS, 'favoritos.json')
+function leerFavoritos() {
+  const f = leerJson(rutaFavoritos(), {}).favoritos
+  return Array.isArray(f) ? f.filter((t) => typeof t === 'string' && t.trim()) : []
+}
+export function alternarFavorito(titulo, favorito) {
+  const lista = new Set(leerFavoritos())
+  if (favorito) lista.add(titulo); else lista.delete(titulo)
+  mkdirSync(DATOS, { recursive: true })
+  writeFileSync(rutaFavoritos(), JSON.stringify({ favoritos: [...lista].sort() }, null, 2) + '\n')
+}
+
 async function construir(servidor = false, opciones = {}) {
-  const datos = { generado: new Date().toISOString(), servidor, proyectos: await recolectar(opciones) }
+  const datos = { generado: new Date().toISOString(), servidor, favoritos: leerFavoritos(), proyectos: await recolectar(opciones) }
   const plantilla = readFileSync(join(AQUI, 'plantilla.html'), 'utf8')
   const json = JSON.stringify(datos).replace(/</g, '\\u003c')
   return { datos, html: plantilla.replace('/*__DATOS__*/null', () => json) }
@@ -565,6 +578,7 @@ function huella() {
     }
   }
   carpeta(PLANES)
+  ver(rutaFavoritos())
   for (const p of proyectos) {
     const patron = new RegExp(p.patronBacklogs || '^BACKLOG.*\\.md$', 'i')
     for (const d of p.docs) carpeta(d, (f) => patron.test(f))
@@ -635,6 +649,15 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         if (hashBitacora(actual) !== b.hash) return enviar(res, 409, { error: 'La bitácora cambió desde que la cargaste (quizá cerró otra sesión): recarga y vuelve a intentarlo.' })
         writeFileSync(b.ruta, editarFila(actual, b))
         return enviar(res, 200, { ok: true, datos: (await fresco(true)).datos })
+      }
+      // Favoritos: solo escribe datos/favoritos.json; el título identifica la sesión.
+      if (ruta === '/api/favoritos') {
+        const titulo = typeof b.titulo === 'string' ? b.titulo.replace(/\s+/g, ' ').trim() : ''
+        if (!titulo || titulo.length > 200 || typeof b.favorito !== 'boolean') return enviar(res, 400, { error: 'Falta el título de la sesión o si es favorita.' })
+        alternarFavorito(titulo, b.favorito)
+        const c = await fresco() // los favoritos no tocan nada más: se parchea la caché en vez de reconstruir todo
+        c.datos.favoritos = leerFavoritos()
+        return enviar(res, 200, { ok: true, datos: c.datos })
       }
       // Sincronía: el cliente solo manda claves y lados elegidos; el plan se recalcula aquí con datos frescos.
       if (ruta === '/api/sincronia/previa' || ruta === '/api/sincronia/aplicar') {

@@ -1,8 +1,19 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H4 — Búsqueda y favoritos
+
+### S6 — Búsqueda en Planes y sesiones favoritas · **Sonnet** · rama `busqueda-favoritos` (sale de `backlog-coherencia`)
+`generar.mjs`, `plantilla.html`, `servidor.test.mjs`, README. (Esta sección no existía en el backlog: se añadió al hacer la sesión, según el prompt.)
+- [x] Búsqueda en Backlogs y Planes: campo que filtra sobre el DOM ya pintado (sin repintar, el foco no se pierde), abre lo que coincide y cuenta coincidencias; en Planes filtra también la lista lateral (título y contenido)
+- [x] Favoritos en `datos/favoritos.json` vía `POST /api/favoritos` `{ titulo, favorito }`, clave por título de sesión (sin marcas de markdown), no por `s.id`; entra en `datos.favoritos` y en la huella de `/api/version`
+- [x] Estrella en cada sesión `S…`, filtro «★ Solo favoritas» y tarjeta «Sesiones favoritas» en el Resumen
+- [x] Tests en `servidor.test.mjs` (403 por Host/Origin/tipo, 400 por cuerpo inválido, alternar, idempotencia); prueba en el navegador por CDP con una copia de `datos/` (estrella, filtro, búsqueda, Planes, Resumen)
+Decisión: el POST parchea la caché (`datos.favoritos`) en vez de reconstruir todo (de ~4 s a ~0,25 s).
 
 ## H1 — Ajustes visuales
 
