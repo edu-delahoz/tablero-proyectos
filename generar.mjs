@@ -18,7 +18,7 @@ import { join, dirname, basename, isAbsolute, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extraerMarcas, tareasLocales, planificarSincronia, aplicarSincronia } from './integraciones/sincronia.mjs'
 import { leerCredenciales, credencialesPara, guardarCredencial, resumenCredenciales, REQUISITOS, RUTA_CREDENCIALES } from './integraciones/credenciales.mjs'
-import { validarIntegracion, aplicarCambio, anadirProyecto, editarProyecto, escribirAtomico, ErrorConfig, CAMPOS, COMUNES, CAMPOS_PROYECTO } from './integraciones/config.mjs'
+import { validarIntegracion, aplicarCambio, anadirProyecto, editarProyecto, escribirAtomico, ErrorConfig, CAMPOS, COMUNES, CAMPOS_PROYECTO, noEscribeMd } from './integraciones/config.mjs'
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
@@ -818,9 +818,11 @@ const rutaInstantanea = (p, cfg) => join(DATOS, `sync-${p.id}-${cfg.id}.json`)
 const hashDe = (t) => createHash('sha1').update(t).digest('hex')
 const conTiempo = (promesa, ms) => Promise.race([promesa, new Promise((_, mal) => setTimeout(() => mal(new Error(`Sin conexión: no respondió en ${ms / 1000} s.`)), ms).unref())])
 export class ErrorSincronia extends Error { constructor(msg, estado, extra) { super(msg); Object.assign(this, { estado, extra }) } }
-// «modo: 'lectura'»: solo se lee afuera; ni backlog, ni crear/actualizar, ni instantánea, ni sincronía.
-const esLectura = (cfg) => cfg?.modo === 'lectura'
+// «modo: 'lectura'» y «'participar'»: solo se lee afuera; ni backlog, ni crear/actualizar, ni instantánea, ni sincronía.
+// En «participar» además puedes asignarte ítems y cambiarles el estado afuera (endpoints /api/integraciones/asignar y /estado).
+const esLectura = noEscribeMd
 const SOLO_LECTURA = 'Esta integración es de solo lectura: no se sincroniza nada (ni afuera ni en el backlog).'
+const SOLO_PARTICIPAR = 'Esta integración está en modo participar: te asignas ítems y cambias su estado afuera, pero no se sincroniza con un backlog.'
 const AVISO_PRIMERA = 'Primera sincronía: usa la vista previa («Sincronizar») para elegir qué se crea; «auto» no aplica nada hasta entonces.'
 
 // Todo lo necesario para sincronizar una integración: config, backlog, adaptador enlazado y credenciales.
@@ -836,6 +838,12 @@ function contextoIntegracion(p, cfg, backlogs, adaptadores) {
   if (faltan.length) throw new ErrorSincronia(`Falta credencial: ${faltan.join(', ')}.`, 400, { estado: 'falta-credencial', paso })
   const deps = { memo: new Map() }
   const adaptador = { leer: () => mod.leer(cfg, cred, deps) }
+  // Participar: solo asignar y cambiar estado de ítems existentes; nunca crear ni actualizar.
+  if (cfg.modo === 'participar') {
+    if (mod.asignar) adaptador.asignar = (id, correo) => mod.asignar(cfg, cred, id, correo, deps)
+    if (mod.cambiarEstado) adaptador.cambiarEstado = (id, estado, op) => mod.cambiarEstado(cfg, cred, id, estado, deps, op)
+    if (mod.quienSoy) adaptador.quienSoy = () => mod.quienSoy(cfg, cred, deps)
+  }
   if (!lectura) Object.assign(adaptador, {
     crear: (c, cr, t) => mod.crear(c, cr, t, deps),
     actualizar: (c, cr, id, x) => mod.actualizar(c, cr, id, x, deps),
@@ -847,7 +855,7 @@ function contextoIntegracion(p, cfg, backlogs, adaptadores) {
 export async function sincronizar(p, idIntegracion, { elegidas = null, resoluciones = {}, hashPrevio, adaptadores = ADAPTADORES, rutasPermitidas } = {}) {
   const cfg = (p.integraciones || []).find((x) => x.id === idIntegracion)
   if (!cfg) throw new ErrorSincronia('Esa integración no está en proyectos.json.', 404)
-  if (esLectura(cfg)) throw new ErrorSincronia(SOLO_LECTURA, 400, { estado: 'solo-lectura' })
+  if (esLectura(cfg)) throw new ErrorSincronia(cfg.modo === 'participar' ? SOLO_PARTICIPAR : SOLO_LECTURA, 400, { estado: 'solo-lectura' })
   const ctx = contextoIntegracion(p, cfg, leerBacklogs(p), adaptadores)
   const ruta = ctx.backlog.ruta
   if (rutasPermitidas && !rutasPermitidas.has(ruta)) throw new ErrorSincronia('Ese archivo no lo administra el tablero.', 403)
@@ -889,7 +897,7 @@ async function leerIntegraciones(p, backlogs, { adaptadores = ADAPTADORES, aplic
   const rutaExt = join(DATOS, `externo-${p.id}.json`), cache = leerJson(rutaExt, {})
   const salida = await Promise.all(p.integraciones.map(async (cfg) => {
     const lectura = esLectura(cfg)
-    const base = { id: cfg.id, tipo: cfg.tipo, nombre: NOMBRES[cfg.tipo] || cfg.tipo, modo: lectura ? 'lectura' : 'sincronizar', backlog: lectura ? null : cfg.backlog, auto: !lectura && !!cfg.auto, config: configVisible(cfg), ultimaSincronia: cache[cfg.id]?.ultimaSincronia || null }
+    const base = { id: cfg.id, tipo: cfg.tipo, nombre: NOMBRES[cfg.tipo] || cfg.tipo, modo: cfg.modo || 'sincronizar', backlog: lectura ? null : cfg.backlog, auto: !lectura && !!cfg.auto, config: configVisible(cfg), ultimaSincronia: cache[cfg.id]?.ultimaSincronia || null }
     let ctx
     try { ctx = contextoIntegracion(p, cfg, backlogs, adaptadores) } catch (e) {
       return { ...base, estado: e.extra?.estado || 'error', mensaje: e.message, paso: e.extra?.paso || null }
@@ -906,7 +914,7 @@ async function leerIntegraciones(p, backlogs, { adaptadores = ADAPTADORES, aplic
     return {
       ...base, estado: error ? 'error' : 'conectado', mensaje: error, aviso: ctx.aviso, avisos: [...(fuera?.avisos || []), ...(base.auto && primera ? [AVISO_PRIMERA] : [])],
       url: fuera?.url || null, titulo: fuera?.titulo || null, columnas: fuera?.columnas || [],
-      items: (fuera?.items || []).map(({ id, titulo, hecha, columna, url, tipo, asignado, mio, actualizado }) => ({ id, titulo, hecha, columna, url, tipo, asignado, mio, actualizado })),
+      items: (fuera?.items || []).map(({ id, titulo, hecha, columna, url, tipo, asignado, mio, actualizado, descripcion, prioridad, iteracion, padre }) => ({ id, titulo, hecha, columna, url, tipo, asignado, mio, actualizado, descripcion, prioridad, iteracion, padre })),
       leidoEn: error ? cache[cfg.id]?.fecha || null : new Date().toISOString(), desdeCache: !!error && !!fuera,
       pendientes: acciones.filter((a) => a.tipo !== 'huerfana').length, porTipo, _auto: auto,
     }
@@ -1443,6 +1451,53 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         }
         return enviar(res, 200, { ok: true, archivo: basename(destino), ruta: destino, contenido, datos: (await fresco(true)).datos })
       }
+      // Participar: asignarme (o soltar) un ítem, o cambiarle el estado afuera. Nunca crea ni toca un .md.
+      if (ruta === '/api/integraciones/asignar' || ruta === '/api/integraciones/estado') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const p = integracionDe(b)
+        const cfg = (p.integraciones || []).find((x) => x.id === b.integracion)
+        if (!cfg) throw new ErrorConfig('Esa integración no está en proyectos.json.', 404)
+        if (cfg.modo !== 'participar') throw new ErrorConfig('Solo puedes asignarte ítems o cambiar su estado en una integración en modo «participar».')
+        const mod = adaptadores[cfg.tipo]
+        if (!mod?.asignar || !mod?.cambiarEstado) throw new ErrorConfig(`${NOMBRES[cfg.tipo] || cfg.tipo}: este conector aún no participa.`)
+        const id = String(b.id ?? '')
+        if (!/^\d+$/.test(id)) throw new ErrorConfig('Falta el id del ítem (solo números).')
+        const esAsignar = ruta === '/api/integraciones/asignar'
+        if (esAsignar && typeof b.aMi !== 'boolean') throw new ErrorConfig('«aMi» debe ser sí o no.')
+        const rutaExt = join(DATOS, `externo-${p.id}.json`)
+        const columnas = leerJson(rutaExt, {})[cfg.id]?.columnas || []
+        let estado
+        if (!esAsignar) {
+          estado = typeof b.estado === 'string' ? columnas.find((x) => x.toLowerCase() === b.estado.trim().toLowerCase()) : undefined
+          if (!estado) throw new ErrorConfig(`«${b.estado}» no es un estado conocido de esta integración${columnas.length ? ` (${columnas.join(', ')})` : ': recarga para leer los estados'}.`)
+        }
+        const ctx = contextoIntegracion(p, cfg, [], adaptadores)
+        let item, yo
+        try {
+          if (esAsignar) {
+            yo = leerJson(rutaExt, {})[cfg.id]?.yo
+            if (b.aMi && !(yo?.correo && Date.now() - Date.parse(yo.fecha) < 3600e3)) yo = { ...(await conTiempo(ctx.adaptador.quienSoy(), 15000)), fecha: new Date().toISOString() }
+            item = await conTiempo(ctx.adaptador.asignar(id, b.aMi ? yo.correo : null), 15000)
+          } else item = await conTiempo(ctx.adaptador.cambiarEstado(id, estado, { columnas }), 15000)
+        } catch (e) {
+          registrar(`${esAsignar ? 'asignar' : 'estado'} ${p.id}/${cfg.id} #${id}: ${e?.message || e}`)
+          return enviar(res, 502, { error: String(e?.message || e) })
+        }
+        const correoYo = yo?.correo || leerJson(rutaExt, {})[cfg.id]?.yo?.correo
+        const cambios = { columna: item.columna, hecha: item.hecha, asignado: item.asignado ?? null }
+        if (esAsignar) cambios.mio = !!item.asignado && (b.aMi || (!!correoYo && item.asignado.correo?.toLowerCase() === correoYo.toLowerCase()))
+        // Caché en disco: el ítem parcheado (y quién soy, 1 h). Sin releer los ítems de afuera.
+        const ext = leerJson(rutaExt, {})
+        ext[cfg.id] = { ...ext[cfg.id], ...(yo ? { yo } : {}) }
+        const enCache = ext[cfg.id].items?.find((x) => String(x.id) === id)
+        if (enCache) Object.assign(enCache, cambios)
+        mkdirSync(DATOS, { recursive: true })
+        writeFileSync(rutaExt, JSON.stringify(ext))
+        const c = await fresco()
+        const enDatos = c.datos.proyectos.find((x) => x.id === p.id)?.integraciones?.find((x) => x.id === cfg.id)?.items?.find((x) => String(x.id) === id)
+        if (enDatos) Object.assign(enDatos, cambios)
+        return enviar(res, 200, { ok: true, item: { ...(enDatos || enCache || {}), id, ...cambios }, datos: c.datos })
+      }
       // Importar una integración de solo lectura a un BACKLOG_<ID>.md propio (nunca sobrescribe; `previa` no escribe).
       if (ruta === '/api/integraciones/importar') {
         if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
@@ -1474,7 +1529,7 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         let r
         try { r = await conTiempo(ctx.adaptador.leer(), 15000) } catch (e) { return enviar(res, 502, { error: String(e?.message || e) }) }
         const vinculadas = ctx.backlog ? tareasLocales(ctx.backlog.contenido, limpia.id).filter((t) => t.marca).length : 0
-        return enviar(res, 200, { ok: true, modo: esLectura(limpia) ? 'lectura' : 'sincronizar', titulo: r.titulo || null, url: r.url || null, columnas: r.columnas || [], items: r.items.length, avisos: [...(ctx.aviso ? [ctx.aviso] : []), ...(r.avisos || [])], vinculadas, ...(limpia.organizacion ? { organizacion: limpia.organizacion } : {}) })
+        return enviar(res, 200, { ok: true, modo: limpia.modo || 'sincronizar', titulo: r.titulo || null, url: r.url || null, columnas: r.columnas || [], items: r.items.length, avisos: [...(ctx.aviso ? [ctx.aviso] : []), ...(r.avisos || [])], vinculadas, ...(limpia.organizacion ? { organizacion: limpia.organizacion } : {}) })
       }
       // Descubrir para los desplegables (solo lectura): `consulta` parcial según el tipo; `clave` = id de una integración con credencial propia.
       if (ruta === '/api/integraciones/descubrir') {
