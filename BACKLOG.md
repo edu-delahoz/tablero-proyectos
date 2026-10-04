@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · S15 hecha (mod `~/.claude/mods/panel-tablero`, sin git): rutas relativas y nombres sueltos de backlog resueltos contra el root, sesión pedida en el prompt («Sesión S3c de BACKLOG_MVP.md»), `seccionDe` entiende viñetas `- **S3c — …**` (tarea madre, casillas, fallback a la primera abierta), tarjeta con `H3 › Personas mal migradas › S3c  …` + hasta 4 casillas, y texto ajustado en vez de recortado. `claude plugin test` 11/11, `plugin validate` OK (solo aviso de `author`), `tsc` limpio. Con el `BACKLOG_MVP.md` real: pedida S3c → 3/3; sin pistas → S4c con 4 casillas. H7 cerrado.
 - 2026-10-04 · rama `plan-en-curso` · S14 hecha, tests en verde (93 pasan, 2 omitidos): huella del código en `/api/version` (`codigo`), `POST /api/salir` (solo local), `asegurarServidor()` recicla (salir → SIGTERM al pid de `lsof` → arrancar) y el servidor se relanza solo cada 30 s si cambia el código — comprobado con el servidor real (viejo de S11 reciclado por SIGTERM; `touch plantilla.html` → «reinicio por código nuevo» en 30 s). `construirFrente`: abiertas por sub-sesión (Falta = la siguiente), `planDelFrente` (mención en la siguiente → en la hecha → nombre con la clave y el backlog → lo de antes) con `planDe`; tarjeta «Falta · S3c — …», «S3c 0/3», «Plan (de S3)». Con el `BACKLOG_MVP.md` real: S3c siguiente, 3 casillas, plan `sesi-n-s3c-de-backlog-mvp-md-swift-ember.md`. No se miró la tarjeta en el navegador (solo `/api/datos`). Los cambios sin commit de `coherencia.*` (aviso «sesión sin casillas») no son de S14. Siguiente: **S15** (mod).
 - 2026-10-04 · fuera del repo · revisión del panel `panel-tablero` a 207 y ~120 col: no se pudo ver el panel real (`/tablero` solo se ve en la UI de Claude Code). Ampliado el test «plan solo leído» del mod a anchos 120 y 207: `claude plugin test` 7/7, ningún texto desborda. Sin cambios en el repo salvo este backlog. Pendiente solo: vistazo del usuario a `/tablero` (207 y ~120).
 - 2026-10-04 · fuera del repo · verificación del mod `~/.claude/mods/panel-tablero` v2 hecha en lo automatizable: `claude plugin test` 7/7 (nuevo test: plan solo leído → «👁 leído» y ningún texto desborda a 40/60/100 col), `plugin validate` y `tsc` limpios; los casos «sin tocar → del proyecto», «✎ actualizando» y «↳ antes» ya los cubrían los tests existentes. No se pudo ver el panel real: pendiente solo un vistazo del usuario en Claude Code (`/tablero`, ancho 207 y ~120). Sin cambios en el repo salvo este backlog.
@@ -33,11 +34,14 @@ Decisiones y trampas (S14): el bloque de una sub-sesión acaba en la siguiente l
 
 ### S15 — Mod `panel-tablero`: rutas relativas, sub-sesiones y casillas · **Opus** · fuera del repo (`~/.claude/mods/panel-tablero`, sin git)
 `hooks/register.tsx`, `register.test.ts`, `types/index.d.ts` (parte B del plan). Cargar la skill `plugin-authoring`; en el `.tsx` ninguna variable puede llamarse `h`.
-- [ ] `focoDeSesion(mensajes, home, root)`: rutas `./`/`../…backlog*.md` y nombres sueltos `BACKLOG*.md` resueltos contra `$.session.root()`; test: prompt con ruta relativa → backlog encontrado
-- [ ] Clave pedida en el primer mensaje (`Sesión S3c de BACKLOG_MVP.md`) manda sobre el fallback; test → H3 › … › S3c, 0/3, 3 abiertas
-- [ ] `seccionDe` entiende viñetas `- **S\d+[a-z]? — …**` (rango por sangría, hito del `## H…`, título = tarea abreviada + sub-sesión, `hechas/total`, `abiertas`); fallback: primera sub-sesión con casillas abiertas; test sin pistas
-- [ ] Tarjeta «Esta sesión»: línea `H3 › Personas mal migradas › S3c  …` y hasta 4 casillas `[ ] …` + «… y N más»; test sin desborde a 40/120/207 col
-- [ ] `claude plugin test`, `plugin validate` y `tsc` limpios; resultado en `## Estado`
+- [x] `focoDeSesion(mensajes, home, root)`: rutas `./`/`../…backlog*.md` y nombres sueltos `BACKLOG*.md` resueltos contra `$.session.root()`; test: prompt con ruta relativa → backlog encontrado
+- [x] Clave pedida en el primer mensaje (`Sesión S3c de BACKLOG_MVP.md`) manda sobre el fallback; test → H3 › … › S3c, 0/3, 3 abiertas
+- [x] `seccionDe` entiende viñetas `- **S\d+[a-z]? — …**` (rango por sangría, hito del `## H…`, título = tarea abreviada + sub-sesión, `hechas/total`, `abiertas`); fallback: primera sub-sesión con casillas abiertas; test sin pistas
+- [x] Tarjeta «Esta sesión»: línea `H3 › Personas mal migradas › S3c  …` y hasta 4 casillas `[ ] …` + «… y N más»; test sin desborde a 40/120/207 col
+- [x] `claude plugin test`, `plugin validate` y `tsc` limpios; resultado en `## Estado`
+- [x] (añadido en S15, pedido por el usuario) Ningún texto del panel se recorta con «…»: `ajustar()` parte por palabras al ancho (respeta dobles espacios); las casillas, hasta 3 líneas cada una; la nota de la derecha de PLAN/BACKLOG baja de línea si no cabe
+
+Decisiones y trampas (S15): un nombre suelto (`BACKLOG_MVP.md`) se resuelve primero contra una ruta ya vista en la sesión con ese nombre y, si no, contra el root (al revés que el plan: la ruta vista casi siempre es la buena); el activo salta a la siguiente candidata si no se puede leer. Orden en `seccionDe`: fragmento editado → sesión pedida → «Siguiente:/sigue **SX**» de `## Estado` → primera `###` abierta → primera viñeta abierta tras la última hecha. «Sesión/sección SX de BACKLOG…md» cuenta como pedida. No se abrió una sesión real en el IEP para ver el panel (solo test con su `BACKLOG_MVP.md` real).
 
 ## H6 — Plan en curso a la vista
 
