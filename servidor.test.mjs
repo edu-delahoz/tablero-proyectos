@@ -456,3 +456,15 @@ test('primera sincronía (sin instantánea): la previa lo dice con el conteo y �
   writeFileSync(join(dir, 'datos', 'sync-primera-g.json'), '{}')
   assert.equal((await sincronizar(p, 'g', { adaptadores: { 'github-projects': gh } })).primera, false)
 })
+
+test('vista: la plantilla trae modo, filtro Mías/Sin asignar, chips y la primera sincronía sin marcar', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['data-integ-filtro', 'chip-asig', 'chip-tipo', 'id="fi-modo"', 'data-fi="tipoItem-todos"', 'Primera sincronía.', 'modo: lectura ? \'lectura\' : \'sincronizar\'']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+  // En solo lectura no hay botón «Sincronizar» ni «auto: no»: el guardia está en la tarjeta.
+  assert.match(html, /integ\.estado === 'conectado' && !lectura \? \(editable\(\)/)
+  // Los datos que alimentan chips y filtros llegan a la vista (EAP10, solo lectura).
+  const d = await (await fetch(`http://127.0.0.1:${puerto}/api/datos`)).json()
+  const ado = d.proyectos.find((p) => p.id === 'eap10').integraciones[0]
+  assert.equal(ado.modo, 'lectura')
+  assert.equal(ado.backlog, null)
+})

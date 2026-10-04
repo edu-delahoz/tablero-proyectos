@@ -299,6 +299,11 @@ a.chip-ext:hover { border-color: var(--azul); }
 .campo-fi { display: grid; gap: 2px; margin: 0 0 8px; min-width: 0; }
 .campo-fi > span { font-size: .85em; color: var(--suave); }
 .campo-fi input:not([type=checkbox]), .campo-fi select { max-width: 100%; width: min(100%, 28em); padding: 4px 6px; background: var(--superficie); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio); font: inherit; }
+.chip-asig, .chip-tipo { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--borde); font: .78em/1.5 var(--mono); white-space: nowrap; vertical-align: baseline; }
+.chip-asig.sin { color: var(--suave); border-style: dashed; }
+.chip-tipo { color: var(--azul); }
+.filtro-integ { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; font-size: .9em; border: 0; padding: 0; }
+.tipos-fi { display: flex; flex-wrap: wrap; gap: 4px 14px; border: 0; padding: 0; margin: 0 0 8px; }
 .campo-fi.marca-fi { display: flex; gap: 6px; align-items: baseline; }
 .campo-fi.marca-fi > span { color: inherit; font-size: 1em; }
 .manual-fi { display: flex; flex-wrap: wrap; gap: 0 16px; }
@@ -902,7 +907,7 @@ function detalleCambios(c, app) {
   if ('titulo' in c) partes.push(`renombrar a «${c.titulo}»`);
   return partes.join(' · ');
 }
-function filaAccion(a, integ) {
+function filaAccion(a, integ, primera) {
   const enlace = a.url ? ` <a href="${esc(a.url)}" target="_blank" rel="noopener">↗<span class="sr"> abrir en ${esc(integ.nombre)}</span></a>` : '';
   const caja = (marcada) => `<input type="checkbox" name="accion" value="${esc(a.clave)}"${marcada ? ' checked' : ''} aria-label="Aplicar: ${esc(a.titulo)}">`;
   if (a.tipo === 'huerfana') return `<div class="accion"><span aria-hidden="true">·</span><div class="det">${esc(a.titulo)} <span class="suave">${esc(a.id)}</span></div></div>`;
@@ -914,7 +919,7 @@ function filaAccion(a, integ) {
   const det = a.tipo === 'crear-fuera' ? `${estadoTxt(a.hecha)}${a.seccion ? ` · sección ${a.seccion}` : ''}${a.subtareas?.length ? ` · ${a.subtareas.length} subtareas como checklist` : ''}`
     : a.tipo === 'traer' ? `${a.columna || 'sin columna'} → ${estadoTxt(a.hecha)}`
     : detalleCambios(a.cambios, a.tipo === 'actualizar-fuera');
-  return `<div class="accion">${caja(true)}<div class="det">${esc(a.titulo)}${enlace}<span class="suave">${esc(det)}</span></div></div>`;
+  return `<div class="accion">${caja(!(primera && (a.tipo === 'crear-fuera' || a.tipo === 'traer')))}<div class="det">${esc(a.titulo)}${enlace}<span class="suave">${esc(det)}</span></div></div>`;
 }
 function vistaPrevia(integ) {
   const pv = previas.get(integ.id);
@@ -926,46 +931,68 @@ function vistaPrevia(integ) {
       <button class="boton" type="button" data-cerrar-sync="${esc(integ.id)}">Cerrar</button></div>`;
   }
   if (!pv.acciones.length) return `<div class="resultado-sync" role="status">Todo sincronizado: no hay cambios. <button class="boton" type="button" data-cerrar-sync="${esc(integ.id)}">Cerrar</button></div>`;
-  const app = integ.nombre;
+  const app = integ.nombre, nC = pv.conteo?.['crear-fuera'] || 0, nT = pv.conteo?.traer || 0;
+  const avisoPrimera = pv.primera ? `<div class="integ-paso" role="note"><strong>Primera sincronía.</strong> Se crearían ${nC} ${integ.tipo === 'azure-devops' ? 'work item' : 'ítem'}${nC === 1 ? '' : 's'} en el proyecto real de ${esc(app)}${nT ? ` y se traerían ${nT} al backlog` : ''}. Por eso esas acciones vienen <strong>sin marcar</strong>: marca solo las que quieras.</div>` : '';
   return `<form class="sync-previa" data-integ="${esc(integ.id)}" aria-label="Vista previa de la sincronía">
-    <p class="suave" style="margin-top:0">Vista previa: nada se ha aplicado todavía. Primero se escribe en ${esc(app)} y luego, de una vez, en ${esc(integ.backlog)}.</p>
+    <p class="suave" style="margin-top:0">Vista previa: nada se ha aplicado todavía. Primero se escribe en ${esc(app)} y luego, de una vez, en ${esc(integ.backlog)}.</p>${avisoPrimera}
     ${GRUPOS_SYNC.map(([tipo, titulo]) => {
       const as = pv.acciones.filter((a) => a.tipo === tipo);
-      return as.length ? `<fieldset><legend class="rotulo">${esc(titulo.replace('{app}', app).replace('{id}', integ.id))} · ${as.length}</legend>${as.map((a) => filaAccion(a, integ)).join('')}</fieldset>` : '';
+      return as.length ? `<fieldset><legend class="rotulo">${esc(titulo.replace('{app}', app).replace('{id}', integ.id))} · ${as.length}</legend>${as.map((a) => filaAccion(a, integ, pv.primera)).join('')}</fieldset>` : '';
     }).join('')}
     <div class="pie"><button class="boton primario" type="submit">Aplicar</button><button class="boton" type="button" data-cerrar-sync="${esc(integ.id)}">Cancelar</button></div></form>`;
 }
+const filtroInteg = new Map(); // id de integración → 'todas' | 'mias' | 'sin'
+const FILTROS_INTEG = [['todas', 'Todas'], ['mias', 'Mías'], ['sin', 'Sin asignar']];
+const conAsignado = (xs) => xs.some((x) => 'asignado' in x);
+const conMio = (xs) => xs.some((x) => typeof x.mio === 'boolean');
+const pasaFiltro = (x, f) => f === 'mias' ? x.mio === true : f === 'sin' ? !x.asignado : true;
+function filtroItems(integ) {
+  const xs = integ.items || [];
+  if (!xs.length || !conAsignado(xs)) return '';
+  const mio = conMio(xs), act = filtroInteg.get(integ.id) === 'mias' && !mio ? 'todas' : (filtroInteg.get(integ.id) || 'todas');
+  return `<fieldset class="filtro-integ"><legend class="sr">Filtrar ítems</legend>${FILTROS_INTEG.map(([v, t]) => {
+    const off = v === 'mias' && !mio;
+    return `<label${off ? ' title="No se pudo saber cuáles son tuyas"' : ''}><input type="radio" name="filtro-${esc(integ.id)}" data-integ-filtro="${esc(integ.id)}" value="${v}"${act === v ? ' checked' : ''}${off ? ' disabled' : ''}> ${t}</label>`;
+  }).join('')}${mio ? '' : '<span class="suave">«Mías» no disponible: no se pudo saber cuáles son tuyas.</span>'}</fieldset>`;
+}
+function itemExterno(x) {
+  const asig = 'asignado' in x ? (x.asignado ? `<span class="chip-asig" title="${esc(x.asignado.correo || 'Asignado')}">${esc(x.asignado.nombre || x.asignado.correo || String(x.asignado))}</span>` : '<span class="chip-asig sin">Sin asignar</span>') : '';
+  return `<li${x.hecha ? ' class="hecha"' : ''}><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a>${x.tipo ? `<span class="chip-tipo">${esc(x.tipo)}</span>` : ''}${asig}</li>`;
+}
 function tarjetaIntegracion(integ) {
   if (formInteg?.original === integ.id) return formularioInteg();
+  const lectura = integ.modo === 'lectura', filtro = filtroInteg.get(integ.id) || 'todas';
   const [cls, punto, txt] = ESTADO_INTEG[integ.estado] || ESTADO_INTEG.error;
-  const columnas = [...integ.columnas, ...new Set(integ.items.map((x) => x.columna || 'Sin estado').filter((c) => !integ.columnas.includes(c)))];
-  const porCol = columnas.map((c) => [c, integ.items.filter((x) => (x.columna || 'Sin estado') === c)]).filter(([, xs]) => xs.length);
+  const items = integ.items || [], itemsVis = items.filter((x) => pasaFiltro(x, filtro));
+  const columnas = [...(integ.columnas || []), ...new Set(items.map((x) => x.columna || 'Sin estado').filter((c) => !(integ.columnas || []).includes(c)))];
+  const porCol = columnas.map((c) => [c, itemsVis.filter((x) => (x.columna || 'Sin estado') === c)]).filter(([, xs]) => xs.length);
   const pt = integ.porTipo || {};
   return `<section class="tarjeta" style="margin-bottom:18px" aria-label="${esc(integ.nombre)} ${esc(integ.id)}">
-    <h2><span>${esc(integ.nombre)} · ${esc(integ.id)}</span><small>${esc(integ.backlog || '')}</small></h2>
+    <h2><span>${esc(integ.nombre)} · ${esc(integ.id)}</span><small>${lectura ? 'solo lectura' : esc(integ.backlog || '')}</small></h2>
     <p class="integ-estado"><span class="${cls}"><span class="punto" aria-hidden="true">${punto}</span> ${txt}</span>
       ${integ.titulo ? `<span>«${esc(integ.titulo)}»</span>` : ''}
       ${integ.leidoEn ? `<span class="suave">leído ${hace(integ.leidoEn)}${integ.desdeCache ? ' (caché)' : ''}</span>` : ''}
-      <span class="suave">última sincronía: ${integ.ultimaSincronia ? hace(integ.ultimaSincronia) : 'nunca'}</span>
-      <span class="suave">auto: ${integ.auto ? 'sí' : 'no'}</span></p>
+      ${lectura ? '<span class="suave">solo lectura · no escribe nada afuera ni en backlogs</span>' : `<span class="suave">última sincronía: ${integ.ultimaSincronia ? hace(integ.ultimaSincronia) : 'nunca'}</span>
+      <span class="suave">auto: ${integ.auto ? 'sí' : 'no'}</span>`}</p>
     ${integ.mensaje ? `<div class="integ-paso ${integ.estado === 'error' ? 'mal' : ''}">${esc(integ.mensaje)}${integ.paso ? `<br><span class="suave">${esc(integ.paso)}</span>` : ''}</div>` : ''}
     ${integ.aviso ? `<div class="integ-paso">${esc(integ.aviso)}</div>` : ''}
     ${(integ.avisos || []).map((a) => `<p class="suave" style="margin:4px 0">· ${esc(a)}</p>`).join('')}
-    ${integ.estado === 'conectado' || integ.desdeCache ? `<p class="suave" style="margin:4px 0 8px">${integ.pendientes ? `⇄ ${integ.pendientes} cambio${integ.pendientes === 1 ? '' : 's'} por sincronizar` : '✓ sin cambios por sincronizar'}${Object.entries(pt).length ? ` · ${Object.entries(pt).map(([k, v]) => `${v} ${k}`).join(' · ')}` : ''}</p>` : ''}
+    ${(integ.estado === 'conectado' || integ.desdeCache) && !lectura ? `<p class="suave" style="margin:4px 0 8px">${integ.pendientes ? `⇄ ${integ.pendientes} cambio${integ.pendientes === 1 ? '' : 's'} por sincronizar` : '✓ sin cambios por sincronizar'}${Object.entries(pt).length ? ` · ${Object.entries(pt).map(([k, v]) => `${v} ${k}`).join(' · ')}` : ''}</p>` : ''}
     <p style="margin:0">${integ.url ? `<a class="boton" href="${esc(integ.url)}" target="_blank" rel="noopener">Abrir en ${esc(integ.nombre)} ↗</a>` : ''}
       ${editable() ? `<button class="boton" type="button" data-integ-editar="${esc(integ.id)}">Editar</button><button class="boton" type="button" data-integ-quitar="${esc(integ.id)}">Quitar</button>` : '<button class="boton" type="button" disabled title="Requiere el servidor local">Editar</button><button class="boton" type="button" disabled title="Requiere el servidor local">Quitar</button>'}
-      ${integ.estado === 'conectado' ? (editable() ? `<button class="boton primario" type="button" data-sincronizar="${esc(integ.id)}">Sincronizar</button>` : '<span class="suave">Sincronizar requiere el servidor local: abre el tablero con Tablero.app o <code>node generar.mjs --abrir</code>. Como archivo suelto es solo lectura.</span>') : ''}</p>
+      ${integ.estado === 'conectado' && !lectura ? (editable() ? `<button class="boton primario" type="button" data-sincronizar="${esc(integ.id)}">Sincronizar</button>` : '<span class="suave">Sincronizar requiere el servidor local: abre el tablero con Tablero.app o <code>node generar.mjs --abrir</code>. Como archivo suelto es solo lectura.</span>') : ''}</p>
     ${quitandoInteg === integ.id ? `<div class="integ-paso mal" role="group" aria-label="Confirmar quitar ${esc(integ.id)}">Se quita solo el bloque «${esc(integ.id)}» de <code>proyectos.json</code>. No se borra nada afuera (en ${esc(integ.nombre)} todo se queda) ni en el backlog: sus marcas <code>&lt;!-- ${esc(integ.id)}:… --&gt;</code> quedan sin uso.<br>
       <button class="boton primario" type="button" data-integ-confirmar>Sí, quitar</button><button class="boton" type="button" data-integ-no-quitar>Cancelar</button></div>` : ''}
     ${vistaPrevia(integ)}
-    ${porCol.length ? `<div class="columnas-ext">${porCol.map(([c, xs]) => `<div class="columna-ext"><div class="rotulo">${esc(c)} · ${xs.length}</div><ul>${xs.map((x) => `<li${x.hecha ? ' class="hecha"' : ''}><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a></li>`).join('')}</ul></div>`).join('')}</div>` : integ.estado === 'conectado' ? '<p class="suave">El tablero externo está vacío.</p>' : ''}
+    ${filtroItems(integ)}
+    ${porCol.length ? `<div class="columnas-ext">${porCol.map(([c, xs]) => `<div class="columna-ext"><div class="rotulo">${esc(c)} · ${xs.length}</div><ul>${xs.map(itemExterno).join('')}</ul></div>`).join('')}</div>` : integ.estado === 'conectado' ? `<p class="suave">${items.length ? 'Ningún ítem coincide con el filtro.' : 'El tablero externo está vacío.'}</p>` : ''}
   </section>`;
 }
 async function pedirPrevia(id, boton) {
   boton.disabled = true; boton.textContent = 'Leyendo…';
   try {
     const r = await api('/api/sincronia/previa', { proyecto: P.id, integracion: id });
-    previas.set(id, { acciones: r.acciones, hash: r.hash }); pintar();
+    previas.set(id, { acciones: r.acciones, hash: r.hash, primera: !!r.primera, conteo: r.conteo }); pintar();
     document.querySelector(`.sync-previa[data-integ="${CSS.escape(id)}"] input, [data-cerrar-sync="${CSS.escape(id)}"]`)?.focus();
   } catch (e) { boton.disabled = false; boton.textContent = 'Sincronizar'; avisar(`No se pudo leer: ${e.message}`, true); }
 }
@@ -1004,7 +1031,7 @@ const idPropuesto = (tipo) => {
   let id = base; for (let n = 2; usados.has(id); n++) id = `${base}-${n}`;
   return id;
 };
-const nuevoForm = (integ) => ({ original: integ?.id || null, cfg: integ ? structuredClone(integ.config || {}) : { tipo: '', backlog: archivosBacklog()[0] || '', auto: false }, op: {}, cargando: '', error: '', prueba: null, cred: {}, cambiarCred: false, idTocado: !!integ });
+const nuevoForm = (integ) => ({ original: integ?.id || null, cfg: integ ? { ...structuredClone(integ.config || {}), modo: integ.modo || integ.config?.modo || 'sincronizar' } : { tipo: '', backlog: archivosBacklog()[0] || '', auto: false, modo: archivosBacklog().length ? 'sincronizar' : 'lectura' }, op: {}, cargando: '', error: '', prueba: null, cred: {}, cambiarCred: false, idTocado: !!integ });
 function abrirForm(integ) {
   quitandoInteg = null; formInteg = nuevoForm(integ);
   pintarF();
@@ -1043,7 +1070,9 @@ async function guardarCred(boton) {
 }
 // Lo que se manda al servidor: solo campos con valor (el servidor vuelve a validar y filtra).
 function cfgLimpia(c, idFinal) {
-  const o = { id: idFinal, tipo: c.tipo, backlog: c.backlog, auto: !!c.auto };
+  const lectura = c.modo === 'lectura';
+  const o = { id: idFinal, tipo: c.tipo, modo: lectura ? 'lectura' : 'sincronizar' };
+  if (!lectura) { o.backlog = c.backlog; o.auto = !!c.auto; }
   for (const k of ['propietario', 'numero', 'campoEstado', 'campoSeccion', 'tablero', 'organizacion', 'proyecto', 'tipoItem']) if (c[k] !== undefined && c[k] !== '') o[k] = c[k];
   const col = Object.fromEntries(Object.entries(c.columnas || {}).filter(([, v]) => v && v.length));
   if (Object.keys(col).length) o.columnas = col;
@@ -1111,6 +1140,15 @@ function pasoDestino(c) {
   return `${textoFi('fi-organizacion', 'Organización', 'organizacion', c.organizacion, 'Nombre o URL: dev.azure.com/&lt;organización&gt;')}<button class="boton" type="button" data-fi-accion="destinos"${cargando || !c.organizacion ? ' disabled' : ''}>Buscar proyectos</button>${estado}
     ${op.destinos ? selectFi('fi-destino', 'Proyecto', 'destino', c.proyecto, lista, '— elige un proyecto —') : ''}${manual || !op.destinos ? textoFi('fi-proyecto', 'Proyecto (a mano)', 'proyecto', c.proyecto) : ''}`;
 }
+const tiposElegidos = (c) => c.tipoItem === '*' ? '*' : Array.isArray(c.tipoItem) ? c.tipoItem : c.tipoItem ? [c.tipoItem] : [];
+// Casillas de tipo de work item; «Todos» solo en solo lectura (al sincronizar no se sabría qué tipo crear).
+function tiposFi(c, nombres) {
+  const sel = tiposElegidos(c), todos = sel === '*', lista = [...new Set([...nombres, ...(todos ? [] : sel)])];
+  return `<fieldset class="tipos-fi" aria-label="Tipo de work item"><legend class="rotulo">Tipo de work item</legend>
+    ${c.modo === 'lectura' ? `<label><input type="checkbox" data-fi="tipoItem-todos"${todos ? ' checked' : ''}> Todos</label>` : ''}
+    ${lista.map((n) => `<label><input type="checkbox" data-fi="tipoItem-op" value="${esc(n)}"${todos ? ' disabled' : sel.includes(n) ? ' checked' : ''}> ${esc(n)}</label>`).join('')}
+    <small class="suave">${todos ? 'Se leen todos los tipos.' : sel.length ? '' : 'Sin marcar: Task.'}</small></fieldset>`;
+}
 function pasoColumnas(c) {
   const d = formInteg.op.detalle, cargando = formInteg.cargando === 'detalle', col = c.columnas || {};
   if (cargando) return '<p class="suave" role="status">Leyendo columnas…</p>';
@@ -1120,7 +1158,12 @@ function pasoColumnas(c) {
     opciones = def?.opciones;
     extra = d ? selectFi('fi-campoEstado', 'Campo de estado', 'campoEstado', c.campoEstado, (d.camposSeleccion || []).map((x) => x.nombre), 'Status (por defecto)') + selectFi('fi-campoSeccion', 'Campo de texto para la sección', 'campoSeccion', c.campoSeccion, d.camposTexto || [], 'Sección (por defecto)') : '';
   } else if (c.tipo === 'trello') opciones = d?.listas;
-  else { const tipos = d?.tipos || []; opciones = tipos.find((t) => t.nombre === (c.tipoItem || 'Task'))?.estados; extra = d ? selectFi('fi-tipoItem', 'Tipo de work item', 'tipoItem', c.tipoItem, tipos.map((t) => t.nombre), 'Task (por defecto)') : ''; }
+  else {
+    const tipos = d?.tipos || [], sel = tiposElegidos(c);
+    opciones = (sel === '*' ? tipos : tipos.filter((t) => sel.includes(t.nombre))).flatMap((t) => (t.estados || []).map((e) => (typeof e === 'string' ? e : e?.nombre ?? e?.name ?? '')));
+    if (!opciones.length) opciones = tipos.find((t) => t.nombre === 'Task')?.estados;
+    extra = d ? tiposFi(c, tipos.map((t) => t.nombre)) : '';
+  }
   const nombres = (o) => (o || []).map((x) => (typeof x === 'string' ? x : x?.nombre ?? x?.name ?? ''));
   const lista = nombres(opciones);
   return `${extra}<div class="manual-fi">${selectFi('fi-col-pendiente', 'Pendiente = ', 'col:pendiente', col.pendiente, lista, 'automático')}${selectFi('fi-col-hecho', 'Hecho = ', 'col:hecho', col.hecho, lista, 'automático')}</div>
@@ -1129,7 +1172,7 @@ function pasoColumnas(c) {
 const avisoRenombra = (f) => f.original && f.cfg.id && f.cfg.id !== f.original ? `<div class="integ-paso">Cambiar el id deja huérfanas las marcas <code>&lt;!-- ${esc(f.original)}:… --&gt;</code> que ya tiene el backlog: no se renombran solas.</div>` : '';
 function formularioInteg() {
   const f = formInteg, c = f.cfg, editar = !!f.original, pr = f.prueba;
-  const cred = credOk(c.tipo), destino = c.tipo && cred && DESTINO_OK[c.tipo](c);
+  const cred = credOk(c.tipo), destino = c.tipo && cred && DESTINO_OK[c.tipo](c), lectura = c.modo === 'lectura';
   const paso = (n, t, cuerpo) => `<fieldset class="paso-fi"><legend class="rotulo">${n}. ${t}</legend>${cuerpo}</fieldset>`;
   return `<form class="form-integ tarjeta" id="form-integ" data-form-integ aria-label="${editar ? `Editar ${esc(f.original)}` : 'Nueva integración'}">
     <h2><span>${editar ? `Editar «${esc(f.original)}»` : 'Nueva integración'}</span></h2>
@@ -1138,11 +1181,12 @@ function formularioInteg() {
     ${c.tipo ? paso(2, 'Credencial', pasoCredencial(c)) : ''}
     ${c.tipo && cred ? paso(3, 'Destino', pasoDestino(c)) : ''}
     ${f.error ? `<div class="integ-paso mal" role="alert">${esc(f.error)}</div>` : ''}
-    ${destino ? paso(4, 'Backlog que se sincroniza', selectFi('fi-backlog', 'Archivo', 'backlog', c.backlog, archivosBacklog())) : ''}
+    ${destino ? paso(4, 'Modo y backlog', `<label class="campo-fi" for="fi-modo"><span>Modo</span><select id="fi-modo" data-fi="modo">${opcion('sincronizar', 'Sincronizar con un backlog', !lectura)}${opcion('lectura', 'Solo lectura (solo se muestra lo de afuera)', lectura)}</select></label>
+      ${lectura ? `<div class="integ-paso">${archivosBacklog().length ? 'Solo lectura:' : 'Este proyecto no tiene backlog:'} solo se mostrará lo de ${esc((TIPOS_INTEG.find(([v]) => v === c.tipo) || [, c.tipo])[1])}. No se crea, cambia ni borra nada afuera, y no se toca ningún backlog.</div>` : selectFi('fi-backlog', 'Archivo', 'backlog', c.backlog, archivosBacklog())}`) : ''}
     ${destino ? paso(5, 'Columnas', pasoColumnas(c)) : ''}
-    ${destino ? paso(6, 'Nombre y modo', `${textoFi('fi-id', 'Id', 'id', c.id ?? idPropuesto(c.tipo), 'minúsculas, números y guiones; es el prefijo de las marcas <code>&lt;!-- id:… --&gt;</code> del backlog')}
+    ${destino ? paso(6, 'Nombre', `${textoFi('fi-id', 'Id', 'id', c.id ?? idPropuesto(c.tipo), 'minúsculas, números y guiones; es el prefijo de las marcas <code>&lt;!-- id:… --&gt;</code> del backlog')}
       <div id="fi-aviso-id">${avisoRenombra(f)}</div>
-      <label class="campo-fi marca-fi"><input type="checkbox" data-fi="auto"${c.auto ? ' checked' : ''}> <span>Sincronizar solo lo seguro al regenerar (<code>auto</code>), sin vista previa</span></label>`) : ''}
+      ${lectura ? '' : `<label class="campo-fi marca-fi"><input type="checkbox" data-fi="auto"${c.auto ? ' checked' : ''}> <span>Sincronizar solo lo seguro al regenerar (<code>auto</code>), sin vista previa</span></label>`}`) : ''}
     ${pr ? `<div id="fi-prueba" tabindex="-1" class="integ-paso ${pr.ok ? '' : 'mal'}" role="status">${pr.ok ? `✓ Conectado${pr.titulo ? ` a «${esc(pr.titulo)}»` : ''} · ${pr.items} ítems · columnas: ${esc((pr.columnas || []).join(', ') || '—')} · ${pr.vinculadas} casillas vinculadas${(pr.avisos || []).map((a) => `<br><span class="suave">· ${esc(a)}</span>`).join('')}` : `✕ ${esc(pr.error)}`}</div>` : ''}
     <div class="pie">${destino ? '<button class="boton" type="button" data-fi-accion="probar">Probar</button><button class="boton primario" type="submit">Guardar</button>' : ''}<button class="boton" type="button" data-fi-accion="cerrar">Cancelar</button></div>
   </form>`;
@@ -1151,7 +1195,7 @@ function alCambiarFi(el) {
   const f = formInteg, c = f.cfg, k = el.dataset.fi, v = el.type === 'checkbox' ? el.checked : el.value.trim();
   f.prueba = null;
   if (k === 'tipo') {
-    formInteg = { ...f, cfg: { tipo: v, backlog: c.backlog, auto: false }, op: {}, error: '', cred: {}, cambiarCred: false, idTocado: false };
+    formInteg = { ...f, cfg: { tipo: v, backlog: c.backlog, auto: false, modo: c.modo }, op: {}, error: '', cred: {}, cambiarCred: false, idTocado: false };
     formInteg.cfg.id = v ? idPropuesto(v) : undefined; pintarF();
     if (v && credOk(v)) cargarOpciones('destinos');
     return;
@@ -1162,6 +1206,18 @@ function alCambiarFi(el) {
     else if (c.tipo === 'trello') c.tablero = v || undefined; else c.proyecto = v || undefined;
     if (antes !== JSON.stringify([c.propietario, c.numero, c.tablero, c.proyecto])) { delete c.columnas; delete c.campoEstado; delete c.campoSeccion; delete c.tipoItem; f.op.detalle = null; f.op.fallo = null; }
     pintarF(); cargarOpciones('detalle'); return;
+  }
+  if (k === 'modo') {
+    c.modo = v;
+    if (v === 'lectura') c.auto = false;
+    else { if (c.tipoItem === '*') delete c.tipoItem; c.backlog = c.backlog || archivosBacklog()[0] || ''; }
+    pintarF(); return;
+  }
+  if (k === 'tipoItem-todos' || k === 'tipoItem-op') {
+    const cont = el.closest('.tipos-fi');
+    if (k === 'tipoItem-todos' && el.checked) c.tipoItem = '*';
+    else { const m = [...cont.querySelectorAll('[data-fi=tipoItem-op]:checked')].map((x) => x.value); c.tipoItem = m.length ? (m.length === 1 ? m[0] : m) : undefined; }
+    delete c.columnas; pintarF(); return;
   }
   if (k.startsWith('col:')) { c.columnas = { ...(c.columnas || {}), [k.slice(4)]: v || undefined }; pintarF(); return; }
   if (k === 'campoEstado' || k === 'tipoItem') { c[k] = v || undefined; delete c.columnas; pintarF(); return; }
@@ -1742,6 +1798,7 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   const r = e.target;
   if (formInteg && r.dataset?.fi) { alCambiarFi(r); return; }
+  if (r.dataset?.integFiltro) { const id = r.dataset.integFiltro; filtroInteg.set(id, r.value); pintar(); document.querySelector(`[data-integ-filtro="${CSS.escape(id)}"][value="${r.value}"]`)?.focus(); return; }
   if ('soloFav' in (r.dataset || {})) { soloFav = r.checked; pintar(); $('[data-solo-fav]')?.focus(); return; }
   if (r.dataset?.grafPor) { bitGraf.por = r.dataset.grafPor; pintar(); $(`[data-graf-por=${r.dataset.grafPor}]`)?.focus(); return; }
   if (r.dataset?.bitFiltro) { bitFiltro[r.dataset.bitFiltro] = r.checked; pintar(); $(`[data-bit-filtro=${r.dataset.bitFiltro}]`)?.focus(); return; }
