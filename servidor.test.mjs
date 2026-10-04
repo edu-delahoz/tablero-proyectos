@@ -671,3 +671,26 @@ test('vista: Resumen con el avance de la integración y botón «Mis tareas» en
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
   for (const marca of ['function avanceIntegracion', 'id="ir-mias"', 'data-ir-mias', 'Cerrados por semana', 'function pintarBotonMias']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
 })
+
+test('/api/sesiones: sesiones recientes por proyecto, barato, sin tocar la huella; /api/datos trae sesiones y kanban', async () => {
+  const r = join(TR, '-prueba', 'hhhh9999-0000.jsonl')
+  writeFileSync(r, JSON.stringify({ type: 'custom-title', customTitle: 'En vivo' }) + '\n' + JSON.stringify({ type: 'user', gitBranch: 'kb', timestamp: new Date().toISOString(), message: { content: 'Sesión S1 de BACKLOG_PRUEBA.md' } }) + '\n')
+  await get('/api/datos') // calienta la caché de datos
+  const v = (await get('/api/version')).json.version
+  const t0 = Date.now()
+  const s = await get('/api/sesiones')
+  assert.ok(Date.now() - t0 < 300, 'no construye los datos')
+  assert.equal(s.estado, 200)
+  const mia = s.json.sesiones.prueba.find((x) => x.titulo === 'En vivo')
+  assert.equal(mia.activa, true)
+  assert.equal(mia.rama, 'kb')
+  assert.ok(Array.isArray(s.json.columnas.prueba), 'estado de cada tarjeta para repintar')
+  assert.equal(s.json.columnas.prueba.find((c) => c.texto === 'Uno')?.estado, 'en-curso')
+  writeFileSync(r, readFileSync(r, 'utf8') + JSON.stringify({ type: 'user', message: { content: 'más' } }) + '\n')
+  assert.equal((await get('/api/version')).json.version, v, 'la actividad de Claude no entra en la huella')
+  assert.equal((await get('/api/sesiones', { host: `evil.com:${puerto}` })).estado, 403)
+  const d = (await get('/api/datos')).json
+  assert.ok(d.sesiones?.prueba)
+  assert.ok(Array.isArray(d.proyectos[0].kanban))
+  assert.equal(d.proyectos[0].kanban.find((c) => c.texto === 'Uno').archivo, 'BACKLOG_PRUEBA.md')
+})

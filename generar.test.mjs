@@ -539,3 +539,99 @@ test('plantillaBacklog: trae «Para retomar» en Estado e «Historia:» en S1, s
   assert.ok(porClave(arbol, 'S1').historia)
   assert.equal(estasAqui(arbol, t.match(/## Estado\n([\s\S]*?)\n## /)[1]), porClave(arbol, 'S1').id)
 })
+
+// ---------- S33: sesiones activas y columnas del kanban ----------
+const { sesionesActivas, columnasKanban } = await import('./generar.mjs')
+const { writeFileSync: escribirS, appendFileSync: anexarS, mkdtempSync: tmpS, mkdirSync: mkdirS } = await import('node:fs')
+const { tmpdir: tmpdirS } = await import('node:os')
+
+test('sesionesActivas: por proyecto, solo .jsonl < 24 h de su carpeta y subcarpetas; título, rama, archivos, prompt y foco', () => {
+  const TR = join(AQUI, 'fixtures', 'transcripciones')
+  const ahora = Date.parse('2026-10-04T18:00:00Z')
+  const f = (d, s) => join(TR, d, `${s}-0000-0000-0000-000000000000.jsonl`)
+  const poner = (r, ms) => utimesSync(r, new Date(ms), new Date(ms))
+  poner(f('-Users-x-kanban', 'eeee5555'), ahora - 60e3) // activa (hace 1 min)
+  poner(f('-Users-x-kanban', 'ffff6666'), ahora - 3 * 86400e3) // vieja: fuera
+  poner(f('-Users-x-kanban-web', 'abab7777'), ahora - 3600e3) // reciente, no activa
+  poner(f('-Users-x-kanbanOtro', 'cdcd8888'), ahora - 30e3) // de otro proyecto
+  const r = sesionesActivas([{ id: 'k', transcripciones: '-Users-x-kanban' }, { id: 'nada' }], TR, { ahora })
+  assert.deepEqual(Object.keys(r).sort(), ['k', 'nada'])
+  assert.deepEqual(r.nada, [])
+  assert.deepEqual(r.k.map((s) => s.sid), ['eeee5555-0000-0000-0000-000000000000', 'abab7777-0000-0000-0000-000000000000'], 'más reciente primero; sin la vieja ni la de «kanbanOtro»')
+  const [s, w] = r.k
+  assert.equal(s.titulo, 'Kanban en vivo')
+  assert.equal(s.rama, 'kanban-s2', 'la rama más reciente')
+  assert.equal(s.inicio, '2026-10-04T17:00:00.000Z')
+  assert.equal(s.ultimo, new Date(ahora - 60e3).toISOString())
+  assert.equal(s.activa, true)
+  assert.deepEqual(s.archivos, ['/Users/x/kanban/BACKLOG.md', '/Users/x/kanban/a.mjs', '/Users/x/kanban/b.mjs'], 'Edit/Write, más reciente primero, sin repetir; Read no')
+  assert.equal(s.ultimoPrompt, 'ahora ajusta el test', 'ni tool_result ni isMeta')
+  assert.deepEqual(s.foco, { claves: ['S2'], backlogs: ['BACKLOG.md'] })
+  assert.equal(w.activa, false)
+  assert.equal(w.titulo, null)
+  assert.equal(w.rama, 'web')
+})
+
+test('sesionesActivas: cola de 64 KB + cabeza en archivos grandes, prompt ≤ 200, y caché que se invalida por mtime', () => {
+  const TR = tmpS(join(tmpdirS(), 'tablero-ses-'))
+  mkdirS(join(TR, '-r'))
+  const r = join(TR, '-r', 'gggg.jsonl')
+  const ln = (o) => JSON.stringify(o) + '\n'
+  const relleno = ln({ type: 'assistant', timestamp: '2026-10-04T10:00:00.000Z', message: { content: [{ type: 'text', text: 'x'.repeat(2000) }] } })
+  escribirS(r, ln({ type: 'custom-title', customTitle: 'Grande' }) + ln({ type: 'user', timestamp: '2026-10-04T09:00:00.000Z', message: { content: 'Sesión S9 de BACKLOG_X.md' } })
+    + ln({ type: 'assistant', timestamp: '2026-10-04T09:01:00.000Z', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/r/viejo.mjs' } }] } })
+    + relleno.repeat(80) + ln({ type: 'user', gitBranch: 'g', timestamp: '2026-10-04T11:00:00.000Z', message: { content: 'y'.repeat(500) } }))
+  const ahora = Date.now()
+  const a = sesionesActivas([{ id: 'r', transcripciones: '-r' }], TR, { ahora }).r[0]
+  assert.equal(a.titulo, 'Grande')
+  assert.equal(a.inicio, '2026-10-04T09:00:00.000Z')
+  assert.deepEqual(a.archivos, [], 'el Edit viejo quedó fuera de la cola')
+  assert.equal(a.ultimoPrompt.length, 200)
+  assert.deepEqual(a.foco.claves, ['S9'])
+  assert.deepEqual(a.foco.backlogs, ['BACKLOG_X.md'])
+  anexarS(r, ln({ type: 'assistant', timestamp: '2026-10-04T11:01:00.000Z', message: { content: [{ type: 'tool_use', name: 'Write', input: { file_path: '/r/nuevo.mjs' } }] } }))
+  utimesSync(r, new Date(ahora + 5000), new Date(ahora + 5000))
+  assert.deepEqual(sesionesActivas([{ id: 'r', transcripciones: '-r' }], TR, { ahora }).r[0].archivos, ['/r/nuevo.mjs'])
+})
+
+const KANBAN = [
+  '# B', '', '## Estado', '- Siguiente: **S2**', '',
+  '## H1 — Base · rama `base`', '### S1 — Inicio', '- [x] Hecha con PR abierto', '',
+  '## H2 — Registro', 'Rama `registro-h2`.', '',
+  '### S2 — Formulario', '- [ ] Campos', '  - [x] nombre', '- [~] Validación a mano', '- [ ] Enviar', '- [-] Movida a S3', '',
+  '### S3 — Correo', '- [ ] Mandar correo', '- [x] Plantilla de correo', '',
+].join('\n')
+
+test('estructura: «[~]» cuenta como pendiente con marca; «[-]» (movida) no cuenta', () => {
+  const s2 = porClave(estructura(KANBAN), 'S2')
+  assert.equal(s2.tareas.length, 4)
+  assert.equal(s2.tareas[1].marca, '~')
+  assert.equal(s2.tareas[1].hecha, false)
+  assert.equal(s2.tareas[3].marca, '-')
+  assert.deepEqual([s2.hechas, s2.total], [1, 4])
+})
+
+test('columnasKanban: por hacer, en curso (sesión activa o [~]), en prueba (PR abierto o rama sin fusionar), hecho y movida', () => {
+  const est = estructura(KANBAN)
+  const b = { archivo: 'BACKLOG.md', ruta: '/r/BACKLOG.md', contenido: KANBAN, estructura: est }
+  const git = { prs: [{ headRefName: 'base', state: 'OPEN' }], sinFusionar: [] }
+  const por = (cols) => Object.fromEntries(cols.map((c) => [c.texto, c.estado]))
+  const sin = columnasKanban(b, { git }, [])
+  assert.deepEqual(por(sin), { 'Hecha con PR abierto': 'en-prueba', Campos: 'por-hacer', 'Validación a mano': 'en-curso', Enviar: 'por-hacer', 'Movida a S3': 'movida', 'Mandar correo': 'por-hacer', 'Plantilla de correo': 'hecho' })
+  const campos = sin.find((c) => c.texto === 'Campos')
+  assert.deepEqual({ archivo: campos.archivo, clave: campos.clave, hito: campos.hito, linea: campos.linea, hecha: campos.hecha, sub: campos.sub },
+    { archivo: 'BACKLOG.md', clave: 'S2', hito: 'H2', linea: 13, hecha: false, sub: { hechas: 1, total: 1 } })
+  assert.equal(campos.seccion, porClave(est, 'S2').id)
+  // Rama del hito (descripción «Rama `x`») sin fusionar → en prueba.
+  assert.equal(por(columnasKanban(b, { git: { ...git, sinFusionar: ['registro-h2'] } }, []))['Plantilla de correo'], 'en-prueba')
+  // Sesión activa que nombra S2 y el backlog → sus casillas abiertas en curso; inactiva o de otro backlog → no.
+  const ses = { activa: true, archivos: [], foco: { claves: ['S2'], backlogs: ['BACKLOG.md'] } }
+  const con = por(columnasKanban(b, { git }, [ses]))
+  assert.equal(con.Campos, 'en-curso'); assert.equal(con.Enviar, 'en-curso'); assert.equal(con['Mandar correo'], 'por-hacer')
+  assert.equal(por(columnasKanban(b, { git }, [{ ...ses, activa: false }])).Campos, 'por-hacer')
+  assert.equal(por(columnasKanban(b, { git }, [{ ...ses, foco: { claves: ['S2'], backlogs: ['OTRO.md'] } }])).Campos, 'por-hacer')
+  // Sin clave en el prompt: si toca el backlog, manda el frente activo.
+  const frente = { ...b, activo: { seccion: porClave(est, 'S3').id, tarea: null } }
+  const f = por(columnasKanban(frente, { git }, [{ activa: true, archivos: ['/r/BACKLOG.md'], foco: { claves: [], backlogs: [] } }]))
+  assert.equal(f['Mandar correo'], 'en-curso'); assert.equal(f.Campos, 'por-hacer')
+})
