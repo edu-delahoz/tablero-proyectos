@@ -184,3 +184,52 @@ for (const f of ['BACKLOG_MVP.md', 'BACKLOG_H4.md']) {
     assert.ok(estasAqui(estructura(t), estadoDe(t)))
   })
 }
+
+// ---------- Prompts de «Cómo ejecutarlo» ----------
+const PLAN_CLAUDE = fixture('PLAN_CLAUDE.md')
+const seccion = (arbol, re) => aplanar(arbol).find((s) => re.test(s.titulo))
+
+test('prompts: citas «Prompt T1:»/«Prompt T2:» con párrafos y modelo de la tabla de sesiones', () => {
+  const ps = seccion(estructura(PLAN_CLAUDE), /^Cómo ejecutarlo/).prompts
+  assert.deepEqual(ps.slice(0, 2).map((p) => [p.etiqueta, p.clave, p.modelo]), [['Prompt T1', 'T1', 'Sonnet'], ['Prompt T2', 'T2', 'Opus']])
+  assert.equal(ps[0].texto, 'Ejecuta la Parte A del plan `~/plan.md`. Primero los tests, luego el código.\n\nMuéstrame la lista de archivos antes de publicar.')
+  assert.equal(ps[1].texto, 'Ejecuta la Parte B del plan. Aplica el checklist de robustez.')
+})
+
+test('prompts: «Prompt de arranque:» + cerca se toma literal, sin contar casillas ni encabezados', () => {
+  const a = estructura(PLAN_CLAUDE)
+  const alt = seccion(a, /^Arranque alternativo/)
+  assert.equal(alt.prompts.length, 2)
+  assert.equal(alt.prompts[0].etiqueta, 'Prompt de arranque')
+  assert.equal(alt.prompts[0].clave, null)
+  assert.equal(alt.prompts[0].modelo, undefined)
+  assert.match(alt.prompts[0].texto, /^Lee el plan[\s\S]*- \[ \] esta casilla es falsa\n## este encabezado es falso$/)
+  assert.equal(alt.total, 0)
+  assert.equal(aplanar(a).some((s) => /falso/.test(s.titulo)), false)
+})
+
+test('prompts: cerca sin rótulo dentro de «Cómo ejecutarlo» cuenta (subsección hereda) y conserva texto largo', () => {
+  const alt = seccion(estructura(PLAN_CLAUDE), /^Arranque alternativo/)
+  assert.equal(alt.prompts[1].etiqueta, 'Prompt')
+  assert.match(alt.prompts[1].texto, /^Texto_largo_sin_espacios.*0123456789$/)
+})
+
+test('prompts: una cita sin rótulo fuera de «Cómo ejecutarlo» se ignora; con rótulo «Prompt» cuenta', () => {
+  const a = estructura(PLAN_CLAUDE)
+  assert.deepEqual(seccion(a, /^Contexto/).prompts, [])
+  const fin = seccion(a, /^Notas finales/).prompts
+  assert.equal(fin.length, 1)
+  assert.match(fin[0].texto, /^Un prompt con rótulo cuenta/)
+})
+
+test('prompts: el rótulo no se arrastra a una cita posterior y las citas de backlogs reales no generan prompts', () => {
+  const a = estructura('## Cómo ejecutarlo\nPrompt T1:\n> uno\n\n> dos\n')
+  assert.deepEqual(a[0].prompts.map((p) => [p.etiqueta, p.texto]), [['Prompt T1', 'uno'], ['Prompt', 'dos']])
+  assert.deepEqual(aplanar(estructura(MVP)).flatMap((s) => s.prompts), [])
+  assert.deepEqual(estructura('## A\n> solo una cita\n')[0].prompts, [])
+})
+
+test('prompts: la celda de sesión puede llevar texto extra («T2 (corta, tras elegir)»)', () => {
+  const a = estructura('## Cómo ejecutarlo\n| Sesión | Modelo | Qué |\n|---|---|---|\n| T2 (corta, tras elegir) | **Sonnet** | x |\n\nPrompt T2:\n> hola\n')
+  assert.equal(a[0].prompts[0].modelo, 'Sonnet')
+})
