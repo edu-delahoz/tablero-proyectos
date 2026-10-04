@@ -138,6 +138,19 @@ comparan en todos los proyectos. Sin servidor las estrellas se ven pero no se pu
 final de `proyectos.json` (el resto queda igual). `id` en `[a-z0-9-]` y único; `repo` y `docs` (texto o
 lista) deben ser carpetas que existan, absolutas o con `~`. `mtime` es `datos.configMtime`: si el archivo
 cambió responde 409. Con `previa: true` devuelve la entrada sin escribir. Solo desde esta máquina.
+Con `repo`, rellena `transcripciones` (la carpeta de `~/.claude/projects`: la ruta con todo lo no
+alfanumérico cambiado por `-`).
+
+**Editar proyecto.** `POST /api/proyectos/editar` `{ id, cambios, mtime, previa? }` cambia en su sitio solo
+`nombre`, `repo`, `docs`, `notas`, `transcripciones` y `bitacora`; las integraciones, `planes`,
+`patronBacklogs` y cualquier otro campo quedan intactos, igual que el orden y las rutas con `~`. Un valor
+vacío quita el campo (salvo `nombre`). `repo`/`docs` deben ser carpetas que existan; `notas`/`bitacora`, un
+archivo que exista o uno nuevo en una carpeta que exista. Si queda `repo` sin `transcripciones`, se rellena.
+Id inexistente → 404, no valida → 400, `mtime` viejo → 409; `previa: true` devuelve el bloque resultante.
+
+**Guía de configuración.** Cada proyecto de `/api/datos` trae `configuracion: [{ paso, hecho, detalle }]`
+(repo, git, github, docs, backlog, sesiones de Claude, notas, integraciones; sin llamadas de red nuevas) y
+`editable` (los campos editables tal como están en `proyectos.json`, para precargar el formulario).
 
 **Crear backlog.** `POST /api/backlog/crear` `{ proyecto, archivo?, carpeta? }` crea `archivo`
 (por defecto `BACKLOG.md`) con una plantilla mínima (título, `## Estado`, `## S1` con una casilla) en la

@@ -123,6 +123,28 @@ export function anadirProyecto(jsonCrudo, proyecto) {
   return serializar(jsonCrudo, lista)
 }
 
+// Campos de un proyecto que la vista puede editar; id, integraciones, planes, patronBacklogs y cualquier otro no se tocan.
+export const CAMPOS_PROYECTO = ['nombre', 'repo', 'docs', 'notas', 'transcripciones', 'bitacora']
+
+// Nuevo texto de proyectos.json con los campos del proyecto `id` cambiados en su sitio (orden, «~» y campos ajenos intactos).
+// Valor vacío ('' / null / []) = quitar el campo, salvo «nombre». Los valores llegan ya validados (generar.mjs).
+export function editarProyecto(jsonCrudo, id, cambios) {
+  let lista
+  try { lista = JSON.parse(jsonCrudo) } catch { throw new ErrorConfig('proyectos.json no es JSON válido: corrígelo a mano antes de editar desde la vista.', 409) }
+  if (!Array.isArray(lista)) throw new ErrorConfig('proyectos.json debe ser una lista de proyectos.', 409)
+  const p = lista.find((x) => x && x.id === id)
+  if (!p) throw new ErrorConfig(`No hay un proyecto «${id}» en proyectos.json.`, 404)
+  if (!cambios || typeof cambios !== 'object' || Array.isArray(cambios)) throw new ErrorConfig('Faltan los cambios del proyecto.')
+  for (const [k, v] of Object.entries(cambios)) {
+    if (!CAMPOS_PROYECTO.includes(k)) throw new ErrorConfig(`«${k}» no se edita desde la vista (solo ${CAMPOS_PROYECTO.join(', ')}).`)
+    const vacio = v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length)
+    if (!vacio) p[k] = v
+    else if (k === 'nombre') throw new ErrorConfig('El proyecto necesita un nombre.')
+    else delete p[k]
+  }
+  return serializar(jsonCrudo, lista)
+}
+
 // Escritura atómica: temporal en la misma carpeta + rename (nadie lee nunca un archivo a medias).
 // Sin modo, conserva los permisos del archivo que reemplaza.
 export function escribirAtomico(ruta, contenido, modo) {

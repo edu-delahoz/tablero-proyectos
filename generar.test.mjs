@@ -392,3 +392,35 @@ test('frenteActivo: plan por sub-sesión (mención en la siguiente, en la hecha,
   const enS3c = enS3b.replace('      - Resultado S3c:', '      - Plan: `~/.claude/plans/s3c-plan.md`')
   assert.deepEqual([frenteActivo(backlogFrente(enS3c), ultima, conS3c)].map((a) => [a.plan, a.planDe])[0], ['s3c-plan.md', null])
 })
+
+test('transcripcionesDe: carpeta de ~/.claude/projects como la nombra Claude Code', async () => {
+  const { transcripcionesDe } = await import('./generar.mjs')
+  assert.equal(transcripcionesDe('/Users/edudelahoz/Desktop/Desarrollo/Instituto de estudios politicos'), '-Users-edudelahoz-Desktop-Desarrollo-Instituto-de-estudios-politicos')
+  assert.equal(transcripcionesDe('/Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero'), '-Users-edudelahoz-Desktop-Desarrollo-metodologia-claude-tablero')
+  assert.equal(transcripcionesDe('/Users/edudelahoz/Desktop/Desarrollo/metodologia-claude-code'), '-Users-edudelahoz-Desktop-Desarrollo-metodologia-claude-code')
+  assert.equal(transcripcionesDe('/r/app/.claude/worktrees/h1'), '-r-app--claude-worktrees-h1')
+  assert.equal(transcripcionesDe('~/x y'), `${homedir()}/x y`.replace(/[^A-Za-z0-9]/g, '-'))
+})
+
+test('estadoConfiguracion: proyecto vacío → todo pendiente; el tablero → repo, git, docs, backlog, sesiones, notas', async () => {
+  const { estadoConfiguracion } = await import('./generar.mjs')
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const vacio = estadoConfiguracion({ id: 'x', nombre: 'X' }, { transcripciones: join(tmpdir(), 'no-existe-tablero') })
+  assert.deepEqual(vacio.map((x) => x.paso), ['repo', 'git', 'github', 'docs', 'backlog', 'sesiones', 'notas', 'integraciones'])
+  assert.ok(vacio.every((x) => x.hecho === false && x.detalle))
+  const tr = mkdtempSync(join(tmpdir(), 'tablero-tr-'))
+  mkdirSync(join(tr, '-aqui-wt'), { recursive: true })
+  writeFileSync(join(tr, '-aqui-wt', 's.jsonl'), '')
+  mkdirSync(join(tr, '-aquiotro'))
+  writeFileSync(join(tr, '-aquiotro', 's.jsonl'), '')
+  const est = Object.fromEntries(estadoConfiguracion(
+    { id: 'tablero', repo: AQUI, docs: [AQUI], notas: join(AQUI, 'N.md'), transcripciones: '-aqui' },
+    { backlogs: [{ archivo: 'BACKLOG.md' }, { archivo: 'PLAN.md', esPlan: true }], transcripciones: tr },
+  ).map((x) => [x.paso, x]))
+  for (const paso of ['repo', 'git', 'docs', 'backlog', 'sesiones', 'notas']) assert.equal(est[paso].hecho, true, paso)
+  assert.equal(est.sesiones.detalle, '1 sesión(es) de Claude', 'no cuenta «-aquiotro»')
+  assert.equal(est.backlog.detalle, 'BACKLOG.md')
+  assert.equal(est.github.hecho, false)
+  assert.equal(est.integraciones.hecho, false)
+})

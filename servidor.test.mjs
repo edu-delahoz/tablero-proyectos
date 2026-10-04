@@ -504,7 +504,7 @@ test('crear proyecto: previa sin escribir, id inválido o duplicado y rutas inex
   assert.equal(r.estado, 200, r.json.error)
   const conf = JSON.parse(readFileSync(CONF, 'utf8'))
   assert.deepEqual(conf.slice(0, -1), JSON.parse(antes), 'los proyectos de antes quedan igual')
-  assert.deepEqual(conf.at(-1), { id: 'nuevo', nombre: 'Nuevo', repo: dir, docs: [docsNuevo] })
+  assert.deepEqual(conf.at(-1), { id: 'nuevo', nombre: 'Nuevo', repo: dir, transcripciones: dir.replace(/[^A-Za-z0-9]/g, '-'), docs: [docsNuevo] })
   assert.ok(r.json.datos.proyectos.some((p) => p.id === 'nuevo'))
   assert.equal((await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Otra vez', mtime: await mtime() })).estado, 400)
 })
@@ -540,4 +540,46 @@ test('crear backlog: sin docs, nombre con ruta o fuera del patrón → 400; exis
   const otro = await post('/api/backlog/crear', { proyecto: 'nuevo', archivo: 'BACKLOG_NUEVO.md' })
   assert.equal(otro.estado, 200, otro.json.error)
   assert.ok(existsSync(join(docsNuevo, 'BACKLOG_NUEVO.md')))
+})
+
+test('editar proyecto: 404, 400, 409 y previa no escriben; editar deja integraciones y demás proyectos intactos', async () => {
+  const antes = readFileSync(CONF, 'utf8')
+  const eap = () => JSON.parse(readFileSync(CONF, 'utf8')).find((p) => p.id === 'eap10')
+  const integ = eap().integraciones
+  const docsEap = join(dir, 'docs-eap10')
+  mkdirSync(docsEap)
+  assert.equal((await post('/api/proyectos/editar', { id: 'nada', cambios: { nombre: 'x' }, mtime: await mtime() })).estado, 404)
+  for (const [cambios, re] of [
+    [{ repo: join(dir, 'no-existe') }, /no es una carpeta/],
+    [{ docs: ['relativa'] }, /absoluta/],
+    [{ notas: join(dir, 'no-existe', 'N.md') }, /carpeta que exista/],
+    [{ nombre: '  ' }, /nombre/],
+    [{ integraciones: [] }, /no se edita/],
+    [{ transcripciones: '../x' }, /transcripciones/],
+  ]) {
+    const r = await post('/api/proyectos/editar', { id: 'eap10', cambios, mtime: await mtime() })
+    assert.equal(r.estado, 400, JSON.stringify(cambios))
+    assert.match(r.json.error, re)
+  }
+  const cambios = { repo: dir, docs: [docsEap], notas: join(docsEap, 'NOTAS.md') }
+  const pv = await post('/api/proyectos/editar', { id: 'eap10', cambios, previa: true })
+  assert.equal(pv.estado, 200, pv.json.error)
+  assert.deepEqual(pv.json.proyecto, { ...eap(), ...cambios, transcripciones: dir.replace(/[^A-Za-z0-9]/g, '-') })
+  assert.equal((await post('/api/proyectos/editar', { id: 'eap10', cambios, mtime: (await mtime()) - 1000 })).estado, 409)
+  assert.equal((await post('/api/proyectos/editar', { id: 'eap10', cambios })).estado, 400, 'sin mtime no escribe')
+  assert.equal(readFileSync(CONF, 'utf8'), antes)
+  const r = await post('/api/proyectos/editar', { id: 'eap10', cambios, mtime: await mtime() })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.deepEqual(eap().integraciones, integ, 'las integraciones quedan intactas')
+  assert.deepEqual(eap(), pv.json.proyecto)
+  const otros = (t) => JSON.parse(t).filter((p) => p.id !== 'eap10')
+  assert.deepEqual(otros(readFileSync(CONF, 'utf8')), otros(antes))
+  const p = r.json.datos.proyectos.find((x) => x.id === 'eap10')
+  assert.equal(p.editable.repo, dir)
+  assert.deepEqual(Object.fromEntries(p.configuracion.map((x) => [x.paso, x.hecho])).docs, true)
+  // Quitar un campo: '' lo borra; «nombre» no se puede quitar.
+  const q = await post('/api/proyectos/editar', { id: 'eap10', cambios: { notas: '' }, mtime: await mtime() })
+  assert.equal(q.estado, 200, q.json.error)
+  assert.ok(!('notas' in eap()))
+  assert.deepEqual(eap().integraciones, integ)
 })

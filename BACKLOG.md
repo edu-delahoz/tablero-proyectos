@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `integraciones-vista` · S28 hecha, tests en verde (134 pasan, 0 fallan): `editarProyecto` en `integraciones/config.mjs` (solo `CAMPOS_PROYECTO`, en su sitio; integraciones, `planes`, `~`, orden y campos ajenos intactos; `''` quita salvo `nombre`), `POST /api/proyectos/editar` `{id, cambios, mtime, previa?}` (404/400/409, previa devuelve `proyecto` = bloque resultante), `validarCarpeta`/`validarArchivo`/`cambiosProyecto`/`transcripcionesDe` en `generar.mjs` (crear rellena `transcripciones` con `repo`; editar solo si falta), `p.configuracion` (`estadoConfiguracion`: repo, git, github, docs, backlog, sesiones, notas, integraciones) y `p.editable` (campos crudos con `~` para precargar). README documentado. Para S29: el formulario de editar manda solo los campos cambiados (`''` = quitar) y precarga desde `p.editable`; los `paso` de `p.configuracion` son esos 8 nombres. Trampa: el test de crear proyecto ahora espera `transcripciones`. Siguiente: **S29** (Sonnet). Los cambios sin commit de `coherencia*.mjs` no son de H10.
+- 2026-10-04 · rama `integraciones-vista` · H10 planeado (plan `~/.claude/plans/no-se-si-hay-streamed-lighthouse.md`), sin código: el usuario confirmó un solo equipo en EAP10 (S24b, sin `areaPath`) y pidió crear backlog en EAP10 (hoy imposible: sin `docs` y sin «Editar proyecto»), vista «Mis tareas», importar Azure a `.md` (S25) y guía de configuración de proyectos nuevos. Siguiente: **S28** (Opus), luego S29, S30 y S25 (Sonnet). Los cambios sin commit de `coherencia*.mjs` no son de H10.
 - 2026-10-04 · rama `integraciones-vista` · S27 hecha, tests en verde (130 pasan, 2 omitidos): `plantilla.html` con botón «＋ Nuevo proyecto» en la cabecera (solo con servidor) y panel `#panel-crear` (`crear`, `abrirCrear`, `enviarCrear`): formulario → vista previa (`previa: true`) → crear con `mtime: DATOS.configMtime`; tras crear abre el proyecto en Backlogs. «Crear backlog» en la pestaña Backlogs vacía y en el paso «Modo y backlog» (sin backlogs, modo sincronizar); al crear deja `cfg.backlog` puesto y el formulario de integración abierto. Verificado en Chrome headless por CDP con servidor y datos de prueba (id duplicado, previa sin escribir, crear proyecto → backlog → preselección). Trampa: en CDP, navegar solo con otro `#hash` no recarga la página (mtime viejo → 409); usar `?r=<ts>`. No se probó el flujo completo hasta guardar integración sincronizar (requiere credencial/red). Siguiente: **S24b** (Sonnet): tests/PR y opcional S25. Los cambios sin commit de `coherencia*.mjs` no son de H9.
 - 2026-10-04 · rama `integraciones-vista` · S26 hecha, tests en verde (129 pasan, 2 omitidos): `POST /api/proyectos/crear` `{id, nombre, repo?, docs?, mtime, previa?}` (`proyectoNuevo` en `generar.mjs` valida id `[a-z0-9-]` único y carpetas existentes absolutas o con `~`, se guardan tal como se escribieron; `anadirProyecto` en `integraciones/config.mjs` añade al final sin tocar el resto; 409 si cambió el `mtime`, 400 sin `mtime`) y `POST /api/backlog/crear` `{proyecto, archivo?, carpeta?, previa?}` (`rutaBacklogNuevo` + `plantillaBacklog`: por defecto `BACKLOG.md` en la primera `docs`, `carpeta` debe ser una de las `docs`, nombre simple que cumpla `patronBacklogs`, escritura con `flag: 'wx'` → nunca sobrescribe, 409). Ambos solo desde 127.0.0.1; la respuesta trae `datos` frescos para repintar. README documentado. Para S27: la vista manda `mtime: datos.configMtime` al crear proyecto y usa `previa: true` para la vista previa; tras crear backlog, `r.archivo` es el que hay que preseleccionar. Siguiente: **S27** (Sonnet). Los cambios sin commit de `coherencia*.mjs` no son de H9.
 - 2026-10-04 · rama `integraciones-vista` · S24 a medias: EAP10 añadido a `proyectos.json` (ignorado por git; el PAT ya estaba) y `--probar-conexiones` OK con la org real (204 ítems, 13 columnas, solo lectura). El usuario probó en navegador pero no dio resultados → resto pasa a **S24b**. Después el usuario confirmó que todo funciona y pidió crear proyectos y backlogs desde la vista → **S26** (Opus, servidor) y **S27** (Sonnet, vista); S24b queda solo con tests/PR y el opcional. Sin cambios de código; tests no corridos. Los cambios sin commit de `coherencia*.mjs` no son de H9.
@@ -152,7 +154,7 @@ Prompt de arranque S24 (Sonnet, sin plugins/MCP):
 ### S24b — Resultados de la prueba real y cierre · **Sonnet**, con el usuario
 El usuario revisó EAP10 en el navegador al final de S24 pero no dictó los resultados (el relevo se pidió sin ellos); hay que pedírselos.
 - [x] (el usuario confirmó «todo eso funciona»; sin detalle de equipos/`areaPath`) Preguntar al usuario y anotar aquí: ¿«Buscar proyectos» lista EAP10? ¿«Mías» coincide con Azure (`@Me`)? ¿EAP10 tiene más de un equipo (→ `areaPath`)? ¿org falsa y servidor detenido dieron los mensajes esperados? ¿causa real de «cargando»?
-- [ ] Si hay más de un equipo: añadir sesión nueva con campo opcional `areaPath`
+- [x] (el usuario confirmó que todos están en el mismo equipo: no hace falta `areaPath`) Si hay más de un equipo: añadir sesión nueva con campo opcional `areaPath`
 - [ ] Opcional: `generar.mjs` ~l.773, el reinicio por código nuevo espera a que no haya peticiones en vuelo; prueba en `generar.test.mjs`
 - [ ] `git status` (ningún `.md` cambió salvo BACKLOG), `node --test 2>&1 | tail -40`, actualizar PR #9
 
@@ -179,9 +181,48 @@ Prompt de arranque S26 (Opus, sin plugins/MCP):
 Prompt de arranque S27 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S27) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 
-### S25 — (opcional) Importar el backlog de EAP10 a un `.md` propio · **Sonnet**
-Solo si lo pides: hoy EAP10 no tiene dónde sincronizarse.
+## H10 — Mis tareas, editar proyecto y guía de configuración
+
+Plan: `~/.claude/plans/no-se-si-hay-streamed-lighthouse.md`. Rama `integraciones-vista`. Pedido del usuario (2026-10-04) tras confirmar que EAP10 funciona: (1) ¿dónde creo un backlog en EAP10? Hoy no se puede: «＋ Crear backlog» (`rutaBacklogNuevo`) exige `docs`, EAP10 se creó sin `docs`/`repo` (aún no tiene carpeta en el Mac) y no hay forma de **editar** un proyecto desde la vista; (2) ver **mis tareas** para hacerlas: vista «Mis tareas» **y** importar lo de Azure a un `.md` (S25); (3) guía de configuración para un proyecto nuevo (carpeta/repo, GitHub, sesiones de Claude, backlog, integraciones; nota abierta «crear un nuevo proyecto, forma fácil de vincularlo con todo»). Mientras tanto, a mano: crear la carpeta de EAP10, poner `repo` y `docs` en su bloque de `proyectos.json`, recargar → Backlogs → «＋ Crear backlog». Orden: S28 → S29 → S30 → S25 (S30 puede ir antes que S29; S25 después de S28).
+
+### S28 — Editar proyecto y estado de configuración (servidor) · **Opus** (escribe `proyectos.json`)
+Archivos: `generar.mjs`, `integraciones/config.mjs`, `config.test.mjs`, `servidor.test.mjs`, `generar.test.mjs`, `README.md`.
+- [x] (`CAMPOS_PROYECTO` exportado; `{}` devuelve el texto igual) `integraciones/config.mjs`: `editarProyecto(jsonCrudo, id, cambios)` sobre el JSON crudo (como `aplicarCambio`/`anadirProyecto`): solo `nombre, repo, docs, notas, transcripciones, bitacora`; conserva `~`, orden, integraciones y campos ajenos; campo vacío = quitarlo (salvo `nombre`). Prueba en `config.test.mjs`
+- [x] (`validarCarpeta` exportada, `validarArchivo` y `cambiosProyecto(cambios, actual)` en `generar.mjs`) `generar.mjs`: extraer `validarCarpeta` de `proyectoNuevo` y reutilizarla; `notas`/`bitacora` = archivo existente o carpeta padre existente
+- [x] (también 400 por campo no editable o `transcripciones` con `/`; quitar con `''`) `POST /api/proyectos/editar` `{id, cambios, mtime, previa?}`: solo local, `exigirMtime`, `escribirAtomico`, devuelve `datos` frescos; `previa` muestra el bloque resultante sin escribir. Pruebas en `servidor.test.mjs`: id inexistente → 404, carpeta inexistente → 400, `mtime` viejo → 409, previa no escribe, integraciones intactas tras editar
+- [x] (`proyectoNuevo` la añade con `repo`; editar solo si falta y no se pidió quitarla; los valores reales existentes no se tocan: IEP usa la carpeta padre del repo a propósito) `transcripcionesDe(repo)`: nombre de carpeta de `~/.claude/projects` derivado de la ruta expandida (no alfanumérico → `-`); crear/editar lo rellena si falta. Prueba con los 3 proyectos reales como casos (p. ej. `-Users-edudelahoz-Desktop-Desarrollo-Instituto-de-estudios-politicos`)
+- [x] (exportada; sesiones = `.jsonl` en la carpeta exacta o `<carpeta>-…`; github = `p.git.url`) `estadoConfiguracion(p)` en `recolectar` → `p.configuracion = [{ paso, hecho, detalle }]`: carpeta del repo, es git, remoto GitHub + `gh` autenticado (reusar `p.git`), `docs`, backlog, sesiones de Claude (≥1 `.jsonl` en transcripciones), notas, integraciones. Sin red nueva. Prueba en `generar.test.mjs` (proyecto vacío → todo `false`; tablero → casi todo `true`)
+- [x] (134 pasan, 0 fallan) README («Editar proyecto» y guía), `node --test 2>&1 | tail -40`, commit
+- [x] (añadido en S28) `datos.proyectos[].editable`: los campos editables tal cual están en `proyectos.json` (con `~`) para que S29 precargue el formulario sin rutas expandidas
+
+Prompt de arranque S28 (Opus, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S28) y trabaja solo esa sesión en la rama `integraciones-vista`. Prioridad: editar un proyecto nunca debe perder sus integraciones ni campos ajenos de `proyectos.json`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S29 — Vista: editar proyecto y guía de configuración · **Sonnet**
+Archivos: `plantilla.html`, `servidor.test.mjs`. Depende de S28.
+- [ ] `plantilla.html`: botón «Editar proyecto» (Resumen, solo con servidor) que reutiliza `#panel-crear` (`abrirCrear`/`pintarCrear`/`enviarCrear`) con `tipo: 'editar'`, campos precargados, vista previa → guardar con `mtime: DATOS.configMtime`
+- [ ] `plantilla.html`: tarjeta «Configurar este proyecto» al inicio del Resumen si algún paso de `p.configuracion` está en `false`, y «⚙ N de M pasos» en la tarjeta de «Todos los proyectos». Acción por paso: carpeta/docs → «Editar proyecto»; backlog → `data-crear="backlog"`; integraciones → pestaña Integraciones con «+ Añadir»; GitHub → comandos copiables (`gh auth login`, `gh repo create` / `gh repo clone`); sesiones de Claude → `cd "<repo>" && claude` copiable. «Ocultar guía» por proyecto (localStorage en try/catch)
+- [ ] Verificar en Chrome headless por CDP con datos de prueba: proyecto vacío → guía completa → editar (poner docs) → crear backlog → la guía marca los pasos
+- [ ] Test de plantilla en `servidor.test.mjs`; `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S29 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S29) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S30 — Vista «Mis tareas» · **Sonnet**
+Archivos: `plantilla.html`, `generar.mjs` (solo si a los ítems les falta `url`/estado), `servidor.test.mjs`.
+- [ ] `plantilla.html`: «Mis tareas» en el selector de proyectos junto a «Todos los proyectos» (`#p=mias`, mismo patrón que el flag `todos` y `vistaTodos`)
+- [ ] Bloque «Asignadas a mí»: ítems `mio: true` de todas las integraciones que no estén en la columna de hecho (`col.hecho` o la última), agrupados por proyecto → estado, con tipo, enlace al ítem y fecha; aviso si alguna integración no trae `mio`
+- [ ] Bloque «Siguientes pasos en mis backlogs»: por proyecto, casillas abiertas de la siguiente sesión (`enCurso(p).falta`) con enlace a Backlogs y prompt copiable
+- [ ] Contador «N asignadas a mí» en la cabecera de «Todos los proyectos»
+- [ ] Verificar por CDP con `datos/` de prueba (ítems `mio` en varias integraciones); test de plantilla; `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S30 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S30) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S25 — Importar el backlog de EAP10 a un `.md` propio · **Sonnet**
+El usuario lo pidió (2026-10-04). Depende de S28: EAP10 necesita `docs` (o ponerlos a mano en `proyectos.json`).
 - [ ] `generar.mjs`: `POST /api/integraciones/importar` → vista previa del `BACKLOG_<ID>.md` (casillas con `<!-- ado:ID -->`, agrupadas por estado/tipo) y creación solo si el archivo no existe y el proyecto tiene `docs`; nunca sobrescribe. Prueba: archivo existente → 409
+- [ ] (añadido en H10) Opción «solo las mías» (`mio: true`) en la vista previa de la importación. Prueba
 - [ ] `plantilla.html`: botón «Crear backlog local desde Azure» con la vista previa; al crear, la integración pasa a `modo: 'sincronizar'` con ese backlog
 - [ ] `node --test 2>&1 | tail -40`, commit
 

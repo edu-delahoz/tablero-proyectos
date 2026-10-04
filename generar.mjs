@@ -18,7 +18,7 @@ import { join, dirname, basename, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extraerMarcas, tareasLocales, planificarSincronia, aplicarSincronia } from './integraciones/sincronia.mjs'
 import { leerCredenciales, credencialesPara, guardarCredencial, resumenCredenciales, REQUISITOS, RUTA_CREDENCIALES } from './integraciones/credenciales.mjs'
-import { validarIntegracion, aplicarCambio, anadirProyecto, escribirAtomico, ErrorConfig, CAMPOS, COMUNES } from './integraciones/config.mjs'
+import { validarIntegracion, aplicarCambio, anadirProyecto, editarProyecto, escribirAtomico, ErrorConfig, CAMPOS, COMUNES, CAMPOS_PROYECTO } from './integraciones/config.mjs'
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
@@ -48,6 +48,7 @@ function cargarProyectos(forzar = false) {
   firmaConfig = firma
   proyectos = leerJson(CONFIG, []).map((p) => ({
     ...p,
+    editable: Object.fromEntries(CAMPOS_PROYECTO.filter((k) => p[k] !== undefined).map((k) => [k, p[k]])), // tal cual (con «~») para «Editar proyecto»
     repo: p.repo && expandir(p.repo),
     docs: (p.docs || []).map(expandir),
     notas: p.notas && expandir(p.notas),
@@ -73,9 +74,31 @@ const PLANTILLA_NOTAS = `# Notas para Claude
 
 `
 
-// ---------- Crear proyecto y backlog desde la vista ----------
-// Entrada de proyectos.json para un proyecto nuevo: id [a-z0-9-] único; repo y docs, carpetas que ya existen
-// (se guardan como se escribieron, «~» incluido). Lanza ErrorConfig (400) con todos los errores juntos.
+// ---------- Crear y editar proyecto, crear backlog desde la vista ----------
+// Rutas: absolutas o con «~», y se guardan como se escribieron. Cada validador añade a `errores` y devuelve el valor recortado o null.
+export function validarCarpeta(v, campo, errores) {
+  if (typeof v !== 'string' || !v.trim()) return errores.push(`«${campo}» debe ser una ruta.`), null
+  const r = v.trim()
+  if (!isAbsolute(expandir(r))) return errores.push(`«${campo}» debe ser una ruta absoluta (o empezar por ~): ${r}`), null
+  if (!statSync(expandir(r), { throwIfNoEntry: false })?.isDirectory()) return errores.push(`«${campo}» no es una carpeta que exista: ${r}`), null
+  return r
+}
+// notas/bitácora: un archivo que ya existe, o uno nuevo dentro de una carpeta que existe (las notas se crean con su plantilla).
+function validarArchivo(v, campo, errores) {
+  if (typeof v !== 'string' || !v.trim()) return errores.push(`«${campo}» debe ser una ruta.`), null
+  const r = v.trim(), abs = expandir(r)
+  if (!isAbsolute(abs)) return errores.push(`«${campo}» debe ser una ruta absoluta (o empezar por ~): ${r}`), null
+  const st = statSync(abs, { throwIfNoEntry: false })
+  if (st ? !st.isFile() : !statSync(dirname(abs), { throwIfNoEntry: false })?.isDirectory()) return errores.push(`«${campo}» debe ser un archivo, o estar en una carpeta que exista: ${r}`), null
+  return r
+}
+const comoLista = (v) => (v == null || v === '' ? [] : Array.isArray(v) ? v : [v])
+
+// Carpeta de ~/.claude/projects de las sesiones abiertas en `repo`: Claude Code cambia todo lo no alfanumérico por «-».
+export const transcripcionesDe = (repo) => expandir(repo).replace(/[^A-Za-z0-9]/g, '-')
+
+// Entrada de proyectos.json para un proyecto nuevo: id [a-z0-9-] único; repo y docs, carpetas que ya existen;
+// «transcripciones» sale del repo. Lanza ErrorConfig (400) con todos los errores juntos.
 export function proyectoNuevo(b, existentes) {
   const errores = []
   const id = typeof b.id === 'string' ? b.id.trim() : ''
@@ -83,17 +106,34 @@ export function proyectoNuevo(b, existentes) {
   if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(id)) errores.push('El id solo admite minúsculas, números y guiones (hasta 40, sin empezar por guion).')
   else if (existentes.some((p) => p.id === id)) errores.push(`Ya hay un proyecto con id «${id}».`)
   if (!nombre || nombre.length > 100) errores.push('Falta el nombre (hasta 100 caracteres).')
-  const carpeta = (v, campo) => {
-    if (typeof v !== 'string' || !v.trim()) return errores.push(`«${campo}» debe ser una ruta.`), null
-    const r = v.trim()
-    if (!isAbsolute(expandir(r))) return errores.push(`«${campo}» debe ser una ruta absoluta (o empezar por ~): ${r}`), null
-    if (!statSync(expandir(r), { throwIfNoEntry: false })?.isDirectory()) return errores.push(`«${campo}» no es una carpeta que exista: ${r}`), null
-    return r
-  }
-  const repo = b.repo == null || b.repo === '' ? undefined : carpeta(b.repo, 'repo')
-  const docs = (b.docs == null || b.docs === '' ? [] : Array.isArray(b.docs) ? b.docs : [b.docs]).map((d) => carpeta(d, 'docs'))
+  const repo = b.repo == null || b.repo === '' ? undefined : validarCarpeta(b.repo, 'repo', errores)
+  const docs = comoLista(b.docs).map((d) => validarCarpeta(d, 'docs', errores))
   if (errores.length) throw Object.assign(new ErrorConfig(errores.join(' ')), { errores })
-  return { id, nombre, ...(repo && { repo }), ...(docs.length && { docs }) }
+  return { id, nombre, ...(repo && { repo, transcripciones: transcripcionesDe(repo) }), ...(docs.length && { docs }) }
+}
+
+// Cambios validados para editarProyecto (config.mjs): solo CAMPOS_PROYECTO; '' = quitar el campo (salvo nombre).
+// Si el proyecto queda con repo y sin «transcripciones» (y no se pidió quitarla), se rellena desde el repo.
+export function cambiosProyecto(cambios, actual) {
+  if (!cambios || typeof cambios !== 'object' || Array.isArray(cambios)) throw new ErrorConfig('Faltan los cambios del proyecto.')
+  const errores = [], limpios = {}
+  const vacio = (v) => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length)
+  for (const [k, v] of Object.entries(cambios)) {
+    if (!CAMPOS_PROYECTO.includes(k)) { errores.push(`«${k}» no se edita desde la vista (solo ${CAMPOS_PROYECTO.join(', ')}).`); continue }
+    if (k === 'nombre') {
+      const n = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : ''
+      if (!n || n.length > 100) errores.push('Falta el nombre (hasta 100 caracteres).'); else limpios.nombre = n
+    } else if (vacio(v)) limpios[k] = ''
+    else if (k === 'repo') limpios.repo = validarCarpeta(v, 'repo', errores)
+    else if (k === 'docs') limpios.docs = comoLista(v).map((d) => validarCarpeta(d, 'docs', errores))
+    else if (k === 'notas' || k === 'bitacora') limpios[k] = validarArchivo(v, k, errores)
+    else if (typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,200}$/.test(v.trim())) limpios.transcripciones = v.trim()
+    else errores.push('«transcripciones» es el nombre de una carpeta de ~/.claude/projects (sin «/»).')
+  }
+  if (errores.length) throw Object.assign(new ErrorConfig(errores.join(' ')), { errores })
+  const repo = 'repo' in limpios ? limpios.repo : actual?.repo
+  if (repo && !('transcripciones' in limpios) && !actual?.transcripciones) limpios.transcripciones = transcripcionesDe(repo)
+  return limpios
 }
 
 export const plantillaBacklog = (nombre, fecha) => `# Backlog — ${nombre}
@@ -731,6 +771,31 @@ function leerBitacoras() {
   return new Map(rutas.map((ruta) => [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa, jsonl) }]))
 }
 
+// Guía «Configurar este proyecto»: un paso por pieza, con lo que ya hay a mano (sin red: GitHub sale de p.git, que ya leyó gh).
+export function estadoConfiguracion(p, { git = null, backlogs = [], transcripciones = TRANSCRIPCIONES } = {}) {
+  const repo = p.repo && statSync(p.repo, { throwIfNoEntry: false })?.isDirectory()
+  const esGit = !!repo && existsSync(join(p.repo, '.git'))
+  const docs = (p.docs || []).filter((d) => statSync(d, { throwIfNoEntry: false })?.isDirectory())
+  const locales = backlogs.filter((b) => !b.esPlan)
+  let sesiones = 0
+  if (p.transcripciones && existsSync(transcripciones)) {
+    for (const d of readdirSync(transcripciones)) {
+      if (d === p.transcripciones || d.startsWith(`${p.transcripciones}-`)) sesiones += readdirSync(join(transcripciones, d)).filter((f) => f.endsWith('.jsonl')).length
+    }
+  }
+  const integ = p.integraciones || []
+  return [
+    { paso: 'repo', hecho: !!repo, detalle: repo ? p.repo : p.repo ? `No existe la carpeta ${p.repo}` : 'Sin carpeta del repo' },
+    { paso: 'git', hecho: esGit, detalle: esGit ? 'Repositorio git' : 'La carpeta no es un repositorio git' },
+    { paso: 'github', hecho: !!git?.url, detalle: git?.url || 'Sin remoto en GitHub (o gh sin sesión)' },
+    { paso: 'docs', hecho: !!docs.length && docs.length === (p.docs || []).length, detalle: p.docs?.length ? `${docs.length} de ${p.docs.length} carpeta(s) de documentos` : 'Sin carpeta de documentos' },
+    { paso: 'backlog', hecho: !!locales.length, detalle: locales.length ? locales.map((b) => b.archivo).join(', ') : 'Sin backlog' },
+    { paso: 'sesiones', hecho: sesiones > 0, detalle: sesiones ? `${sesiones} sesión(es) de Claude` : p.transcripciones ? 'Aún no hay sesiones de Claude en esta carpeta' : 'Sin carpeta de transcripciones' },
+    { paso: 'notas', hecho: !!p.notas, detalle: p.notas || 'Sin archivo de notas' },
+    { paso: 'integraciones', hecho: !!integ.length, detalle: integ.length ? integ.map((x) => x.id).join(', ') : 'Sin integraciones' },
+  ]
+}
+
 async function recolectar(opciones = {}) {
   cargarProyectos()
   mkdirSync(DATOS, { recursive: true })
@@ -754,7 +819,9 @@ async function recolectar(opciones = {}) {
     const historial = actualizarHistorial(p, backlogs)
     const planes = leerPlanes(p, menciones, duenos)
     for (const b of backlogs) if (!b.esPlan) b.activo = frenteActivo(b, historial[b.archivo], planes)
-    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git: leerGit(p), notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones }
+    const git = leerGit(p)
+    const configuracion = estadoConfiguracion(p, { git, backlogs })
+    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones, configuracion, editable: p.editable }
   }))
 }
 
@@ -958,6 +1025,19 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         escribirAtomico(CONFIG, anadirProyecto(readFileSync(CONFIG, 'utf8'), nuevo))
         cargarProyectos(true)
         return enviar(res, 200, { ok: true, proyecto: nuevo, datos: (await fresco(true)).datos })
+      }
+      // Editar proyecto: solo CAMPOS_PROYECTO, en su sitio; integraciones y campos ajenos intactos. `previa` devuelve el bloque sin escribir.
+      if (ruta === '/api/proyectos/editar') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const p = cargarProyectos(true).find((x) => x.id === b.id)
+        if (!p) throw new ErrorConfig('Falta el proyecto o no está en proyectos.json.', 404)
+        const texto = editarProyecto(readFileSync(CONFIG, 'utf8'), p.id, cambiosProyecto(b.cambios, p))
+        const proyecto = JSON.parse(texto).find((x) => x?.id === p.id)
+        if (b.previa === true) return enviar(res, 200, { ok: true, previa: true, proyecto, archivo: CONFIG })
+        exigirMtime(b)
+        escribirAtomico(CONFIG, texto)
+        cargarProyectos(true)
+        return enviar(res, 200, { ok: true, proyecto, datos: (await fresco(true)).datos })
       }
       // Backlog nuevo: plantilla mínima dentro de una carpeta «docs» del proyecto; nunca sobrescribe (409).
       if (ruta === '/api/backlog/crear') {
