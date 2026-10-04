@@ -1,0 +1,7 @@
+proyectos.json
+datos/
+index.html
+respaldo-*/
+credenciales*.json
+.DS_Store
+node_modules/

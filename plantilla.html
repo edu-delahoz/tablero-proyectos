@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="es-CO">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablero de proyectos</title>
+<script>
+// Tema antes de pintar (sin parpadeo).
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('tablero.tema'); } catch (_) {}
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<style>
+/* ===================== Tokens (estilo terminal; claro/oscuro con light-dark) ===================== */
+:root {
+  color-scheme: light dark;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --fondo: light-dark(#f4efe6, #191816); --superficie: light-dark(#f4efe6, #191816); --panel: light-dark(#ece5d8, #211f1c);
+  --borde: light-dark(#cbc1b0, #45413a); --texto: light-dark(#2b2925, #e8e4da); --suave: light-dark(#6b6457, #9a9384);
+  --acento: light-dark(#b0532f, #d97757); --sobre-acento: light-dark(#fff, #191816);
+  --ok: light-dark(#3d7a37, #8cc265); --aviso: light-dark(#8a5d00, #e5c07b); --peligro: light-dark(#b3392f, #e06c75); --morado: light-dark(#7a4fb0, #c678dd);
+  --azul: light-dark(#1f6fb2, #61afef); --cian: light-dark(#0f7a7a, #56b6c2);
+  --barra: light-dark(#d9d0c0, #3a3731); --codigo: light-dark(#e9e2d4, #25231f); --sel: light-dark(#e8dccb, #2c2925);
+  --estado-fondo: light-dark(#005fb8, #007acc);
+  --prosa: var(--mono); --titulos: var(--mono); --tam: 14px; --radio: 0;
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+/* ===================== Base ===================== */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--fondo); color: var(--texto); font: var(--tam)/1.55 var(--prosa); }
+a { color: var(--acento); }
+button, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+::selection { background: var(--sel); }
+code, .hash, .chip, .n, .barra-txt, .glifo, .icono, .casilla, .rotulo, .segmentos, .archivos, #barra-estado, .prompt, .rama, textarea { font-family: var(--mono); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.suave { color: var(--suave); font-size: .9em; }
+
+#app { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr auto; }
+#principal { min-width: 0; display: flex; flex-direction: column; }
+
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--borde); background: var(--superficie); }
+header h1 { font: 600 1.05rem/1.3 var(--titulos); margin: 0; }
+header h1 .logo { color: var(--acento); }
+.controles { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.controles label { display: inline-flex; gap: 6px; align-items: center; font-size: .85em; color: var(--suave); }
+select { padding: 3px 6px; background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); max-width: 60vw; }
+header .meta { color: var(--suave); font-size: .82em; }
+
+nav#pestanas { display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--borde); background: var(--superficie); overflow-x: auto; }
+nav#pestanas button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--suave); padding: 9px 12px; cursor: pointer; white-space: nowrap; }
+nav#pestanas button[aria-current="page"] { color: var(--texto); border-bottom-color: var(--acento); font-weight: 600; }
+.cuenta { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 4px; border-radius: 9px; background: var(--peligro); color: var(--fondo); font-size: 12px; text-align: center; font-weight: 600; }
+
+main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; min-width: 0; }
+.rejilla { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+.tarjeta { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 16px; min-width: 0; }
+.tarjeta h2 { font: 600 1rem/1.3 var(--titulos); margin: 0 0 10px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; min-width: 0; }
+.tarjeta h2 > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.tarjeta h2 small { color: var(--suave); font-weight: 400; font-size: .78em; white-space: nowrap; }
+.progreso { display: block; height: 6px; background: var(--barra); border-radius: 3px; overflow: hidden; margin: 6px 0; min-width: 60px; }
+.progreso > i { display: block; height: 100%; background: var(--ok); }
+.barra-txt { white-space: pre; letter-spacing: 0; }
+.barra-txt b { font-weight: 400; color: var(--ok); }
+.barra-txt i { font-style: normal; color: var(--barra); }
+.fila { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--borde); font-size: .93em; min-width: 0; }
+.fila:first-child { border-top: 0; }
+.fila > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.etq { display: inline-block; padding: 1px 7px; border-radius: var(--radio); font: 600 12px/1.6 var(--mono); white-space: nowrap; }
+.MERGED { background: color-mix(in srgb, var(--morado) 18%, transparent); color: var(--morado); }
+.OPEN { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.CLOSED { background: color-mix(in srgb, var(--peligro) 18%, transparent); color: var(--peligro); }
+.DRAFT { background: var(--barra); color: var(--suave); }
+.lateral { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .lateral { grid-template-columns: minmax(0, 1fr); } }
+.lista button { display: block; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--borde); padding: 8px 6px; color: var(--texto); cursor: pointer; overflow-wrap: anywhere; }
+.lista button:first-child { border-top: 0; }
+.lista button[aria-current="true"] { background: var(--sel); }
+.md { overflow-wrap: anywhere; }
+.md h1, .md h2, .md h3, .md h4 { font-family: var(--titulos); scroll-margin-top: 16px; }
+.md h1 { font-size: 1.35em; } .md h2 { font-size: 1.12em; border-bottom: 1px solid var(--borde); padding-bottom: 4px; } .md h3 { font-size: 1em; }
+.md code, .cuerpo code, .mapa-cab code, .panel-falta code, .titulo code { font-size: .88em; background: var(--codigo); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+.md pre { background: var(--codigo); padding: 12px; border-radius: var(--radio); overflow-x: auto; }
+.md pre code { background: none; padding: 0; }
+.md table { border-collapse: collapse; display: block; overflow-x: auto; }
+.md td, .md th { border: 1px solid var(--borde); padding: 4px 8px; vertical-align: top; }
+.md blockquote { margin: 0; padding-left: 12px; border-left: 3px solid var(--borde); color: var(--suave); }
+.md li:has(> input[type=checkbox]) { list-style: none; margin-left: -1.2em; }
+.md input[type=checkbox] { margin-right: 6px; }
+.md li:has(> input:checked) { color: var(--suave); }
+.md .destacado { background: var(--sel); }
+.diff { font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 0; }
+.diff .mas { color: var(--ok); } .diff .menos { color: var(--peligro); text-decoration: line-through; opacity: .8; }
+details summary { cursor: pointer; }
+.boton { display: inline-block; padding: 4px 10px; border: 1px solid var(--borde); border-radius: var(--radio); text-decoration: none; color: var(--texto); background: var(--superficie); font-size: .85em; margin: 0 6px 6px 0; cursor: pointer; }
+.enlace { background: none; border: 0; padding: 0; color: var(--acento); cursor: pointer; text-align: left; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.vacio { color: var(--suave); padding: 20px; text-align: center; }
+.hash { font-size: .85em; }
+
+/* ---------- Barra de archivos + conmutador ---------- */
+.archivos { display: flex; gap: 0; overflow-x: auto; border-bottom: 1px solid var(--borde); margin-bottom: 12px; }
+.archivos button { flex: none; background: none; border: 0; border-bottom: 2px solid transparent; padding: 7px 12px; cursor: pointer; color: var(--suave); white-space: nowrap; font-size: .85em; }
+.archivos button[aria-current="true"] { color: var(--texto); border-bottom-color: var(--acento); }
+.archivos .n { margin-left: 6px; }
+.barra-vista { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.conmutador { display: inline-flex; border: 1px solid var(--borde); border-radius: var(--radio); overflow: hidden; }
+.conmutador button { background: none; border: 0; padding: 4px 12px; cursor: pointer; color: var(--suave); }
+.conmutador button[aria-pressed="true"] { background: var(--acento); color: var(--sobre-acento); }
+
+/* ---------- Mapa ---------- */
+.mapa-cab { border: 1px solid var(--borde); border-radius: var(--radio); padding: 12px 14px; margin-bottom: 16px; background: var(--superficie); min-width: 0; }
+.mapa-cab .global { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.mapa-cab .global .progreso { flex: 1 1 200px; height: 8px; }
+.mapa-cab p { margin: 8px 0 0; overflow-wrap: anywhere; }
+.aqui .rotulo-aqui { color: var(--acento); font-weight: 700; font-family: var(--mono); }
+.estado-res { margin-top: 8px; font-size: .92em; }
+.estado-res .md > :first-child { margin-top: 0; } .estado-res .md > :last-child { margin-bottom: 0; }
+.mapa-rejilla { container-type: inline-size; }
+.mapa-interior { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@container (min-width: 880px) {
+  .mapa-interior { grid-template-columns: minmax(0, 1fr) 300px; }
+  .panel-falta { position: sticky; top: 12px; max-height: calc(100dvh - 40px); overflow: auto; }
+}
+ol.linea { list-style: none; margin: 0; padding: 0; counter-reset: paso; }
+.paso { counter-increment: paso; scroll-margin-top: 16px; min-width: 0; }
+.paso > details > summary { list-style: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 6px 4px; border-radius: var(--radio); }
+.paso > details > summary::-webkit-details-marker { display: none; }
+.paso > details > summary:hover { background: var(--sel); }
+.paso.actual > details > summary { background: color-mix(in srgb, var(--acento) 12%, transparent); box-shadow: inset 3px 0 0 var(--acento); }
+.glifo { color: var(--borde); flex: none; }
+.icono { flex: none; width: 1.3em; text-align: center; font-weight: 700; }
+.est-hecho > details > summary .icono { color: var(--ok); }
+.est-en-curso > details > summary .icono { color: var(--aviso); }
+.est-pendiente > details > summary .icono { color: var(--suave); }
+.cab-paso { flex: 1 1 16rem; min-width: 0; overflow-wrap: anywhere; }
+.cab-paso .titulo { font-family: var(--titulos); font-weight: 600; }
+.est-hecho > details > summary .titulo { color: var(--suave); font-weight: 400; }
+.avance { flex: none; margin-left: auto; display: inline-flex; gap: 8px; align-items: center; color: var(--suave); }
+.avance .progreso { width: 90px; margin: 0; }
+.chip { display: inline-block; margin-left: 8px; font-size: .78em; color: var(--suave); white-space: nowrap; }
+.etq-aqui { margin-left: 8px; color: var(--acento); font: 700 .78em var(--mono); white-space: nowrap; }
+.cuerpo { margin: 2px 0 10px calc(.6em + 4px); padding: 4px 0 4px 14px; border-left: 1px solid var(--borde); min-width: 0; }
+.cuerpo .nota { margin: 2px 0 8px; color: var(--suave); font-size: .9em; }
+.rotulo { font-size: .76em; letter-spacing: .06em; text-transform: uppercase; color: var(--suave); margin: 6px 0 4px; }
+.grupo { margin: 4px 0 8px; }
+details.grupo > summary { list-style: none; } details.grupo > summary::-webkit-details-marker { display: none; }
+details.grupo > summary::before { content: "▸ "; } details.grupo[open] > summary::before { content: "▾ "; }
+ul.tareas { list-style: none; margin: 0; padding: 0; }
+ul.tareas ul.tareas { margin-left: 0; }
+.tarea { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 .6em; padding: 3px 0; }
+.tarea > ul { grid-column: 2; }
+.casilla { color: var(--suave); white-space: pre; }
+.tarea.hecha > .texto { color: var(--suave); }
+.tarea:not(.hecha) > .casilla { color: var(--acento); }
+.texto { min-width: 0; overflow-wrap: anywhere; }
+.vinculo { border: 1px dashed var(--borde); border-radius: var(--radio); padding: 6px 10px; margin: 4px 0 10px; }
+.documentacion { margin-top: 22px; border-top: 1px solid var(--borde); padding-top: 8px; }
+.documentacion ul { list-style: none; margin: 0; padding: 0; }
+.documentacion ul ul { padding-left: 1.4em; }
+.documentacion li { padding: 2px 0; }
+.panel-falta { border: 1px solid var(--borde); border-radius: var(--radio); padding: 10px 12px; background: var(--superficie); min-width: 0; }
+.panel-falta .grupo-falta { margin: 8px 0 12px; }
+.panel-falta ul { margin: 4px 0 0; padding-left: 1.1em; font-size: .88em; }
+.panel-falta li { margin: 3px 0; overflow-wrap: anywhere; }
+.panel-falta li::marker { color: var(--acento); }
+.hito-cuerpo p { margin: 4px 0 8px; overflow-wrap: anywhere; }
+
+/* ---------- Resumen: mapa en miniatura ---------- */
+.segmentos { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0 6px; }
+.seg { display: inline-flex; flex-direction: column; align-items: center; background: none; border: 0; padding: 2px; cursor: pointer; color: var(--suave); border-radius: var(--radio); }
+.seg .bloque { display: block; width: 2.4em; height: 1.1em; line-height: 1.1em; text-align: center; overflow: hidden; }
+.seg .clave { font-size: .72em; }
+.seg.actual .clave { color: var(--acento); font-weight: 700; }
+.seg.actual { outline: 1px solid var(--acento); }
+.seg.est-hecho .bloque { color: var(--ok); } .seg.est-en-curso .bloque { color: var(--aviso); } .seg.est-pendiente .bloque { color: var(--barra); }
+
+/* ---------- Barra de estado (abajo, fija) ---------- */
+#barra-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 0 18px; position: sticky; bottom: 0; z-index: 5; background: var(--estado-fondo); color: #fff; font-size: 12.5px; padding: 3px 14px; }
+#barra-estado button { background: none; border: 0; color: inherit; padding: 1px 0; cursor: pointer; }
+#barra-estado button:hover { text-decoration: underline; text-underline-offset: 2px; }
+#barra-estado :focus-visible { outline-color: #fff; }
+#barra-estado .rama-barra { font-weight: 700; background: rgb(255 255 255 / .16); padding: 1px 8px; }
+#barra-estado .derecha { margin-left: auto; }
+
+/* ---------- Rama: siempre visible ---------- */
+.rama { display: inline-flex; align-items: center; gap: .35em; max-width: 100%; padding: 0 .55em; border: 1px solid color-mix(in srgb, var(--rama, var(--aviso)) 70%, transparent); background: color-mix(in srgb, var(--rama, var(--aviso)) 14%, transparent); color: var(--rama, var(--aviso)); font-weight: 600; font-size: .85em; line-height: 1.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: baseline; }
+button.rama { cursor: pointer; font-family: var(--mono); }
+button.rama:hover { background: color-mix(in srgb, var(--rama, var(--aviso)) 26%, transparent); }
+.cab-paso .rama { margin-left: 8px; }
+.rama-actual { font-size: .95em; padding: 2px .7em; }
+.rama-actual .punto { width: .5em; height: .5em; border-radius: 50%; background: currentColor; flex: none; }
+.titulo-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
+
+/* ---------- GitHub: ramas + grafo ---------- */
+.ramas { width: 100%; border-collapse: collapse; font-size: .9em; }
+.ramas td { padding: 7px 8px 7px 0; border-top: 1px solid var(--borde); vertical-align: top; }
+.ramas tr:first-child td { border-top: 0; }
+.ramas tr.foco td { background: var(--sel); }
+.ramas .col-rama { width: 1%; max-width: 46vw; }
+.ramas .sesiones { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.sesion { display: inline-flex; gap: 4px; align-items: baseline; background: none; border: 1px solid var(--borde); padding: 0 6px; cursor: pointer; color: var(--texto); font: .85em/1.6 var(--mono); text-align: left; overflow-wrap: anywhere; }
+.sesion:hover { border-color: var(--acento); }
+.sesion .ic-hecho { color: var(--ok); } .sesion .ic-en-curso { color: var(--aviso); } .sesion .ic-pendiente { color: var(--suave); }
+.sesion.plan { border-style: dashed; }
+.tabla-scroll { overflow-x: auto; }
+.grafo { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; }
+.grafo svg { display: block; }
+.grafo-filas { list-style: none; margin: 0; padding: 0; min-width: 0; }
+.grafo-fila { height: 30px; display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; font-size: .9em; padding-right: 4px; }
+.grafo-fila.foco { background: var(--sel); }
+.grafo-fila .tit { min-width: 0; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; }
+.grafo-fila .tit.merge { color: var(--suave); }
+.grafo-fila .cuando { color: var(--suave); flex: none; font-size: .9em; }
+.grafo-fila .rama { flex: none; max-width: 40%; }
+.leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .85em; color: var(--suave); margin: 0 0 10px; }
+
+/* ---------- Esquema de un plan ---------- */
+.items { margin: 2px 0 6px; padding-left: 1.6em; }
+.items li { margin: 3px 0; overflow-wrap: anywhere; }
+.items li::marker { color: var(--acento); }
+ul.items { list-style: "- "; }
+.acciones-esquema { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+
+/* ---------- Edición de .md ---------- */
+.editor-md textarea { display: block; width: 100%; min-height: 62vh; resize: vertical; padding: 12px; font-size: 13px; line-height: 1.55; background: var(--codigo); color: var(--texto); border: 1px solid var(--borde); tab-size: 2; }
+.editor-md .pie { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 8px; }
+.boton.primario { background: var(--acento); color: var(--sobre-acento); border-color: var(--acento); }
+.boton.primario::before { color: inherit; }
+.boton[disabled] { opacity: .55; cursor: progress; }
+.aviso-linea { border: 1px solid var(--peligro); color: var(--peligro); padding: 8px 10px; margin: 8px 0; overflow-wrap: anywhere; }
+.nueva-nota { display: grid; gap: 8px; }
+.nueva-nota textarea { width: 100%; min-height: 4.6em; resize: vertical; padding: 8px 10px; background: var(--codigo); color: var(--texto); border: 1px solid var(--borde); font-size: 13px; }
+.nota-abierta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 .6em; padding: 6px 0; border-top: 1px solid var(--borde); }
+.nota-abierta:first-of-type { border-top: 0; }
+.nota-abierta .casilla { color: var(--acento); }
+#aviso { position: fixed; right: 16px; bottom: 34px; z-index: 10; max-width: min(420px, calc(100vw - 32px)); }
+#aviso:not(:empty) { background: var(--panel); border: 1px solid var(--borde); border-left: 3px solid var(--ok); padding: 8px 12px; }
+#aviso.error:not(:empty) { border-left-color: var(--peligro); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .progreso > i { transition: width .3s; }
+}
+
+/* ===================== Terminal ===================== */
+.prompt { display: block; color: var(--suave); margin: 0 0 14px; overflow-wrap: anywhere; }
+.prompt b { color: var(--acento); font-weight: 700; }
+header { border-bottom: 0; padding-bottom: 4px; }
+nav#pestanas { border-bottom: 1px dashed var(--borde); gap: 6px; padding-bottom: 6px; }
+nav#pestanas button { text-transform: lowercase; border: 0; padding: 4px 4px; border-radius: 0; }
+nav#pestanas button::before { content: "[ "; color: var(--borde); }
+nav#pestanas button::after { content: " ]"; color: var(--borde); }
+nav#pestanas button[aria-current="page"] { color: var(--acento); }
+nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-current="page"]::after { color: var(--acento); }
+.tarjeta, .mapa-cab, .panel-falta { position: relative; background: transparent; margin-top: 12px; padding-top: 18px; }
+.tarjeta > h2:first-child { position: absolute; top: -.75em; left: 10px; right: 10px; margin: 0; font-size: .95em; pointer-events: none; }
+.tarjeta > h2:first-child > * { background: var(--fondo); padding: 0 6px; pointer-events: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tarjeta > h2:first-child > span:first-child { color: var(--acento); }
+.tarjeta > h2:first-child > span:first-child::before { content: "─ "; color: var(--borde); }
+.rotulo { text-transform: none; letter-spacing: 0; }
+.rotulo::before { content: "# "; color: var(--acento); }
+.panel-falta > .rotulo:first-child, .mapa-cab > .rotulo:first-child { position: absolute; top: -.8em; left: 10px; margin: 0; background: var(--fondo); padding: 0 6px; color: var(--acento); }
+.chip { color: var(--suave); }
+.chip::before { content: "· "; color: var(--borde); }
+.chip.m-opus { color: var(--acento); } .chip.m-fable { color: var(--morado); } .chip.m-sonnet { color: var(--ok); }
+.chip.ch-rama { color: var(--aviso); }
+.cuerpo { border-left-style: dashed; }
+.paso.actual > details > summary { box-shadow: none; }
+.boton, .conmutador { border-radius: 0; }
+.boton::before { content: "› "; color: var(--acento); }
+.seg .bloque { font-size: 1.15em; letter-spacing: -1px; }
+
+@media (max-width: 600px) {
+  header, main, nav#pestanas { padding-left: 16px; padding-right: 16px; }
+  .avance .progreso { width: 60px; }
+  .cuerpo { padding-left: 10px; }
+  #barra-estado .opcional { display: none; }
+  .grafo-fila .cuando { display: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="principal">
+    <header>
+      <div class="titulo-cab"><h1><span class="logo" aria-hidden="true">✻</span> Tablero de proyectos</h1><span id="rama-cab"></span></div>
+      <div class="controles">
+        <label>Proyecto <select id="proyecto"></select></label>
+        <label>Tema <select id="tema"></select></label>
+      </div>
+    </header>
+    <nav id="pestanas" aria-label="Secciones"></nav>
+    <main id="contenido"></main>
+  </div>
+  <footer id="barra-estado" aria-label="Barra de estado"></footer>
+</div>
+<div id="aviso" role="status" aria-live="polite"></div>
+<script>
+let DATOS = /*__DATOS__*/null;
+const $ = (s) => document.querySelector(s);
+const raiz = document.documentElement;
+const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fecha = (iso) => iso ? new Date(iso).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+const hace = (iso) => {
+  const m = (Date.now() - new Date(iso)) / 60000;
+  if (m < 60) return `hace ${Math.max(1, Math.round(m))} min`;
+  if (m < 1440) return `hace ${Math.round(m / 60)} h`;
+  return `hace ${Math.round(m / 1440)} d`;
+};
+const pct = (h, t) => t ? Math.round((h / t) * 100) : 0;
+const movimientoReducido = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const leer = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+// Mismo «plano» que generar.mjs: quita marcas de markdown para comparar con el DOM.
+const plano = (t) => String(t).replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*|__|`/g, '').trim();
+const aplanar = (arbol) => arbol.flatMap((s) => [s, ...aplanar(s.hijas)]);
+const sumar = (secs) => secs.reduce((a, s) => ({ h: a.h + s.hechas, t: a.t + s.total }), { h: 0, t: 0 });
+const slug = (t) => String(t).replace(/[^a-z0-9]+/gi, '-');
+const idPaso = (clave, id) => `paso-${slug(clave)}-${id}`;
+// Con el servidor local (Tablero.app / --abrir) los .md se editan aquí; abierto como archivo, solo lectura.
+const editable = () => !!DATOS?.servidor && location.protocol.startsWith('http');
+
+// ---------- Progreso en texto ----------
+function barra(h, t, ancho = 12) {
+  const p = pct(h, t), et = `${p} % (${h} de ${t})`, n = Math.round((p / 100) * ancho);
+  return `<span class="barra-txt" role="img" aria-label="${et}">[<b>${'█'.repeat(n)}</b><i>${'░'.repeat(ancho - n)}</i>] ${String(p).padStart(3)}%</span>`;
+}
+const ICONO = { hecho: '✓', 'en-curso': '◐', pendiente: '○', doc: '·' };
+const ETIQUETA = { hecho: 'terminada', 'en-curso': 'en curso', pendiente: 'pendiente', doc: 'documentación' };
+const CASILLA = () => ['[ ]', '[x]'];
+const GLIFO_SEG = { hecho: '██', 'en-curso': '▒▒', pendiente: '░░' };
+const ESTADO_PR = (pr) => pr.isDraft && pr.state === 'OPEN' ? ['DRAFT', 'borrador'] : [pr.state, { MERGED: 'mergeado', OPEN: 'abierto', CLOSED: 'cerrado' }[pr.state]];
+
+let P = null, pestana = leer('tablero.pestana') || 'resumen', sel = {}, ramaFoco = null;
+let modo = { backlogs: 'mapa', planes: 'mapa' };
+try { Object.assign(modo, JSON.parse(leer('tablero.modo') || '{}')); } catch {}
+const abiertos = new Map(); // «archivo#sección» → abierta/cerrada por el usuario
+const borradores = new Map(); // ruta → texto sin guardar
+let editando = null; // ruta del .md en edición
+
+// Enlaza «PR #N», «#N» y hashes de commits conocidos con GitHub antes de renderizar el markdown.
+function enlazar(md) {
+  const url = P.git?.url;
+  if (!url) return md;
+  const oids = (P.git.commits || []).map((c) => c.oid).concat((P.git.prs || []).flatMap((p) => p.commits.map((c) => c.oid)));
+  return md
+    .replace(/(^|[^\[\w/])(PR\s*)?#(\d{1,4})\b/gm, (m, a, pr, n) => (P.git.prs || []).some((p) => p.number == n) ? `${a}[${pr || ''}#${n}](${url}/pull/${n})` : m)
+    .replace(/(^|[\s(])`?([0-9a-f]{7,40})`?(?=[\s).,:;]|$)/gm, (m, a, h) => oids.some((o) => o.startsWith(h)) ? `${a}[\`${h.slice(0, 7)}\`](${url}/commit/${h})` : m);
+}
+function md(texto) {
+  const t = enlazar(texto || '');
+  if (window.marked) return `<div class="md">${marked.parse(t)}</div>`;
+  return `<pre class="md">${esc(texto)}</pre>`;
+}
+const inline = (t) => window.marked ? marked.parseInline(enlazar(t || '')) : esc(t);
+// Títulos dentro de <summary>: sin enlaces anidados.
+const inlineTitulo = (t) => window.marked ? marked.parseInline(String(t).replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')).replace(/<a [^>]*>|<\/a>/g, '') : esc(t);
+function corto(t, n = 280) {
+  if (t.length <= n) return t;
+  let c = t.slice(0, n);
+  const esp = c.lastIndexOf(' ');
+  if (esp > n * 0.7) c = c.slice(0, esp);
+  if ((c.match(/`/g) || []).length % 2) c = c.slice(0, c.lastIndexOf('`'));
+  return c.trimEnd() + ' …';
+}
+const enVSCode = (ruta) => `<a class="boton" href="vscode://file${encodeURI(ruta)}">Abrir en VS Code</a>`;
+const botonEditar = (ruta) => editable()
+  ? `<button class="boton" data-editar="${esc(ruta)}">${borradores.has(ruta) ? 'Editar (borrador sin guardar)' : 'Editar aquí'}</button>`
+  : `<span class="suave" title="Abre el tablero con Tablero.app (o node generar.mjs --abrir) para editar aquí">solo lectura</span>`;
+const acciones = (ruta) => `${botonEditar(ruta)}${enVSCode(ruta)}`;
+
+const PESTANAS = [
+  ['resumen', 'Resumen'], ['backlogs', 'Backlogs'], ['planes', 'Planes'],
+  ['historial', 'Historial'], ['github', 'GitHub'], ['notas', 'Notas'],
+];
+
+// ---------- Ramas: badge + vínculos con backlogs, planes y PRs ----------
+const COLORES = ['var(--acento)', 'var(--azul)', 'var(--ok)', 'var(--morado)', 'var(--aviso)', 'var(--cian)', 'var(--peligro)'];
+const color = (i) => COLORES[i % COLORES.length];
+const badgeRama = (nombre, extra = '', estiloColor = '') => `<button class="rama ${extra}" data-rama="${esc(nombre)}" title="Ver la rama ${esc(nombre)} en GitHub"${estiloColor ? ` style="--rama:${estiloColor}"` : ''}><span aria-hidden="true">⎇</span>${esc(nombre)}</button>`;
+function sesionesDeRama(nombre) {
+  return P.backlogs.flatMap((b) => aplanar(b.estructura || []).filter((s) => s.meta?.rama === nombre).map((s) => ({ b, s })));
+}
+const planesDeRama = (nombre) => P.planes.filter((p) => p.contenido.includes(nombre));
+const prsDeRama = (nombre) => (P.git?.prs || []).filter((pr) => pr.headRefName === nombre);
+const botonSesion = ({ b, s }) => `<button class="sesion" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${s.id}" title="${esc(plano(s.titulo))}"><span class="ic-${s.estado}" aria-hidden="true">${ICONO[s.estado]}</span>${esc(b.archivo.replace(/\.md$/, ''))} · ${esc(s.clave || corto(plano(s.titulo), 30))}<span class="sr"> (${ETIQUETA[s.estado]})</span></button>`;
+const botonPlan = (p) => `<button class="sesion plan" data-ir="planes" data-sel="${esc(p.nombre)}" title="${esc(p.titulo)}">✎ ${esc(corto(p.titulo, 42))}</button>`;
+const etqPR = (pr) => { const [cls, txt] = ESTADO_PR(pr); return `<a class="etq ${cls}" href="${esc(pr.url)}" title="${esc(pr.title)}">#${pr.number} ${txt}</a>`; };
+
+// ---------- Tareas ----------
+const completa = (t) => t.hecha && t.hijas.every(completa);
+const cajas = (t) => 1 + t.hijas.reduce((a, x) => a + cajas(x), 0);
+const pendientes = (t) => (t.hecha ? 0 : 1) + t.hijas.reduce((a, x) => a + pendientes(x), 0);
+function tarea(t) {
+  const c = corto(t.texto);
+  return `<li class="tarea${t.hecha ? ' hecha' : ''}"><span class="casilla" aria-hidden="true">${CASILLA()[t.hecha ? 1 : 0]}</span><span class="texto"${c !== t.texto ? ` title="${esc(plano(t.texto))}"` : ''}><span class="sr">${t.hecha ? 'Hecha' : 'Pendiente'}: </span>${inline(c)}</span>${t.hijas.length ? `<ul class="tareas">${t.hijas.map(tarea).join('')}</ul>` : ''}</li>`;
+}
+function chips(meta = {}) {
+  const pr = meta.rama && prsDeRama(meta.rama)[0];
+  return (meta.modelo ? `<span class="chip ch-modelo m-${esc(meta.modelo.toLowerCase())}">${esc(meta.modelo)}</span>` : '')
+    + (meta.rama ? badgeRama(meta.rama) + (pr ? ` ${etqPR(pr)}` : '') : '')
+    + (meta.duracion ? `<span class="chip ch-dur">${esc(meta.duracion)}</span>` : '');
+}
+const glifo = (ultimo) => `<span class="glifo" aria-hidden="true">${ultimo ? '└─' : '├─'}</span>`;
+function cabeceraPaso({ titulo, meta, esAqui, ultimo, hechas, total, estado }) {
+  return `<summary>${glifo(ultimo)}<span class="icono" aria-hidden="true">${ICONO[estado]}</span>
+    <span class="cab-paso"><span class="sr">${ETIQUETA[estado]}: </span><span class="titulo">${inlineTitulo(titulo)}</span>${chips(meta)}${esAqui ? '<span class="etq-aqui">◀ estás aquí</span>' : ''}</span>
+    ${total ? `<span class="avance">${barra(hechas, total, 10)}<span class="n">${hechas}/${total}</span></span>` : ''}</summary>`;
+}
+
+// ---------- Mapa de un backlog ----------
+function paso(s, ctx) {
+  const { doc, clave, ultimo } = ctx;
+  const k = `${clave}#${s.id}`;
+  const esAqui = s.id === doc.aqui;
+  const contieneAqui = aplanar(s.hijas).some((x) => x.id === doc.aqui);
+  const abierto = abiertos.has(k) ? abiertos.get(k) : (esAqui || contieneAqui || s.estado === 'pendiente');
+  const hijas = s.hijas.filter((x) => x.estado !== 'doc');
+  return `<li class="paso est-${s.estado}${esAqui ? ' actual' : ''}" id="${idPaso(clave, s.id)}">
+    <details data-k="${esc(k)}"${abierto ? ' open' : ''}>
+      ${cabeceraPaso({ titulo: s.titulo, meta: s.meta, esAqui, ultimo, hechas: s.hechas, total: s.total, estado: s.estado })}
+      <div class="cuerpo">${cuerpo(s)}${hijas.length ? `<ol class="linea">${hijas.map((x, i) => paso(x, { ...ctx, ultimo: i === hijas.length - 1 })).join('')}</ol>` : ''}</div>
+    </details></li>`;
+}
+function cuerpo(s) {
+  const falta = s.tareas.filter((t) => !completa(t)), hecho = s.tareas.filter(completa);
+  let html = s.meta.nota ? `<p class="nota">${inline(s.meta.nota)}</p>` : '';
+  if (s.vinculo) html += vinculo(s.vinculo);
+  if (falta.length) html += `<div class="grupo"><div class="rotulo">Falta · ${falta.reduce((a, t) => a + pendientes(t), 0)}</div><ul class="tareas">${falta.map(tarea).join('')}</ul></div>`;
+  if (hecho.length) html += `<details class="grupo"><summary class="rotulo">Hecho · ${hecho.reduce((a, t) => a + cajas(t), 0)}</summary><ul class="tareas">${hecho.map(tarea).join('')}</ul></details>`;
+  return html;
+}
+function vinculo(archivo) {
+  const hijo = P.backlogs.find((b) => b.archivo === archivo);
+  if (!hijo) return '';
+  const pasos = hijo.estructura.filter((s) => s.estado !== 'doc'), { h, t } = sumar(pasos);
+  return `<div class="vinculo"><div class="rotulo">Mini backlog · ${h}/${t}</div>
+    <p style="margin:0 0 4px"><button class="enlace" data-ir="backlogs" data-sel="${esc(archivo)}">${esc(archivo)}</button></p>
+    <ol class="linea">${pasos.map((x, i) => paso(x, { doc: hijo, clave: hijo.archivo, ultimo: i === pasos.length - 1 })).join('')}</ol></div>`;
+}
+function documentacion(secs) {
+  if (!secs.length) return '';
+  const item = (s) => `<li><button class="enlace" data-doc="${esc(plano(s.tituloCrudo))}">${esc(plano(s.titulo))}</button>${s.hijas.length ? `<ul>${s.hijas.map(item).join('')}</ul>` : ''}</li>`;
+  return `<section class="documentacion" aria-label="Documentación"><div class="rotulo">Documentación</div><ul>${secs.map(item).join('')}</ul></section>`;
+}
+// fuente = backlog con las tareas; enOtra = el panel vive en otra página (el PLAN) → los enlaces navegan.
+function panelFalta(fuente, enOtra) {
+  const grupos = aplanar(fuente.estructura).filter((s) => s.estado !== 'doc' && s.estado !== 'hecho')
+    .map((s) => ({ s, falta: s.tareas.filter((t) => !completa(t)), hijo: s.vinculo && P.backlogs.find((b) => b.archivo === s.vinculo) }))
+    .filter((g) => g.falta.length || g.hijo);
+  if (!grupos.length) return '';
+  const total = grupos.reduce((a, g) => a + g.falta.reduce((x, t) => x + pendientes(t), 0), 0);
+  const ir = (s) => enOtra ? `data-ir="backlogs" data-sel="${esc(fuente.archivo)}" data-sec="${s.id}"` : `data-saltar="${idPaso(fuente.archivo || fuente.nombre, s.id)}"`;
+  return `<aside class="panel-falta" aria-label="Qué falta"><div class="rotulo">Qué falta · ${total}</div>
+    ${grupos.map(({ s, falta, hijo }) => {
+      const nHijo = hijo ? aplanar(hijo.estructura).reduce((a, x) => a + x.tareas.reduce((y, t) => y + pendientes(t), 0), 0) : 0;
+      return `<div class="grupo-falta"><button class="enlace" ${ir(s)}>${esc(plano(s.titulo))}</button> <span class="n suave">${falta.reduce((a, t) => a + pendientes(t), 0)}</span>
+        <ul>${falta.map((t) => `<li>${inline(corto(t.texto, 140))}</li>`).join('')}${nHijo ? `<li class="suave">＋ ${nHijo} en <button class="enlace" data-ir="backlogs" data-sel="${esc(hijo.archivo)}">${esc(hijo.archivo)}</button></li>` : ''}</ul></div>`;
+    }).join('')}</aside>`;
+}
+function estadoResumido(txt) {
+  if (!txt) return '';
+  const prim = txt.split('\n').find((l) => l.trim()) || '';
+  return `<div class="estado-res">${md(prim)}${txt.trim() !== prim.trim() ? `<details><summary class="suave">Estado completo</summary>${md(txt)}</details>` : ''}</div>`;
+}
+// «❯ estás aquí: H4 — … → S3 — …» (si la sección tiene mini backlog, se encadena su «aquí»).
+// fuera = el botón navega al mapa en vez de saltar dentro de la página (Resumen).
+function lineaAqui(doc, clave, fuera) {
+  const aqui = aplanar(doc.estructura || []).find((s) => s.id === doc.aqui);
+  if (!aqui) return '';
+  const hijo = aqui.vinculo && P.backlogs.find((b) => b.archivo === aqui.vinculo);
+  const sub = hijo && aplanar(hijo.estructura).find((s) => s.id === hijo.aqui);
+  const destino = fuera ? `data-ir="backlogs" data-sel="${esc(clave)}" data-sec="${aqui.id}"` : `data-saltar="${idPaso(clave, aqui.id)}"`;
+  return `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> <button class="enlace" ${destino}>${esc(plano(aqui.titulo))}</button>${chips(aqui.meta)}${sub ? ` <span class="suave">→</span> <button class="enlace" data-ir="backlogs" data-sel="${esc(hijo.archivo)}" data-sec="${sub.id}">${esc(plano(sub.titulo))}</button>${chips(sub.meta)}` : ''}</p>`;
+}
+function vistaMapa(doc) {
+  if (doc.esPlan && doc.pareja) return mapaPlan(doc);
+  const clave = doc.archivo || doc.nombre, arbol = doc.estructura || [];
+  const pasos = arbol.filter((s) => s.estado !== 'doc');
+  const docs = arbol.filter((s) => s.estado === 'doc' && !/^estado\b/i.test(plano(s.titulo)));
+  if (!pasos.length) return esquema(doc);
+  const { h, t } = sumar(pasos);
+  const padre = doc.padre ? `<p class="suave">Mini backlog de <button class="enlace" data-ir="backlogs" data-sel="${esc(doc.padre.archivo)}" data-sec="${doc.padre.id}">${esc(doc.padre.archivo)} · ${esc(doc.padre.clave)}</button></p>` : '';
+  return `<div class="mapa-cab"><div class="rotulo">Progreso</div>
+      <div class="global">${barra(h, t, 24)}<span><strong>${h}/${t}</strong> tareas · ${pct(h, t)} %</span></div>
+      ${lineaAqui(doc, clave)}${padre}${estadoResumido(doc.estado)}</div>
+    <div class="mapa-rejilla"><div class="mapa-interior"><div class="mapa-linea">
+      <ol class="linea">${pasos.map((s, i) => paso(s, { doc, clave, ultimo: i === pasos.length - 1 })).join('')}</ol>
+      ${documentacion(docs)}</div>${panelFalta(doc, false)}</div></div>`;
+}
+// Documento sin casillas (los planes de Claude): esquema de secciones con sus pasos numerados.
+function esquema(doc) {
+  const clave = doc.archivo || doc.nombre, arbol = (doc.estructura || []).filter((s) => !/^estado\b/i.test(plano(s.titulo)));
+  if (!arbol.length) return `<div class="mapa-cab"><div class="rotulo">Esquema</div><p class="suave">Este documento no tiene secciones ## ni casillas. Míralo en «Documento».</p></div>`;
+  const todas = aplanar(arbol), nItems = todas.reduce((a, s) => a + s.items.length, 0);
+  const ramas = [...new Set(todas.map((s) => s.meta.rama).concat((doc.contenido.match(/rama\s+`([^`]+)`/gi) || []).map((m) => m.replace(/^rama\s+`|`$/gi, ''))).filter(Boolean))];
+  const nodo = (s, i, lista) => {
+    const k = `${clave}#${s.id}`, abierto = abiertos.has(k) ? abiertos.get(k) : false;
+    const nItemsS = aplanar([s]).reduce((a, x) => a + x.items.length, 0);
+    const lista_ = s.items.length ? `<${s.items[0].numero ? 'ol' : 'ul'} class="items">${s.items.map((it) => `<li${it.numero ? ` value="${esc(it.numero)}"` : ''}>${inline(corto(it.texto, 320))}</li>`).join('')}</${s.items[0].numero ? 'ol' : 'ul'}>` : '';
+    return `<li class="paso est-doc" id="${idPaso(clave, s.id)}"><details data-k="${esc(k)}"${abierto ? ' open' : ''}>
+      <summary>${glifo(i === lista.length - 1)}<span class="icono" aria-hidden="true">${s.hijas.length ? '▸' : '·'}</span>
+        <span class="cab-paso"><span class="titulo">${inlineTitulo(s.titulo)}</span>${chips(s.meta)}</span>
+        ${nItemsS ? `<span class="avance"><span class="n">${nItemsS} paso${nItemsS === 1 ? '' : 's'}</span></span>` : ''}</summary>
+      <div class="cuerpo">${s.meta.nota ? `<p class="nota">${inline(s.meta.nota)}</p>` : ''}${lista_}
+        <p><button class="enlace" data-doc="${esc(plano(s.tituloCrudo))}">Leer la sección completa</button></p>
+        ${s.hijas.length ? `<ol class="linea">${s.hijas.map(nodo).join('')}</ol>` : ''}</div>
+    </details></li>`;
+  };
+  return `<div class="mapa-cab"><div class="rotulo">Esquema</div>
+      <p style="margin-top:0"><strong>${todas.length}</strong> secciones · <strong>${nItems}</strong> pasos${ramas.length ? ` · ramas: ${ramas.map((r) => badgeRama(r)).join(' ')}` : ''}</p>
+      <p class="suave">Los planes no llevan casillas: el avance real vive en el backlog. Aquí, su estructura para recorrerla rápido.</p>
+      <div class="acciones-esquema"><button class="boton" data-plegar="abrir">Expandir todo</button><button class="boton" data-plegar="cerrar">Colapsar todo</button></div></div>
+    <ol class="linea">${arbol.map(nodo).join('')}</ol>`;
+}
+// PLAN: la línea de tiempo son los hitos de su tabla; el avance sale del backlog emparejado.
+function mapaPlan(doc) {
+  const par = P.backlogs.find((b) => b.archivo === doc.pareja);
+  const secs = aplanar(par.estructura), { h, t } = sumar(par.estructura.filter((s) => s.estado !== 'doc'));
+  const aquiPar = secs.find((s) => s.id === par.aqui);
+  const hitoAqui = aquiPar && doc.hitos.find((x) => x.clave === aquiPar.clave);
+  const pasos = doc.hitos.map((hi, i) => {
+    const s = secs.find((x) => x.clave === hi.clave);
+    const estado = s ? s.estado : 'pendiente', esAqui = hi === hitoAqui, k = `${doc.archivo}#${hi.clave}`;
+    const titulo = `${hi.clave} — ${hi.nombre || (s ? plano(s.titulo).replace(/^H\d+\s*[—–-]\s*/, '') : '')}`;
+    const abierto = abiertos.has(k) ? abiertos.get(k) : esAqui;
+    return `<li class="paso est-${estado}${esAqui ? ' actual' : ''}" id="${idPaso(doc.archivo, hi.clave)}"><details data-k="${esc(k)}"${abierto ? ' open' : ''}>
+      ${cabeceraPaso({ titulo, meta: { duracion: hi.duracion }, esAqui, ultimo: i === doc.hitos.length - 1, hechas: s?.hechas || 0, total: s?.total || 0, estado })}
+      <div class="cuerpo hito-cuerpo"><p>${inline(hi.contenido)}</p>
+        ${hi.verificacion ? `<details class="grupo"><summary class="rotulo">Verificación</summary><p>${inline(hi.verificacion)}</p></details>` : ''}
+        ${s ? `<p><button class="boton" data-ir="backlogs" data-sel="${esc(par.archivo)}" data-sec="${s.id}">Ver ${esc(hi.clave)} en ${esc(par.archivo)}</button></p>` : ''}</div>
+    </details></li>`;
+  });
+  return `<div class="mapa-cab"><div class="rotulo">Progreso</div>
+      <div class="global">${barra(h, t, 24)}<span><strong>${h}/${t}</strong> tareas · ${pct(h, t)} %</span></div>
+      ${hitoAqui ? `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> <button class="enlace" data-saltar="${idPaso(doc.archivo, hitoAqui.clave)}">${esc(hitoAqui.clave)} — ${esc(hitoAqui.nombre || plano(aquiPar.titulo))}</button></p>` : ''}
+      <p class="suave">Hitos de la tabla «Secuencia de hitos»; el avance sale de <button class="enlace" data-ir="backlogs" data-sel="${esc(par.archivo)}">${esc(par.archivo)}</button>.</p></div>
+    <div class="mapa-rejilla"><div class="mapa-interior"><div class="mapa-linea">
+      <ol class="linea">${pasos.join('')}</ol>${documentacion(doc.estructura)}</div>${panelFalta(par, true)}</div></div>`;
+}
+
+// ---------- Resumen: mapa en miniatura ----------
+function segmentos(b) {
+  const secs = b.estructura.filter((s) => s.estado !== 'doc');
+  return `<div class="segmentos" aria-label="Avance por sección">${secs.map((s) => `<button class="seg est-${s.estado}${s.id === b.aqui ? ' actual' : ''}" style="--p:${pct(s.hechas, s.total)}%" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${s.id}"
+      title="${esc(plano(s.titulo))} · ${s.hechas}/${s.total}" aria-label="${esc(s.clave || plano(s.titulo))}: ${ETIQUETA[s.estado]}, ${s.hechas} de ${s.total}"><span class="bloque" aria-hidden="true">${GLIFO_SEG[s.estado]}</span><span class="clave" aria-hidden="true">${esc(s.clave || '·')}</span></button>`).join('')}</div>`;
+}
+
+function pintarNavegacion() {
+  const n = P.notas?.abiertas.length || 0;
+  $('#pestanas').innerHTML = PESTANAS.map(([id, t]) =>
+    `<button data-p="${id}"${id === pestana ? ' aria-current="page"' : ''}>${t}${id === 'notas' && n ? `<span class="cuenta">${n}</span>` : ''}${id === 'planes' ? ` <span class="suave">${P.planes.length}</span>` : ''}</button>`).join('');
+  const g = P.git, abiertosPR = g ? g.prs.filter((x) => x.state === 'OPEN').length : 0;
+  $('#rama-cab').innerHTML = g?.rama ? `${badgeRama(g.rama, 'rama-actual')}${g.sinPush?.length ? ` <span class="etq DRAFT">↑ ${g.sinPush.length} sin subir</span>` : ''}` : '';
+  $('#barra-estado').innerHTML = `${g?.rama ? `<button class="rama-barra" data-rama="${esc(g.rama)}" title="Rama actual">⎇ ${esc(g.rama)}</button>` : ''}${g?.sinPush?.length ? `<span>↑ ${g.sinPush.length} sin subir</span>` : ''}
+    ${g ? `<button data-p="github">⊙ ${abiertosPR} PR abiertos</button>` : ''}
+    <button data-p="notas">✉ ${n} notas</button>
+    <span class="opcional">${editable() ? '✎ edición activa' : '◌ solo lectura'}</span>
+    <span class="derecha opcional">Actualizado ${esc(fecha(DATOS.generado))}</span>`;
+}
+
+function barraVista(doc, p) {
+  return `<div class="barra-vista"><div class="conmutador" role="group" aria-label="Vista">
+      <button data-modo="mapa" aria-pressed="${modo[p] !== 'documento'}">Mapa</button><button data-modo="documento" aria-pressed="${modo[p] === 'documento'}">Documento</button></div>
+    <div>${acciones(doc.ruta)}</div></div>`;
+}
+const promptLinea = () => `<div class="prompt" aria-hidden="true"><b>❯</b> tablero --proyecto ${esc(P.id)} --vista ${esc(pestana)}${sel[pestana] ? ' ' + esc(sel[pestana]) : ''}</div>`;
+
+// ---------- Edición de un .md ----------
+const contenidoDe = (ruta) => [...P.backlogs, ...P.planes].find((d) => d.ruta === ruta)?.contenido ?? (P.notas?.ruta === ruta ? P.notas.contenido : null);
+function vistaEditor(ruta) {
+  const original = contenidoDe(ruta) ?? '';
+  return `<form class="editor-md" data-ruta="${esc(ruta)}">
+    <p class="suave hash" style="margin-top:0;overflow-wrap:anywhere">✎ ${esc(ruta)}</p>
+    <label class="sr" for="texto-md">Contenido del archivo</label>
+    <textarea id="texto-md" spellcheck="false">${esc(borradores.get(ruta) ?? original)}</textarea>
+    <div id="conflicto"></div>
+    <div class="pie"><button class="boton primario" type="submit">Guardar</button><button class="boton" type="button" data-cancelar>Cancelar</button>
+      <span class="suave">⌘S / Ctrl+S guarda · Esc cancela</span></div></form>`;
+}
+async function api(ruta, cuerpo) {
+  const r = await fetch(ruta, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo) });
+  const j = await r.json().catch(() => ({ error: `Respuesta inválida (${r.status})` }));
+  if (!r.ok) throw Object.assign(new Error(j.error || `Error ${r.status}`), { estado: r.status, actual: j.actual });
+  return j;
+}
+function avisar(texto, error) {
+  const el = $('#aviso');
+  el.className = error ? 'error' : ''; el.textContent = texto;
+  clearTimeout(avisar.t); avisar.t = setTimeout(() => { el.textContent = ''; }, error ? 8000 : 3000);
+}
+function recargarDatos(nuevos) {
+  const i = DATOS.proyectos.indexOf(P);
+  DATOS = nuevos; P = DATOS.proyectos[Math.max(0, i)];
+}
+async function guardarEdicion(form, forzar) {
+  const ruta = form.dataset.ruta, texto = form.querySelector('textarea').value, boton = form.querySelector('[type=submit]');
+  boton.disabled = true; boton.textContent = 'Guardando…';
+  try {
+    const r = await api('/api/guardar', { ruta, contenido: texto, previo: forzar ? undefined : contenidoDe(ruta) });
+    borradores.delete(ruta); editando = null; recargarDatos(r.datos); pintar(); avisar('Guardado.');
+  } catch (e) {
+    boton.disabled = false; boton.textContent = 'Guardar';
+    if (e.estado === 409) {
+      form.querySelector('#conflicto').innerHTML = `<div class="aviso-linea">${esc(e.message)} Si guardas igual, se pierde lo que cambió afuera.
+        <div style="margin-top:6px"><button class="boton" type="button" data-forzar>Guardar igual</button><button class="boton" type="button" data-recargar>Descartar mis cambios y recargar</button></div></div>`;
+      form._actual = e.actual;
+    } else avisar(`No se pudo guardar: ${e.message}`, true);
+  }
+}
+
+// ---------- GitHub: ramas + grafo ----------
+const limpiarRef = (r) => r.replace(/^HEAD -> /, '').replace(/^origin\//, '').replace(/^tag: /, '');
+function refsDe(c) {
+  return [...new Set((c.refs || '').split(', ').filter((r) => r && r !== 'origin/HEAD' && r !== 'HEAD').map(limpiarRef))];
+}
+function svgGrafo(filas, H) {
+  const X = (i) => 9 + i * 16, ancho = X(Math.max(1, ...filas.flatMap((f) => [...f.antes, ...f.despues, f.col]))) + 10;
+  const curva = (x1, y1, x2, y2) => x1 === x2 ? `M${x1} ${y1}V${y2}` : `M${x1} ${y1}C${x1} ${(y1 + y2) / 2} ${x2} ${(y1 + y2) / 2} ${x2} ${y2}`;
+  const lineas = [], puntos = [];
+  filas.forEach((f, r) => {
+    const y0 = r * H, ym = y0 + H / 2, y1 = y0 + H, xc = X(f.col);
+    for (const i of f.antes) {
+      if (i === f.col) { if (f.tieneArriba) lineas.push([curva(xc, y0, xc, ym), i]); }
+      else if (f.convergen.includes(i)) lineas.push([curva(X(i), y0, xc, ym), i]);
+      else lineas.push([curva(X(i), y0, X(i), y1), i]);
+    }
+    if (f.despues.includes(f.col) && f.padres) lineas.push([curva(xc, ym, xc, y1), f.col]);
+    for (const j of f.nacen) if (j !== f.col) lineas.push([curva(xc, ym, X(j), y1), j]);
+    puntos.push(f.merge
+      ? `<circle cx="${xc}" cy="${ym}" r="4.5" fill="var(--fondo)" stroke="${color(f.col)}" stroke-width="2"/>`
+      : `<circle cx="${xc}" cy="${ym}" r="4.5" fill="${color(f.col)}"/>`);
+  });
+  return `<svg width="${ancho}" height="${filas.length * H}" aria-hidden="true" focusable="false">${lineas.map(([d, i]) => `<path d="${d}" fill="none" stroke="${color(i)}" stroke-width="2"/>`).join('')}${puntos.join('')}</svg>`;
+}
+function vistaGrafo(g) {
+  const H = 30, filas = (g.grafo || []).map((f, i) => ({ ...f, merge: g.commits[i].padres.length > 1, padres: g.commits[i].padres.length }));
+  if (!filas.length) return '<div class="suave">Sin commits.</div>';
+  const prDe = new Map();
+  for (const pr of g.prs) for (const c of pr.commits) if (!prDe.has(c.oid) || pr.baseRefName !== 'main') prDe.set(c.oid, pr);
+  const filasHtml = g.commits.map((c, i) => {
+    const refs = refsDe(c), mpr = c.titulo.match(/^Merge pull request #(\d+) from [^/]+\/(.+)$/);
+    const pr = mpr ? g.prs.find((x) => x.number == mpr[1]) : prDe.get(c.oid);
+    const foco = ramaFoco && refs.includes(ramaFoco);
+    const tit = mpr ? `<span class="tit merge">⑂ merge de ${badgeRama(mpr[2], '', 'var(--suave)')}${pr ? ` → ${esc(pr.baseRefName)}` : ''}</span>` : `<span class="tit" title="${esc(c.titulo)}">${esc(c.titulo)}</span>`;
+    return `<li class="grafo-fila${foco ? ' foco' : ''}"${foco ? ' id="foco-grafo"' : ''}><a class="hash" href="${esc(g.url)}/commit/${c.oid}">${c.oid.slice(0, 7)}</a>
+      ${refs.map((r) => badgeRama(r, '', color(filas[i].col))).join('')}${tit}
+      ${pr ? `<a class="hash" href="${esc(pr.url)}">#${pr.number}</a>` : ''}${g.sinPush.includes(c.oid) ? '<span class="etq DRAFT">sin subir</span>' : ''}<span class="cuando">${hace(c.fecha)}</span></li>`;
+  }).join('');
+  return `<div class="leyenda"><span>● commit</span><span>○ merge (PR)</span><span>cada color es un carril; la etiqueta ⎇ marca dónde está cada rama</span></div>
+    <div class="tabla-scroll"><div class="grafo">${svgGrafo(filas, H)}<ol class="grafo-filas">${filasHtml}</ol></div></div>`;
+}
+function filaRama(r, g) {
+  const prs = prsDeRama(r.nombre), ses = sesionesDeRama(r.nombre), pls = planesDeRama(r.nombre);
+  const seg = r.seguimiento.replace(/ahead (\d+)/, '↑$1 sin subir').replace(/behind (\d+)/, '↓$1 por bajar').replace(', ', ' · ');
+  const donde = r.local && r.remota ? 'local + origin' : r.local ? 'solo local' : 'solo en origin';
+  return `<tr${ramaFoco === r.nombre ? ' class="foco" id="foco-rama"' : ''}>
+    <td class="col-rama">${badgeRama(r.nombre, r.nombre === g.rama ? 'rama-actual' : '')}${r.nombre === g.rama ? ' <span class="suave">actual</span>' : ''}<br><span class="suave">${donde}${seg ? ' · ' + esc(seg) : ''} · ${hace(r.fecha)}</span></td>
+    <td><div class="sesiones">${prs.map(etqPR).join(' ')}${ses.map(botonSesion).join('')}${pls.map(botonPlan).join('')}${!prs.length && !ses.length && !pls.length ? '<span class="suave">sin PR ni sesión enlazada</span>' : ''}</div></td></tr>`;
+}
+
+const VISTAS = {
+  resumen() {
+    const bl = P.backlogs.filter((b) => !b.esPlan);
+    const g = P.git;
+    const abiertosPR = (g?.prs || []).filter((p) => p.state === 'OPEN');
+    const ult = P.planes[0];
+    const sesActual = g?.rama ? sesionesDeRama(g.rama) : [];
+    return `<div class="rejilla">
+      ${bl.map((b) => `<section class="tarjeta">
+        <h2><span>${esc(b.archivo)}</span><small>${hace(b.modificado)}</small></h2>
+        <div>${barra(b.hechas, b.total, 20)}</div><div class="suave">${b.hechas} de ${b.total} tareas (${pct(b.hechas, b.total)} %)</div>
+        ${segmentos(b)}
+        ${lineaAqui(b, b.archivo, true)}
+        ${estadoResumido(b.estado)}
+        <p><button class="boton" data-ir="backlogs" data-sel="${esc(b.archivo)}">Ver mapa</button></p>
+      </section>`).join('')}
+      <section class="tarjeta">
+        <h2><span>GitHub</span><small>${g ? `${abiertosPR.length} PR abiertos` : ''}</small></h2>
+        ${g?.rama ? `<p style="margin-top:0">Rama actual: ${badgeRama(g.rama, 'rama-actual')}</p>${sesActual.length ? `<div class="sesiones" style="display:flex;flex-wrap:wrap;gap:4px 6px">${sesActual.map(botonSesion).join('')}</div>` : ''}` : ''}
+        ${g?.sinPush?.length ? `<p class="suave" style="color:var(--aviso)">${g.sinPush.length} commit(s) local(es) sin subir</p>` : ''}
+        <div class="rotulo">PRs abiertos</div>
+        ${abiertosPR.length ? abiertosPR.map((pr) => filaPR(pr)).join('') : '<div class="suave">Ninguno</div>'}
+        <div class="rotulo" style="margin-top:10px">Últimos mergeados</div>
+        ${(g?.prs || []).filter((p) => p.state === 'MERGED').slice(0, 4).map((pr) => filaPR(pr)).join('')}
+      </section>
+      <section class="tarjeta">
+        <h2><span>Notas para Claude</span><small>${P.notas ? hace(P.notas.modificado) : ''}</small></h2>
+        ${P.notas?.abiertas.length ? P.notas.abiertas.map((a) => `<div class="fila"><span>${CASILLA()[0]} ${inline(a)}</span></div>`).join('') : '<div class="suave">Sin notas abiertas.</div>'}
+        <p>${P.notas ? `<button class="boton" data-p="notas">${editable() ? 'Añadir nota' : 'Ver notas'}</button>` : ''}</p>
+      </section>
+      ${ult ? `<section class="tarjeta"><h2><span>Último plan</span><small>${hace(ult.modificado)}</small></h2>
+        <div>${esc(ult.titulo)}</div><p><button class="boton" data-ir="planes" data-sel="${esc(ult.nombre)}">Abrir plan</button></p></section>` : ''}
+    </div>`;
+  },
+  backlogs() {
+    if (!P.backlogs.length) return '<div class="vacio">No hay backlogs en las carpetas configuradas.</div>';
+    const actual = P.backlogs.find((b) => b.archivo === sel.backlogs) || P.backlogs[0];
+    return `<div class="archivos" aria-label="Archivos">${P.backlogs.map((b) => `<button data-sel="${esc(b.archivo)}" aria-current="${b === actual}">${esc(b.archivo)}${b.total ? `<span class="n">${b.hechas}/${b.total}</span>` : ''}</button>`).join('')}</div>
+      ${editando === actual.ruta ? vistaEditor(actual.ruta) : `${barraVista(actual, 'backlogs')}
+      ${modo.backlogs === 'documento' ? `<div class="tarjeta">${md(actual.contenido)}</div>` : vistaMapa(actual)}`}`;
+  },
+  planes() {
+    if (!P.planes.length) return '<div class="vacio">Aún no hay planes de Claude asociados a este proyecto.</div>';
+    const actual = P.planes.find((p) => p.nombre === sel.planes) || P.planes[0];
+    return `<div class="lateral">
+      <div class="tarjeta lista">${P.planes.map((p) => `<button data-sel="${esc(p.nombre)}" aria-current="${p === actual}">
+        <strong>${esc(p.titulo)}</strong><br><span class="suave">${fecha(p.modificado)} · ${esc(p.carpetas.join(', '))}</span></button>`).join('')}</div>
+      <div style="min-width:0">${editando === actual.ruta ? vistaEditor(actual.ruta) : `<p class="suave hash" style="margin-top:0;overflow-wrap:anywhere">${esc(actual.ruta)}</p>${barraVista(actual, 'planes')}
+        ${modo.planes === 'documento' ? `<div class="tarjeta">${md(actual.contenido)}</div>` : vistaMapa(actual)}`}</div></div>`;
+  },
+  historial() {
+    const eventos = Object.entries(P.historial || {}).flatMap(([archivo, es]) => es.map((e) => ({ archivo, ...e })))
+      .sort((a, b) => b.fecha.localeCompare(a.fecha));
+    if (!eventos.length) return '<div class="vacio">Sin historial todavía.</div>';
+    return `<p class="suave">Cada vez que un backlog cambia, el tablero guarda qué líneas se añadieron o quitaron. El historial empieza el día en que se instaló el tablero.</p>
+      ${eventos.map((e) => `<section class="tarjeta" style="margin-bottom:14px">
+        <h2><span>${esc(e.archivo)}</span><small>${fecha(e.fecha)} · ${e.hechas}/${e.total}</small></h2>
+        ${e.inicial ? '<div class="suave">Primera foto del archivo.</div>' : `<details ${e.anadidas.length + e.quitadas.length < 12 ? 'open' : ''}><summary class="suave">+${e.anadidas.length} / −${e.quitadas.length} líneas</summary>
+          <div class="diff">${e.quitadas.map((l) => `<div class="menos">− ${esc(l)}</div>`).join('')}${e.anadidas.map((l) => `<div class="mas">+ ${esc(l)}</div>`).join('')}</div></details>`}
+      </section>`).join('')}`;
+  },
+  github() {
+    const g = P.git;
+    if (!g) return '<div class="vacio">Este proyecto no tiene repo configurado.</div>';
+    const ramas = g.ramas || [];
+    const fijas = ['main', 'develop'];
+    const integrada = (r) => { const prs = prsDeRama(r.nombre); return prs.length && prs.every((x) => x.state !== 'OPEN') && !sesionesDeRama(r.nombre).some(({ s }) => s.estado !== 'hecho'); };
+    const activa = (r) => fijas.includes(r.nombre) || r.nombre === g.rama || r.nombre === ramaFoco || !integrada(r);
+    const rango = (r) => fijas.includes(r.nombre) ? fijas.indexOf(r.nombre) : r.nombre === g.rama ? 2 : 3;
+    const orden = (a, b) => rango(a) - rango(b) || b.fecha.localeCompare(a.fecha);
+    const act = ramas.filter(activa).sort(orden), resto = ramas.filter((r) => !activa(r));
+    return `<p class="suave">${g.url ? `<a href="${esc(g.url)}">${esc(g.url)}</a> · ` : ''}datos de GitHub: ${g.actualizadoGh ? hace(g.actualizadoGh) : 'sin conexión'}</p>
+      <section class="tarjeta"><h2><span>Ramas</span><small>${ramas.length}</small></h2>
+        <p class="suave" style="margin-top:0">Cada rama con su PR y las sesiones de los backlogs y planes que la usan (por el «rama \`…\`» del título). Haz clic en una rama para verla en el grafo.</p>
+        <div class="tabla-scroll"><table class="ramas"><tbody>${act.map((r) => filaRama(r, g)).join('')}</tbody></table></div>
+        ${resto.length ? `<details style="margin-top:8px"><summary class="suave">${resto.length} ramas ya integradas</summary><div class="tabla-scroll"><table class="ramas"><tbody>${resto.map((r) => filaRama(r, g)).join('')}</tbody></table></div></details>` : ''}
+      </section>
+      <section class="tarjeta" style="margin-top:18px"><h2><span>Grafo de ramas</span><small>últimos ${g.commits.length} commits</small></h2>${vistaGrafo(g)}</section>
+      <section class="tarjeta" style="margin-top:18px"><h2><span>Pull requests</span><small>${g.prs.length}</small></h2>
+        ${g.prs.map((pr) => { const ses = sesionesDeRama(pr.headRefName); return `<details class="fila" style="display:block"><summary>${filaPR(pr, true)}</summary>
+          <div class="suave">${badgeRama(pr.headRefName)} → ${esc(pr.baseRefName)} · creado ${fecha(pr.createdAt)}${pr.mergedAt ? ' · mergeado ' + fecha(pr.mergedAt) : ''}</div>
+          ${ses.length ? `<div class="sesiones" style="display:flex;flex-wrap:wrap;gap:4px 6px;margin:4px 0">${ses.map(botonSesion).join('')}</div>` : ''}
+          ${pr.commits.map((c) => `<div class="suave"><a class="hash" href="${esc(g.url)}/commit/${c.oid}">${c.oid.slice(0, 7)}</a> ${esc(c.titulo)}</div>`).join('')}
+          ${pr.body ? `<details><summary class="suave">Descripción</summary>${md(pr.body)}</details>` : ''}
+        </details>`; }).join('')}
+      </section>`;
+  },
+  notas() {
+    if (!P.notas) return '<div class="vacio">Este proyecto no tiene archivo de notas configurado.</div>';
+    if (editando === P.notas.ruta) return vistaEditor(P.notas.ruta);
+    const ab = P.notas.abiertas;
+    return `<div class="rejilla">
+      <section class="tarjeta"><h2><span>Nueva nota para Claude</span></h2>
+        ${editable() ? `<form class="nueva-nota" id="form-nota"><label class="sr" for="texto-nota">Texto de la nota</label>
+          <textarea id="texto-nota" placeholder="Pregunta, aclaración o pendiente para la próxima sesión…"></textarea>
+          <div><button class="boton primario" type="submit">Añadir nota</button><span class="suave">⌘↵ añade · queda como casilla bajo «Abiertas»</span></div></form>`
+        : `<p class="suave">Para añadir notas aquí, abre el tablero con <strong>Tablero.app</strong> (o <code>node generar.mjs --abrir</code>): así corre el servidor local que guarda el archivo. Abierto como archivo suelto es solo lectura.</p>`}
+      </section>
+      <section class="tarjeta"><h2><span>Abiertas</span><small>${ab.length}</small></h2>
+        ${ab.length ? ab.map((a) => `<div class="nota-abierta"><span class="casilla" aria-hidden="true">[ ]</span><span class="texto">${inline(a)}</span></div>`).join('') : '<div class="suave">Sin notas abiertas.</div>'}
+        <p class="suave">Al iniciar una sesión en este proyecto, Claude recibe esta lista y las responde en el archivo.</p>
+      </section></div>
+      <section class="tarjeta" style="margin-top:18px"><h2><span>${esc(P.notas.ruta.split('/').pop())}</span><small>${hace(P.notas.modificado)}</small></h2>
+        <p>${acciones(P.notas.ruta)}</p>${md(P.notas.contenido)}</section>`;
+  },
+};
+
+function filaPR(pr, sinFila) {
+  const [cls, txt] = ESTADO_PR(pr);
+  const dentro = `<span><a href="${pr.url}">#${pr.number}</a> ${esc(pr.title)}</span><span class="etq ${cls}">${txt}</span>`;
+  return sinFila ? `<span style="display:inline-flex;gap:8px;justify-content:space-between;width:calc(100% - 20px)">${dentro}</span>` : `<div class="fila">${dentro}</div>`;
+}
+
+function pintar() {
+  pintarNavegacion();
+  $('#contenido').innerHTML = promptLinea() + (VISTAS[pestana] || VISTAS.resumen)();
+}
+
+const desplazar = (el) => el.scrollIntoView({ block: 'start', behavior: movimientoReducido() ? 'auto' : 'smooth' });
+// Abre (y lleva el foco a) un paso del mapa.
+function saltar(id) {
+  const li = document.getElementById(id);
+  if (!li) return;
+  for (let d = li.querySelector('details'); d; d = d.parentElement?.closest('details')) d.open = true;
+  desplazar(li);
+  li.querySelector('summary')?.focus({ preventScroll: true });
+}
+// Desde la Documentación/el esquema: abre el Documento en ese encabezado.
+function irADoc(texto) {
+  modo[pestana] = 'documento'; guardar('tablero.modo', JSON.stringify(modo)); pintar();
+  const hs = [...document.querySelectorAll('#contenido .md :is(h1,h2,h3,h4)')];
+  const h = hs.find((x) => plano(x.textContent) === texto) || hs.find((x) => plano(x.textContent).startsWith(texto.slice(0, 30)));
+  if (!h) return;
+  h.tabIndex = -1; h.classList.add('destacado');
+  desplazar(h);
+  h.focus({ preventScroll: true });
+}
+const alInicio = () => window.scrollTo({ top: 0 });
+// Sale del editor guardando el texto como borrador (no se pierde al cambiar de pestaña).
+function soltarEditor() {
+  const t = $('#texto-md');
+  if (editando && t) { if (t.value !== (contenidoDe(editando) ?? '')) borradores.set(editando, t.value); else borradores.delete(editando); }
+  editando = null;
+}
+function irRama(nombre) {
+  soltarEditor();
+  ramaFoco = nombre; pestana = 'github'; guardar('tablero.pestana', pestana); pintar();
+  const el = document.getElementById('foco-rama') || document.getElementById('foco-grafo');
+  if (el) { desplazar(el); el.querySelector('button')?.focus({ preventScroll: true }); } else alInicio();
+}
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.rama) { e.preventDefault(); irRama(b.dataset.rama); return; }
+  if (b.dataset.editar) { editando = b.dataset.editar; pintar(); const t = $('#texto-md'); t?.focus(); t?.setSelectionRange(0, 0); t?.scrollTo(0, 0); return; }
+  if ('cancelar' in b.dataset) { borradores.delete(editando); editando = null; pintar(); return; }
+  if ('forzar' in b.dataset) { guardarEdicion(b.closest('form'), true); return; }
+  if ('recargar' in b.dataset) { const f = b.closest('form'); borradores.delete(f.dataset.ruta); f.querySelector('textarea').value = f._actual ?? ''; f.querySelector('#conflicto').innerHTML = ''; editando = null; location.reload(); return; }
+  if (b.dataset.plegar) { document.querySelectorAll('#contenido details[data-k]').forEach((d) => { d.open = b.dataset.plegar === 'abrir'; }); return; }
+  if (b.dataset.p) { soltarEditor(); pestana = b.dataset.p; guardar('tablero.pestana', pestana); if (pestana !== 'github') ramaFoco = null; pintar(); alInicio(); if (pestana === 'notas') $('#texto-nota')?.focus({ preventScroll: true }); return; }
+  if (b.dataset.modo) { modo[pestana] = b.dataset.modo; guardar('tablero.modo', JSON.stringify(modo)); pintar(); return; }
+  if (b.dataset.saltar) { saltar(b.dataset.saltar); return; }
+  if (b.dataset.doc) { irADoc(b.dataset.doc); return; }
+  if (b.dataset.ir || b.dataset.sel) soltarEditor();
+  if (b.dataset.ir) { pestana = b.dataset.ir; guardar('tablero.pestana', pestana); }
+  if (b.dataset.sel) {
+    sel[pestana] = b.dataset.sel;
+    if (b.dataset.sec) { modo[pestana] = 'mapa'; abiertos.set(`${b.dataset.sel}#${b.dataset.sec}`, true); }
+    pintar();
+    if (b.dataset.sec) saltar(idPaso(b.dataset.sel, b.dataset.sec));
+    else alInicio();
+  }
+});
+document.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.classList.contains('editor-md')) return guardarEdicion(f);
+  if (f.id === 'form-nota') {
+    const t = f.querySelector('textarea'), boton = f.querySelector('[type=submit]');
+    if (!t.value.trim()) { t.focus(); return; }
+    boton.disabled = true;
+    try { const r = await api('/api/nota', { proyecto: P.id, texto: t.value }); recargarDatos(r.datos); pintar(); avisar('Nota añadida.'); $('#texto-nota')?.focus(); }
+    catch (err) { boton.disabled = false; avisar(`No se pudo añadir: ${err.message}`, true); }
+  }
+});
+document.addEventListener('keydown', (e) => {
+  const f = e.target.closest?.('form');
+  if (!f) return;
+  if (f.classList.contains('editor-md') && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); f.requestSubmit(); }
+  else if (f.classList.contains('editor-md') && e.key === 'Escape') { soltarEditor(); pintar(); }
+  else if (f.id === 'form-nota' && (e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); f.requestSubmit(); }
+});
+window.addEventListener('beforeunload', (e) => {
+  const t = $('#texto-md');
+  if (borradores.size || (t && editando && t.value !== (contenidoDe(editando) ?? ''))) e.preventDefault();
+});
+// Recuerda qué secciones abrió/cerró el usuario.
+document.addEventListener('toggle', (e) => { const k = e.target.dataset?.k; if (k) abiertos.set(k, e.target.open); }, true);
+
+// ---------- Controles de cabecera ----------
+const TEMAS = [['auto', 'Auto'], ['light', 'Claro'], ['dark', 'Oscuro']];
+$('#tema').innerHTML = TEMAS.map(([v, t]) => `<option value="${v}"${v === (raiz.dataset.theme || 'auto') ? ' selected' : ''}>${t}</option>`).join('');
+$('#tema').addEventListener('change', (e) => {
+  if (e.target.value === 'auto') delete raiz.dataset.theme; else raiz.dataset.theme = e.target.value;
+  guardar('tablero.tema', e.target.value);
+});
+
+$('#proyecto').innerHTML = DATOS.proyectos.map((p, i) => `<option value="${i}">${esc(p.nombre)}</option>`).join('');
+$('#proyecto').addEventListener('change', (e) => { soltarEditor(); P = DATOS.proyectos[e.target.value]; sel = {}; ramaFoco = null; pintar(); });
+P = DATOS.proyectos[0];
+if (P) pintar(); else $('#contenido').innerHTML = '<div class="vacio">No hay proyectos en proyectos.json.</div>';
+</script>
+</body>
+</html>

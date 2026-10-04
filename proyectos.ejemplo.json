@@ -1,0 +1,18 @@
+[
+  {
+    "id": "ejemplo",
+    "nombre": "Proyecto de ejemplo",
+    "autor": "Ana",
+    "repo": "~/Desarrollo/proyecto-ejemplo",
+    "docs": ["~/Desarrollo/proyecto-ejemplo/docs"],
+    "patronBacklogs": "^(BACKLOG|PLAN).*\\.md$",
+    "notas": "~/Desarrollo/proyecto-ejemplo/docs/NOTAS_PARA_CLAUDE.md",
+    "transcripciones": "-Users-ana-Desarrollo-proyecto-ejemplo",
+    "integraciones": [
+      { "id": "gh", "tipo": "github-projects", "propietario": "usuario", "numero": 1, "backlog": "BACKLOG_MVP.md", "auto": false },
+      { "id": "trello", "tipo": "trello", "tablero": "<idDelTablero>", "backlog": "BACKLOG_MVP.md",
+        "columnas": { "pendiente": "Por hacer", "en-curso": "En curso", "hecho": "Hecho" } },
+      { "id": "ado", "tipo": "azure-devops", "organizacion": "mi-organizacion", "proyecto": "mi-proyecto", "tipoItem": "Task", "backlog": "BACKLOG_MVP.md" }
+    ]
+  }
+]
