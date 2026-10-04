@@ -143,7 +143,8 @@ export function estructura(texto) {
     if (actual) {
       const celdas = linea.split(/(?<!\\)\|/).map((c) => c.trim())
       const mod = celdas.length >= 4 && celdas[2].match(/\*{0,2}(Opus|Sonnet|Haiku|Fable)\*{0,2}/i)
-      if (mod) (actual.filas ||= []).push({ clave: plano(celdas[1]), modelo: mod[1] })
+      const k = mod && plano(celdas[1]).match(/^[A-Z]\d+[a-z]?\b/)
+      if (k) (actual.filas ||= []).push({ clave: k[0], modelo: mod[1] })
     }
     if (!m) {
       // Planes de Claude: sin casillas; sus pasos son los ítems de lista de primer nivel.

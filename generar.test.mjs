@@ -228,3 +228,8 @@ test('prompts: el rótulo no se arrastra a una cita posterior y las citas de bac
   assert.deepEqual(aplanar(estructura(MVP)).flatMap((s) => s.prompts), [])
   assert.deepEqual(estructura('## A\n> solo una cita\n')[0].prompts, [])
 })
+
+test('prompts: la celda de sesión puede llevar texto extra («T2 (corta, tras elegir)»)', () => {
+  const a = estructura('## Cómo ejecutarlo\n| Sesión | Modelo | Qué |\n|---|---|---|\n| T2 (corta, tras elegir) | **Sonnet** | x |\n\nPrompt T2:\n> hola\n')
+  assert.equal(a[0].prompts[0].modelo, 'Sonnet')
+})
