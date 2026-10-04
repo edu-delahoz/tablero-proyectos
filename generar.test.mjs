@@ -342,3 +342,53 @@ test('frenteActivo: sin tarea abierta usa la primera sección abierta del hito',
   assert.equal(a.seccion, porClave(b.estructura, 'S13').id)
   assert.equal(a.tarea, null)
 })
+
+// Forma de BACKLOG_MVP.md tras S3b: sub-sesiones anidadas, S3c abierta y S4 ya con casillas.
+const SUBS = `## H3 — Consulta
+- [ ] **Revisión en iPhone**, rama \`fix\`:
+  - [ ] **Personas mal migradas (PR aparte):** ~32 registros.
+    - **S3 — auditoría (Fable, solo lectura)**, rama \`h3\`.
+      - [x] Auditar las dos migraciones
+    - **S3b — correcciones (Opus)**
+      - [x] Hallazgos 1–4
+      - [x] pgTAP
+    - **S3c — re-auditoría corta (Fable)**
+      - [ ] Re-auditar el diff
+      - [ ] Sacar __pycache__ del índice
+      - [ ] Escribir S4
+      - Resultado S3c:
+    - Después: **S4 Sonnet** consultas/UI.
+    - **S4 — consultas y UI (Sonnet)**
+      - [ ] Fichas con la N:M
+      - [ ] E2E
+`
+const PLANES_S = [
+  { nombre: 'vamos-hacer-s3-mis-melodic-kernighan.md', titulo: 'H4 · S3 partida en S3a + S3b' },
+  { nombre: 'sesi-n-s3-de-backlog-mvp-md-federated-sunrise.md', titulo: 'S3 (Fable) — Auditoría de las migraciones de personas H3' },
+  { nombre: 'federated-swing.md', titulo: 'Plan: cerrar los 5 pendientes de H3 en BACKLOG_MVP.md' },
+]
+const ultimaS3b = [{ anadidas: ['      - [x] pgTAP'] }]
+
+test('frenteActivo: Falta = solo las casillas de la sub-sesión siguiente (S3c), no las de S4', () => {
+  const a = frenteActivo(backlogFrente(SUBS), ultimaS3b, PLANES_S)
+  assert.equal(a.tarea.titulo, 'Personas mal migradas')
+  assert.deepEqual(a.subsesiones.map((s) => [s.clave, s.estado, s.hechas, s.total]), [['S3', 'hecho', 1, 1], ['S3b', 'hecho', 2, 2], ['S3c', 'siguiente', 0, 3], ['S4', 'pendiente', 0, 2]])
+  assert.deepEqual(a.tarea.abiertas, ['Re-auditar el diff', 'Sacar pycache del índice', 'Escribir S4'])
+  assert.deepEqual([a.tarea.hechas, a.tarea.total], [3, 8])
+})
+
+test('frenteActivo: plan por sub-sesión (mención en la siguiente, en la hecha, por nombre con la clave)', () => {
+  const b = backlogFrente(SUBS)
+  // (c) Sin menciones: el plan cuyo nombre lleva «s3» y el backlog; no el de H4 ni el del hito.
+  assert.deepEqual([frenteActivo(b, ultimaS3b, PLANES_S)].map((a) => [a.plan, a.planDe])[0], ['sesi-n-s3-de-backlog-mvp-md-federated-sunrise.md', 'S3'])
+  // Con un plan de S3c por nombre, manda sobre el de S3; «s3» no casa con «s3c».
+  const conS3c = [{ nombre: 'sesi-n-s3c-de-backlog-mvp-md-swift-ember.md', titulo: 'S3c — re-auditoría' }, ...PLANES_S]
+  assert.deepEqual([frenteActivo(b, ultimaS3b, conS3c)].map((a) => [a.plan, a.planDe])[0], ['sesi-n-s3c-de-backlog-mvp-md-swift-ember.md', null])
+  // (b) Mención en la sub-sesión hecha más reciente.
+  const enS3b = SUBS.replace('      - [x] pgTAP', '      - [x] pgTAP (plan `~/.claude/plans/s3b-plan.md`)')
+  const ultima = [{ anadidas: ['      - [x] Hallazgos 1–4'] }]
+  assert.deepEqual([frenteActivo(backlogFrente(enS3b), ultima, conS3c)].map((a) => [a.plan, a.planDe])[0], ['s3b-plan.md', 'S3b'])
+  // (a) Mención dentro de la siguiente manda sobre todo.
+  const enS3c = enS3b.replace('      - Resultado S3c:', '      - Plan: `~/.claude/plans/s3c-plan.md`')
+  assert.deepEqual([frenteActivo(backlogFrente(enS3c), ultima, conS3c)].map((a) => [a.plan, a.planDe])[0], ['s3c-plan.md', null])
+})

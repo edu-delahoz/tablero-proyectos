@@ -36,14 +36,14 @@ const falso = {
   async actualizar(cfg, cred, id, c) { Object.assign(fuera.get(id), c) },
 }
 
-let srv, puerto
+let srv, puerto, salidas = 0
 before(async () => {
   const { crearManejador } = await import('./generar.mjs')
   let manejador
   srv = createServer((q, r) => manejador(q, r))
   await new Promise((ok) => srv.listen(0, '127.0.0.1', ok))
   puerto = srv.address().port
-  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso } })
+  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso }, codigo: 'c1', alSalir: () => { salidas++ } })
 })
 after(() => srv.close())
 
@@ -220,4 +220,34 @@ test('robustez: un manejador que lanza (o rechaza) se registra y no tumba el pro
   eventos.get('uncaughtException')(new Error('x'))
   eventos.get('unhandledRejection')(new Error('y'))
   assert.equal(log.length, 4)
+})
+
+test('/api/version trae la huella del código; POST /api/salir (local, con Origin) avisa al servidor', async () => {
+  assert.equal((await get('/api/version')).json.codigo, 'c1')
+  assert.equal((await post('/api/salir', {}, { origin: 'http://evil.com' })).estado, 403)
+  assert.equal(salidas, 0)
+  assert.deepEqual(await post('/api/salir', {}), { estado: 200, json: { ok: true } })
+  assert.equal(salidas, 1)
+})
+
+test('asegurarServidor: arranca si no hay, deja el vigente y recicla si la huella cambió (SIGTERM si no sale)', async () => {
+  const { asegurarServidor, pidDelLog } = await import('./generar.mjs')
+  const prueba = (estado, remoto, { sale = true } = {}) => {
+    const hechos = []
+    let vivo = estado
+    return asegurarServidor({
+      codigo: 'nuevo', log: (m) => hechos.push(m),
+      vivo: async () => vivo, codigoRemoto: async () => remoto,
+      salir: async () => { hechos.push('salir'); if (sale) vivo = false },
+      matar: () => { hechos.push('matar'); vivo = false },
+      arrancar: async () => { hechos.push('arrancar'); vivo = true },
+    }).then((r) => [r, hechos.filter((m) => !/^reinicio/.test(m)), hechos.some((m) => /^reinicio por código nuevo/.test(m))])
+  }
+  assert.deepEqual(await prueba(false, null), ['arrancado', ['arrancar'], false])
+  assert.deepEqual(await prueba(true, 'nuevo'), ['vigente', [], false])
+  assert.deepEqual(await prueba(true, 'viejo'), ['reciclado', ['salir', 'arrancar'], true])
+  assert.deepEqual(await prueba(true, null, { sale: false }), ['reciclado', ['salir', 'matar', 'arrancar'], true])
+  const log = '2026 arranque (pid 11, puerto 47321)\n2026 arranque (pid 22, puerto 9)\n2026 arranque (pid 33, puerto 47321)\n'
+  assert.equal(pidDelLog(log, 47321), 33)
+  assert.equal(pidDelLog(log, 1), null)
 })

@@ -249,31 +249,63 @@ function construirFrente(b, lineas, { sec, hito, x }, planes) {
   if (seccion !== sec) x = null
   let tarea = null
   const subsesiones = []
+  const bloques = new Map() // sub-sesión -> sus líneas (para buscar menciones de plan)
+  let sig = null
   if (x) {
     const rango = lineas.slice(x.t.linea + 1, x.fin)
     const abiertas = []
-    let hechas = 0, total = 0
+    let hechas = 0, total = 0, sub = null
     for (const l of rango) {
+      // El bloque de una sub-sesión acaba en la siguiente línea con igual o menor sangría («- Después: …»).
+      if (sub && l.trim() && sangria(l) <= sub.sangria) sub = null
       const s = l.match(RE_SUB)
-      if (s) { subsesiones.push({ clave: s[1], titulo: plano(s[2]).replace(/\s*[—–-]\s*$/, ''), estado: 'pendiente', hechas: 0, total: 0, texto: plano(l.replace(/^\s*[-*]\s+/, '')) }); continue }
+      if (s) {
+        sub = { clave: s[1], titulo: plano(s[2]).replace(/\s*[—–-]\s*$/, ''), estado: 'pendiente', hechas: 0, total: 0, abiertas: [], texto: plano(l.replace(/^\s*[-*]\s+/, '')), sangria: sangria(l) }
+        subsesiones.push(sub); bloques.set(sub, [l]); continue
+      }
+      if (sub) bloques.get(sub).push(l)
       const c = l.match(RE_CASILLA)
       if (!c) continue
       const hecha = c[1] !== ' '
       total++; if (hecha) hechas++; else abiertas.push(plano(c[2]))
-      const sub = subsesiones.at(-1)
-      if (sub) { sub.total++; if (hecha) sub.hechas++ }
+      if (sub) { sub.total++; if (hecha) sub.hechas++; else sub.abiertas.push(plano(c[2])) }
     }
-    for (const s of subsesiones) if (s.total && s.hechas === s.total) s.estado = 'hecho'
-    const sig = subsesiones.find((s) => s.estado !== 'hecho' && /\bsiguiente\b/i.test(s.texto)) || subsesiones.find((s) => s.estado !== 'hecho')
+    for (const s of subsesiones) { delete s.sangria; if (s.total && s.hechas === s.total) s.estado = 'hecho' }
+    sig = subsesiones.find((s) => s.estado !== 'hecho' && /\bsiguiente\b/i.test(s.texto)) || subsesiones.find((s) => s.estado !== 'hecho') || null
     if (sig) sig.estado = 'siguiente'
-    tarea = { texto: x.t.texto, titulo: tituloTarea(x.t.texto), linea: x.t.linea, hechas, total, abiertas }
+    // «Falta» es de la sub-sesión siguiente; sin sub-sesiones, de toda la tarea.
+    tarea = { texto: x.t.texto, titulo: tituloTarea(x.t.texto), linea: x.t.linea, hechas, total, abiertas: sig ? sig.abiertas : abiertas }
   }
-  // Plan: mención dentro de la tarea; si no, el plan más reciente cuyo título nombra la clave del hito (y su backlog, si lo cita).
-  const mencion = x && lineas.slice(x.t.linea, x.fin).join('\n').match(/plans\/([A-Za-z0-9_-]+\.md)/)?.[1]
+  const { plan, planDe } = planDelFrente(b, lineas, { seccion, hito, x, subsesiones, sig, bloques }, planes)
+  return { seccion: seccion.id, tarea, subsesiones, plan, planDe }
+}
+
+// Plan del frente, de lo más concreto a lo más general:
+// (a) mención en la sub-sesión siguiente; (b) en la hecha más reciente; (c) plan cuyo nombre o título lleva la clave
+// de la sub-sesión (o de una anterior) y el backlog o el hito; (d) mención en la tarea; (e) título con la clave del hito.
+// `planDe` = clave de la sub-sesión anterior de la que sale el plan (la tarjeta lo rotula «Plan (de S3)»).
+const RE_PLAN = /plans\/([A-Za-z0-9_-]+\.md)/
+const fichas = (t) => String(t).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+function planDelFrente(b, lineas, { seccion, hito, x, subsesiones, sig, bloques }, planes) {
   const clave = hito.clave || seccion.clave
+  if (sig) {
+    const previas = subsesiones.slice(0, subsesiones.indexOf(sig)).reverse()
+    const hecha = previas.find((s) => s.estado === 'hecho')
+    for (const s of [sig, hecha].filter(Boolean)) {
+      const m = bloques.get(s).join('\n').match(RE_PLAN)?.[1]
+      if (m) return { plan: m, planDe: s === sig ? null : s.clave }
+    }
+    const archivo = b.archivo.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    const delBacklog = (p) => p.nombre.toLowerCase().includes(archivo) || p.titulo.includes(b.archivo) || (clave && (fichas(p.nombre).includes(clave.toLowerCase()) || new RegExp(`\\b${clave}\\b`).test(p.titulo)))
+    for (const s of [sig, ...previas]) {
+      const k = s.clave.toLowerCase()
+      const p = planes.find((p) => (fichas(p.nombre).includes(k) || fichas(p.titulo).includes(k)) && delBacklog(p))
+      if (p) return { plan: p.nombre, planDe: s === sig ? null : s.clave }
+    }
+  }
+  const mencion = x && lineas.slice(x.t.linea, x.fin).join('\n').match(RE_PLAN)?.[1]
   const porTitulo = clave && planes.find((p) => new RegExp(`\\b${clave}\\b`).test(p.titulo) && (!/\bBACKLOG\w*\.md\b/i.test(p.titulo) || p.titulo.includes(b.archivo)))?.nombre
-  const plan = mencion || porTitulo || (x ? null : seccion.plan || hito.plan) || null
-  return { seccion: seccion.id, tarea, subsesiones, plan }
+  return { plan: mencion || porTitulo || (x ? null : seccion.plan || hito.plan) || null, planDe: null }
 }
 
 // Filas «| **N — nombre** (duración) | contenido | verificación |» de la tabla de hitos de un PLAN.
@@ -708,8 +740,15 @@ function huella() {
 export const PUERTO = Number(process.env.TABLERO_PUERTO) || 47321
 const URL_LOCAL = `http://127.0.0.1:${PUERTO}/`
 const INACTIVIDAD_MS = 6 * 3600e3
+// Huella del código del servidor (mtimes): la del arranque viaja en /api/version; si la del disco cambia, se recicla.
+const CODIGO = ['generar.mjs', 'plantilla.html', 'bitacora.mjs', 'coherencia.mjs']
+export function huellaCodigo(dir = AQUI) {
+  return CODIGO.map((f) => statSync(join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0).join(':')
+}
+const CODIGO_ARRANQUE = huellaCodigo()
+const local = (dir) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(dir)
 // Manejador HTTP (exportado para los tests: puerto y adaptadores inyectables).
-export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alUsar = () => {} } = {}) {
+export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alUsar = () => {}, codigo = CODIGO_ARRANQUE, alSalir = () => {} } = {}) {
   let cache = null
   const fresco = async (forzar) => { if (forzar || !cache || Date.now() - cache.t > 15000) cache = { t: Date.now(), ...(await construir(true, { adaptadores })) }; return cache }
   const permitidas = async () => new Set((await fresco()).datos.proyectos.flatMap((p) => [...p.backlogs.map((b) => b.ruta), ...p.planes.map((x) => x.ruta), p.notas?.ruta, p.bitacora?.ruta]).filter(Boolean))
@@ -732,10 +771,15 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
     try {
       if (req.method === 'GET' && (ruta === '/' || ruta === '/index.html')) return enviar(res, 200, (await fresco(true)).html, 'text/html; charset=utf-8')
       if (req.method === 'GET' && ruta === '/api/ping') return enviar(res, 200, { tablero: true })
-      if (req.method === 'GET' && ruta === '/api/version') return enviar(res, 200, { version: huella() })
+      if (req.method === 'GET' && ruta === '/api/version') return enviar(res, 200, { version: huella(), codigo })
       if (req.method === 'GET' && ruta === '/api/datos') return enviar(res, 200, (await fresco(true)).datos)
       if (req.method !== 'POST') return enviar(res, 404, { error: 'no existe' })
       if (req.headers.origin !== `http://${host}` || !String(req.headers['content-type']).startsWith('application/json')) return enviar(res, 403, { error: 'origen no permitido' })
+      if (ruta === '/api/salir') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        enviar(res, 200, { ok: true })
+        return alSalir()
+      }
       const b = await leerCuerpo(req)
       if (ruta === '/api/guardar') {
         if (typeof b.ruta !== 'string' || typeof b.contenido !== 'string' || !(await permitidas()).has(b.ruta)) return enviar(res, 403, { error: 'Ese archivo no lo administra el tablero.' })
@@ -809,25 +853,62 @@ function servir() {
   protegerProceso()
   let ultimo = Date.now()
   registrar(`arranque (pid ${process.pid}, puerto ${PUERTO})`)
-  const srv = createServer(protegerManejador(crearManejador({ alUsar: () => { ultimo = Date.now() } })))
+  // Suelta el puerto (también las conexiones keep-alive) antes de salir o de lanzar el relevo.
+  const cerrar = (despues) => { srv.close(despues); srv.closeAllConnections?.() }
+  const alSalir = () => { registrar('salida pedida por /api/salir'); setTimeout(() => cerrar(() => process.exit(0)), 50) }
+  const srv = createServer(protegerManejador(crearManejador({ alUsar: () => { ultimo = Date.now() }, alSalir })))
   srv.on('error', (e) => { registrar(`servidor: ${e?.stack || e}`); if (e.code === 'EADDRINUSE') process.exit(0) })
   srv.listen(PUERTO, '127.0.0.1')
   setInterval(() => { if (Date.now() - ultimo > INACTIVIDAD_MS) { registrar('cerrado por inactividad'); process.exit(0) } }, 60e3)
+  setInterval(() => {
+    if (huellaCodigo() === CODIGO_ARRANQUE) return
+    registrar('reinicio por código nuevo')
+    cerrar(() => { lanzarServidor(); process.exit(0) })
+  }, 30e3).unref()
   for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => { registrar(`salida por ${s}`); process.exit(0) })
 }
 async function servidorVivo() {
   try { return (await (await fetch(URL_LOCAL + 'api/ping', { signal: AbortSignal.timeout(600) })).json()).tablero === true } catch { return false }
 }
-// Lanza `--servir` en segundo plano con stdout/stderr hacia datos/servidor.log y espera a que responda.
-async function arrancarServidor() {
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
+// Lanza `--servir` en segundo plano con stdout/stderr hacia datos/servidor.log.
+function lanzarServidor() {
   mkdirSync(DATOS, { recursive: true })
   const fd = openSync(LOG, 'a')
   try { spawn(process.execPath, [fileURLToPath(import.meta.url), '--servir'], { detached: true, stdio: ['ignore', fd, fd] }).unref() } finally { closeSync(fd) }
-  for (let i = 0; i < 20 && !(await servidorVivo()); i++) await new Promise((r) => setTimeout(r, 150))
 }
-// Abre el tablero servido (arranca el servidor en segundo plano si no corre); si falla, el archivo.
+async function arrancarServidor() {
+  lanzarServidor()
+  for (let i = 0; i < 20 && !(await servidorVivo()); i++) await esperar(150)
+}
+// Pid del último «arranque (pid N, puerto P)» del log en este puerto (servidores viejos sin /api/salir).
+export function pidDelLog(texto, puerto = PUERTO) {
+  return Number([...String(texto).matchAll(/arranque \(pid (\d+), puerto (\d+)\)/g)].filter((m) => +m[2] === puerto).at(-1)?.[1]) || null
+}
+// Deja un servidor con el código del disco: si no hay, lo arranca; si el que corre tiene otra huella, le pide salir
+// (POST /api/salir; si no lo entiende, SIGTERM al pid del log) y arranca uno nuevo. Devuelve qué hizo.
+export async function asegurarServidor({ vivo = servidorVivo, codigoRemoto, salir, matar, arrancar = arrancarServidor, codigo = huellaCodigo(), log = registrar } = {}) {
+  codigoRemoto ||= async () => { try { return (await (await fetch(URL_LOCAL + 'api/version', { signal: AbortSignal.timeout(3000) })).json()).codigo ?? null } catch { return null } }
+  salir ||= async () => { try { await fetch(URL_LOCAL + 'api/salir', { method: 'POST', headers: { origin: URL_LOCAL.slice(0, -1), 'content-type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(1000) }) } catch {} }
+  matar ||= () => {
+    // El pid que escucha en el puerto (lsof); si no hay lsof, el último arranque del log (puede ser uno que murió por EADDRINUSE).
+    let pid = null
+    try { pid = Number(execFileSync('lsof', ['-ti', `tcp:${PUERTO}`, '-sTCP:LISTEN'], { encoding: 'utf8' }).split('\n')[0]) || null } catch {}
+    pid ||= existsSync(LOG) && pidDelLog(readFileSync(LOG, 'utf8'))
+    if (pid && pid !== process.pid) try { process.kill(pid, 'SIGTERM') } catch {}
+  }
+  if (!(await vivo())) { await arrancar(); return 'arrancado' }
+  if ((await codigoRemoto()) === codigo) return 'vigente'
+  log('reinicio por código nuevo (pedido al asegurar el servidor)')
+  await salir()
+  for (let i = 0; i < 20 && (await vivo()); i++) await esperar(100)
+  if (await vivo()) { matar(); for (let i = 0; i < 20 && (await vivo()); i++) await esperar(100) }
+  await arrancar()
+  return 'reciclado'
+}
+// Abre el tablero servido (arranca o recicla el servidor en segundo plano); si falla, el archivo.
 async function abrir() {
-  if (!(await servidorVivo())) await arrancarServidor()
+  await asegurarServidor()
   sh('open', [(await servidorVivo()) ? URL_LOCAL : join(AQUI, 'index.html')])
 }
 
@@ -877,5 +958,5 @@ else {
     console.log(join(AQUI, 'index.html'))
   }
   if (args.includes('--abrir')) await abrir()
-  else if (args.includes('--asegurar-servidor') && !(await servidorVivo())) await arrancarServidor()
+  else if (args.includes('--asegurar-servidor')) await asegurarServidor()
 }

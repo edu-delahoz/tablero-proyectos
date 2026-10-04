@@ -9,7 +9,7 @@ para Claude. Sin dependencias: solo Node.js.
 Cada proyecto tiene estas pestañas:
 
 - **Todos los proyectos** (primera opción del selector y vista por defecto; `#p=todos`): una tarjeta por proyecto con avance y «estás aquí», rama, PRs abiertos, notas y bitácora pendiente (enlazan a su pestaña) y costo de 7 días; totales globales arriba. Clic en la tarjeta abre su Resumen.
-- **Resumen**: arriba, la tarjeta **▶ En curso** (hito donde estás: mini gráfico de sesiones, avance, gasto de su rama, qué falta y el **prompt de la siguiente sesión** con «Copiar»; si el hito está completo sale «✓ completo»); debajo, avance global, «estás aquí» y pendientes más cercanos. «Todos los proyectos» muestra la misma tarjeta (compacta) del proyecto con actividad más reciente. Para enlazar el plan, pon en el hito una línea `Plan: ~/.claude/plans/x.md`; sus prompts de «Cómo ejecutarlo» (etiqueta «**S7 — Sonnet.** Prompt:») salen en la tarjeta.
+- **Resumen**: arriba, la tarjeta **▶ En curso** (hito donde estás: mini gráfico de sesiones, avance, gasto de su rama, qué falta y el **prompt de la siguiente sesión** con «Copiar»; si el hito está completo sale «✓ completo»; con sub-sesiones `- **S3c — …**` en la tarea activa, «Falta · S3c — …» lista solo las casillas de la sub-sesión siguiente y el plan es el que mencione esa sub-sesión, la última hecha, o el de `~/.claude/plans` cuyo nombre lleve su clave y el backlog — «Plan (de S3)» si es de una anterior); debajo, avance global, «estás aquí» y pendientes más cercanos. «Todos los proyectos» muestra la misma tarjeta (compacta) del proyecto con actividad más reciente. Para enlazar el plan, pon en el hito una línea `Plan: ~/.claude/plans/x.md`; sus prompts de «Cómo ejecutarlo» (etiqueta «**S7 — Sonnet.** Prompt:») salen en la tarjeta.
 - **Backlogs**: mapa de hitos y sesiones con casillas `[ ]`/`[x]`, avance por sección y subtareas anidadas.
   Un campo de búsqueda filtra sesiones y tareas (abre las que coinciden y cuenta las coincidencias); la
   estrella ☆/★ de cada sesión `S…` la marca como favorita y «★ Solo favoritas» filtra por ellas. El Resumen
@@ -99,7 +99,7 @@ o padre cerrado con hijo abierto).
 ```sh
 node generar.mjs --servir   # http://127.0.0.1:47321
 node generar.mjs --abrir    # regenera y abre el navegador (arranca el servidor si hace falta)
-node generar.mjs --asegurar-servidor   # regenera y, si el servidor no corre, lo arranca (lo lanza el hook SessionStart)
+node generar.mjs --asegurar-servidor   # regenera; arranca el servidor si no corre o lo recicla si su código es viejo (hook SessionStart)
 ```
 
 Con servidor se pueden marcar casillas y añadir notas desde el navegador; abierto
@@ -107,7 +107,10 @@ como `file://` el tablero es de solo lectura.
 
 El servidor registra arranques, salidas y errores en `datos/servidor.log` (se recorta a ~200 KB); un error
 en una petición no lo tumba, y se cierra solo tras 6 h sin uso (queda anotado en el log). Cada sesión de Claude
-lo revive vía `--asegurar-servidor`.
+lo revive vía `--asegurar-servidor`. El servidor guarda al arrancar la huella de su código (mtimes de `generar.mjs`,
+`plantilla.html`, `bitacora.mjs`, `coherencia.mjs`, visible en `/api/version`): cada ~30 s la compara con el disco y,
+si cambió, se relanza solo («reinicio por código nuevo» en el log). `--asegurar-servidor` hace lo mismo al momento
+(`POST /api/salir`, solo desde 127.0.0.1; si un servidor viejo no lo entiende, SIGTERM al pid que escucha).
 
 **Actualización en vivo.** Con servidor, el tablero sondea `GET /api/version` cada ~3 s (una huella
 de mtimes de backlogs, planes de `~/.claude/plans`, notas, `.git/HEAD` y `.git/refs`; no lee contenido)

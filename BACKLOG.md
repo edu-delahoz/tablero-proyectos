@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `plan-en-curso` · S14 hecha, tests en verde (93 pasan, 2 omitidos): huella del código en `/api/version` (`codigo`), `POST /api/salir` (solo local), `asegurarServidor()` recicla (salir → SIGTERM al pid de `lsof` → arrancar) y el servidor se relanza solo cada 30 s si cambia el código — comprobado con el servidor real (viejo de S11 reciclado por SIGTERM; `touch plantilla.html` → «reinicio por código nuevo» en 30 s). `construirFrente`: abiertas por sub-sesión (Falta = la siguiente), `planDelFrente` (mención en la siguiente → en la hecha → nombre con la clave y el backlog → lo de antes) con `planDe`; tarjeta «Falta · S3c — …», «S3c 0/3», «Plan (de S3)». Con el `BACKLOG_MVP.md` real: S3c siguiente, 3 casillas, plan `sesi-n-s3c-de-backlog-mvp-md-swift-ember.md`. No se miró la tarjeta en el navegador (solo `/api/datos`). Los cambios sin commit de `coherencia.*` (aviso «sesión sin casillas») no son de S14. Siguiente: **S15** (mod).
 - 2026-10-04 · fuera del repo · revisión del panel `panel-tablero` a 207 y ~120 col: no se pudo ver el panel real (`/tablero` solo se ve en la UI de Claude Code). Ampliado el test «plan solo leído» del mod a anchos 120 y 207: `claude plugin test` 7/7, ningún texto desborda. Sin cambios en el repo salvo este backlog. Pendiente solo: vistazo del usuario a `/tablero` (207 y ~120).
 - 2026-10-04 · fuera del repo · verificación del mod `~/.claude/mods/panel-tablero` v2 hecha en lo automatizable: `claude plugin test` 7/7 (nuevo test: plan solo leído → «👁 leído» y ningún texto desborda a 40/60/100 col), `plugin validate` y `tsc` limpios; los casos «sin tocar → del proyecto», «✎ actualizando» y «↳ antes» ya los cubrían los tests existentes. No se pudo ver el panel real: pendiente solo un vistazo del usuario en Claude Code (`/tablero`, ancho 207 y ~120). Sin cambios en el repo salvo este backlog.
 - 2026-10-04 · fuera del repo · mod `~/.claude/mods/panel-tablero` v2 hecho (plan `~/.claude/plans/con-relacion-al-plan-lovely-lightning.md`), sin git: tarjeta «Esta sesión» con plan y backlog sacados de `$.session.messages()` (`focoDeSesion`, `seccionDe`, `leerFoco`; quitado `userConfig.backlog`), refresco inmediato en Write/Edit/Read de plan/backlog. `claude plugin test` 6/6, `plugin validate` y `tsc` limpios. Pendiente: verificación manual en Claude Code (sin tocar nada → «del proyecto»; leer/editar → «✎ actualizando» y «↳ antes»; ancho 207 y ~120 col). Trampa: en el `.tsx` ninguna variable puede llamarse `h` (tapa la fábrica JSX).
@@ -14,6 +15,27 @@
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H7 — Sub-sesión exacta y sus casillas
+
+Plan: `~/.claude/plans/problema-en-el-en-smooth-panda.md`. Rama `plan-en-curso`. Caso real: IEP en **H3 › Personas mal migradas › S3c** (tras S3 y S3b); la tarjeta mostraba el plan viejo (servidor arrancado antes de S13) y el mod decía «sin backlog».
+
+### S14 — Servidor que se recicla, Falta y plan por sub-sesión · **Opus** · rama `plan-en-curso`
+`generar.mjs`, `plantilla.html`, `generar.test.mjs`, `servidor.test.mjs`, README (parte A del plan).
+- [x] `servir()`: huella (mtime de `generar.mjs`, `plantilla.html`, `bitacora.mjs`, `coherencia.mjs`) en `/api/version`; `POST /api/salir` solo desde 127.0.0.1
+- [x] `arrancarServidor()` (`--asegurar-servidor`): huella distinta → pedir salida y arrancar uno nuevo; el servidor la comprueba cada ~30 s y se relanza solo; `servidor.log` «reinicio por código nuevo»; test en `servidor.test.mjs`
+- [x] `construirFrente`: cada sub-sesión guarda sus `abiertas`; `tarea.abiertas` = las de la sub-sesión siguiente (o la tarea si no hay sub-sesiones); test con fixture de la forma de `BACKLOG_MVP.md` (S3/S3b hechas, S3c abierta, S4 con casillas → Falta = solo S3c)
+- [x] Plan por sub-sesión: mención en la siguiente → en la hecha más reciente → plan cuyo nombre/título lleva la clave (`s3c`, si no `s3`) y el backlog o el hito → lo de hoy; `planDe` indica la sub-sesión de origen; tests
+- [x] `tarjetaEnCurso`: rótulo «Falta · S3c — …» con sus casillas, «S3c 0/3» junto a la barra, «Plan (de S3): …»
+- [x] Prueba con el `BACKLOG_MVP.md` real del IEP: S3c con sus 3 casillas; README
+
+### S15 — Mod `panel-tablero`: rutas relativas, sub-sesiones y casillas · **Opus** · fuera del repo (`~/.claude/mods/panel-tablero`, sin git)
+`hooks/register.tsx`, `register.test.ts`, `types/index.d.ts` (parte B del plan). Cargar la skill `plugin-authoring`; en el `.tsx` ninguna variable puede llamarse `h`.
+- [ ] `focoDeSesion(mensajes, home, root)`: rutas `./`/`../…backlog*.md` y nombres sueltos `BACKLOG*.md` resueltos contra `$.session.root()`; test: prompt con ruta relativa → backlog encontrado
+- [ ] Clave pedida en el primer mensaje (`Sesión S3c de BACKLOG_MVP.md`) manda sobre el fallback; test → H3 › … › S3c, 0/3, 3 abiertas
+- [ ] `seccionDe` entiende viñetas `- **S\d+[a-z]? — …**` (rango por sangría, hito del `## H…`, título = tarea abreviada + sub-sesión, `hechas/total`, `abiertas`); fallback: primera sub-sesión con casillas abiertas; test sin pistas
+- [ ] Tarjeta «Esta sesión»: línea `H3 › Personas mal migradas › S3c  …` y hasta 4 casillas `[ ] …` + «… y N más»; test sin desborde a 40/120/207 col
+- [ ] `claude plugin test`, `plugin validate` y `tsc` limpios; resultado en `## Estado`
 
 ## H6 — Plan en curso a la vista
 

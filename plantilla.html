@@ -161,6 +161,7 @@ details.grupo > summary { list-style: none; } details.grupo > summary::-webkit-d
 details.grupo > summary::before { content: "▸ "; } details.grupo[open] > summary::before { content: "▾ "; }
 ul.tareas { list-style: none; margin: 0; padding: 0; }
 ul.tareas ul.tareas { margin-left: 0; }
+ul.tareas.falta li { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .tarea { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 .6em; padding: 3px 0; }
 .tarea > ul { grid-column: 2; }
 .casilla { color: var(--suave); white-space: pre; }
@@ -1277,7 +1278,8 @@ function enCurso(p) {
     : aplanar([aqui]).flatMap((x) => x.tareas.filter((t) => !t.hecha).map((t) => t.texto));
   const filas = rama ? (p.bitacora?.registro || []).filter((f) => f.rama === rama) : [];
   const gasto = filas.length ? { ...(agregarBit(filas, 'rama').grupos[0] || { costo: 0, minutos: 0, sesiones: 0 }), sesionesTotal: filas.length } : null;
-  return { backlog: b, hito, sesiones, aqui, tarea, siguiente, falta, plan, prompts, destacado, rama, gasto, completo: hito.estado === 'hecho' };
+  const planDe = plan && act?.planDe || null;
+  return { backlog: b, hito, sesiones, aqui, tarea, siguiente, falta, plan, planDe, prompts, destacado, rama, gasto, completo: hito.estado === 'hecho' };
 }
 function tarjetaEnCurso(p, compacta = false) {
   const c = enCurso(p);
@@ -1285,18 +1287,18 @@ function tarjetaEnCurso(p, compacta = false) {
   const { backlog: b, hito, sesiones, aqui, tarea, siguiente, plan, destacado, gasto } = c;
   const resto = c.prompts.filter((x) => x !== destacado);
   const hechas = sesiones.filter((x) => x.estado === 'hecho').length;
-  const falta = c.falta.slice(0, 3);
+  const falta = c.falta.slice(0, siguiente ? 6 : 3);
   const titulo = `${corto(plano(hito.titulo), 70)}${tarea ? ` › ${corto(tarea.titulo, 60)}` : ''}`;
   const botones = compacta
     ? `<button class="boton" data-proy="${esc(p.id)}" data-pest="resumen">Abrir proyecto</button>`
     : `${plan ? `<button class="boton" data-ir="planes" data-sel="${esc(plan.nombre)}">Abrir plan</button> ` : ''}<button class="boton" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${aqui.id}">Ver en backlog</button>`;
   return `<section class="tarjeta en-curso" aria-label="Plan en curso">
     <h2><span>${c.completo ? `✓ ${esc(titulo)} completo` : `▶ En curso · ${esc(titulo)}`}</span><small>${plan ? hace(plan.modificado) : hace(b.modificado)}</small></h2>
-    <div class="chips-proy">${compacta ? `<span class="etq">${esc(p.nombre)}</span>` : ''}${c.rama ? `<span class="etq" title="Rama">⎇ ${esc(c.rama)}</span>` : ''}${plan ? `<span class="etq" title="${esc(plan.nombre)}">Plan: ${esc(corto(plan.titulo.replace(/^Plan\s*[:—–-]\s*/i, ''), 60))}</span>` : ''}${chips({ modelo: aqui.meta?.modelo || destacado?.modelo })}</div>
+    <div class="chips-proy">${compacta ? `<span class="etq">${esc(p.nombre)}</span>` : ''}${c.rama ? `<span class="etq" title="Rama">⎇ ${esc(c.rama)}</span>` : ''}${plan ? `<span class="etq" title="${esc(plan.nombre)}">Plan${c.planDe ? ` (de ${esc(c.planDe)})` : ''}: ${esc(corto(plan.titulo.replace(/^Plan\s*[:—–-]\s*/i, ''), 60))}</span>` : ''}${chips({ modelo: aqui.meta?.modelo || destacado?.modelo })}</div>
     ${segmentos(b, sesiones, c.completo || siguiente ? null : aqui.id)}
     <div>${barra(hito.hechas, hito.total, 20)}</div>
-    <div class="suave">${hechas}/${sesiones.length} sesiones${tarea ? ` · ${tarea.hechas}/${tarea.total} casillas de la tarea` : ''} · ${hito.hechas}/${hito.total} tareas${gasto ? ` · ${usd(gasto.costo)} en la rama (${gasto.sesionesTotal} ses.)` : ''}</div>
-    ${!compacta && falta.length ? `<div class="rotulo">Falta</div><ul class="tareas">${falta.map((t) => `<li>${CASILLA()[0]} ${esc(corto(plano(t), 110))}</li>`).join('')}</ul>` : ''}
+    <div class="suave">${hechas}/${sesiones.length} sesiones${siguiente?.total ? ` · ${esc(siguiente.clave)} ${siguiente.hechas}/${siguiente.total}` : ''}${tarea ? ` · ${tarea.hechas}/${tarea.total} casillas de la tarea` : ''} · ${hito.hechas}/${hito.total} tareas${gasto ? ` · ${usd(gasto.costo)} en la rama (${gasto.sesionesTotal} ses.)` : ''}</div>
+    ${!compacta && falta.length ? `<div class="rotulo">Falta${siguiente && tarea?.abiertas.length ? ` · ${esc(siguiente.clave)} — ${esc(corto(siguiente.titulo.replace(/\s*\([^()]*\)\s*$/, ''), 60))}` : ''}</div><ul class="tareas falta">${falta.map((t) => `<li>${CASILLA()[0]} ${esc(corto(plano(t), 240))}</li>`).join('')}</ul>${c.falta.length > falta.length ? `<div class="suave">… y ${c.falta.length - falta.length} más</div>` : ''}` : ''}
     ${destacado ? `<div class="rotulo">${siguiente ? 'Siguiente sesión' : 'Siguiente prompt'} · ${esc(destacado.clave)}</div>${promptsHtml([destacado])}` : ''}
     ${resto.length ? `<details class="grupo"><summary class="rotulo">Otros prompts (${resto.length})</summary>${promptsHtml(resto)}</details>` : ''}
     <p>${botones}</p></section>`;
