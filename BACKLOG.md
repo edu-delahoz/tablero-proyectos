@@ -1,7 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
-- 2026-10-04 · rama `plan-en-curso` · Siguiente: **S12** (servidor robusto + fuga de planes), luego S13 (frente activo: IEP mostraba H5 estando en H3 › Personas mal migradas). Plan `~/.claude/plans/pasted-content-id-9662-se-callo-harmonic-waffle.md`. Servidor relanzado a mano.
+- 2026-10-04 · rama `plan-en-curso` · S12 hecha, tests en verde (83 pasan, 2 omitidos): `protegerProceso`/`protegerManejador`, `enviar` seguro, `datos/servidor.log` (ya ignorado por `datos/`), `--asegurar-servidor` en el hook, `asignarPlanes` (mayoría; `federated-swing` ya solo en IEP). Comprobado: matar el servidor y abrir sesión (hook) lo revive. Siguiente: **S13** (Opus, B+C). Plan `~/.claude/plans/pasted-content-id-9662-se-callo-harmonic-waffle.md`.
 - 2026-10-04 · rama `plan-en-curso` (sale de `notas-tablero`) · S11 hecha, tests en verde (80 pasan, 2 omitidos): `plan` y `modelo` en `estructura()`, `enCurso`/`tarjetaEnCurso` en `plantilla.html` (arriba del Resumen y franja en «Todos los proyectos»); probada por CDP con copia de `datos/` y con S10 desmarcada en una copia del backlog. Nota respondida. Pendiente: que el usuario la pruebe (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `notas-tablero` · S10 hecha, tests en verde (79 pasan, 2 omitidos): vista «Todos los proyectos» (`vistaTodos`, `resumenProyecto`, `abrirProyecto` en `plantilla.html`; `todos` es un flag aparte de `P`, `#p=todos`); probada por CDP con copia de `datos/` (clic en tarjeta/enlaces, hash, recarga, sin guardado). H5 completa. PR #7 (base `busqueda-favoritos`). Pendiente: que el usuario la pruebe (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `notas-tablero` · S9 hecha, tests en verde (79 pasan, 2 omitidos): bloque «Gastos» en Bitácora (`grafTiempo`, `grafRamas`, `grafModelos` en `plantilla.html`, SVG en línea, paleta dataviz slots 1-3 validada, tooltip, tabla accesible); nota 3 respondida. Revisado con captura headless. Siguiente: S10.
@@ -25,10 +25,10 @@ Plan: `~/.claude/plans/planea-para-resolver-mi-lazy-patterson.md`. Rama `plan-en
 
 ### S12 — Servidor robusto y fuga de planes · **Sonnet** · rama `plan-en-curso`
 Plan: `~/.claude/plans/pasted-content-id-9662-se-callo-harmonic-waffle.md` (secciones A y D).
-- [ ] `servir()`: `uncaughtException`/`unhandledRejection` registran y siguen; manejador con `.catch`; `enviar` no escribe si `headersSent`/`destroyed`
-- [ ] Log `datos/servidor.log` (arranque, salida por inactividad, errores; recorte ~200 KB; en `.gitignore`)
-- [ ] `--asegurar-servidor` desde el hook SessionStart (`arrancarServidor()` común con `abrir()`)
-- [ ] `leerPlanes`: cada plan al proyecto con más menciones (lo manual en `proyectos.json` manda); tests
+- [x] `servir()`: `uncaughtException`/`unhandledRejection` registran y siguen; manejador con `.catch`; `enviar` no escribe si `headersSent`/`destroyed`
+- [x] Log `datos/servidor.log` (arranque, salida por inactividad, errores; recorte ~200 KB; en `.gitignore`)
+- [x] `--asegurar-servidor` desde el hook SessionStart (`arrancarServidor()` común con `abrir()`)
+- [x] `leerPlanes`: cada plan al proyecto con más menciones (lo manual en `proyectos.json` manda); tests
 
 ### S13 — Frente activo en la tarjeta «En curso» · **Opus** · rama `plan-en-curso`
 Plan: `~/.claude/plans/pasted-content-id-9662-se-callo-harmonic-waffle.md` (secciones B y C).
