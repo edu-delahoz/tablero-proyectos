@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `integraciones-vista` · H9 planeado (S20–S25, plan `~/.claude/plans/generic-cuddling-hellman.md`) y revisado por Opus (`~/.claude/plans/quiero-que-revises-el-logical-wave.md`): añadidas casillas para `modo` que se perdía al editar, `/probar` sin backlog, `auto` en primera sincronía, `crear()` con varios tipos, estados en una llamada, orden por fecha y `areaPath`. Casillas de S19b pasadas a S24. Sin código. Siguiente: **S20** (Sonnet). Los cambios sin commit de `coherencia*.mjs` no son de H9.
 - 2026-10-04 · rama `integraciones-vista` · S19 hecha en código (commit 1119f1a; 114 tests pasan, 2 omitidos); falta confirmar la causa con la org real y probar en navegador → **S19b**. Antes: S18 hecha (formulario por pasos, Editar/Quitar, README; 112 tests pasan, 2 omitidos; prueba real en navegador con Trello simulado). H8 completo: PR #9 abierto contra `develop`; falta la revisión del usuario y fusionarlo. Antes: S17 hecha, tests en verde (112 pasan, 2 omitidos): `listar()` en GitHub/Trello/ADO (solo lectura, reutilizan `api`/`gql` y `traducirError`) y `POST /api/integraciones/descubrir` (`{tipo, clave?, consulta}`; 400 sin credencial, 502 con error traducido, 15 s). Todo con `fetch`/`gh` simulados, nada de red real. Los cambios sin commit de `coherencia*.mjs` no son de H8. Siguiente: **S19** (Sonnet, arreglar «Buscar proyectos» de Azure DevOps que se queda cargando).
 - 2026-10-04 · S15 hecha (mod `~/.claude/mods/panel-tablero`, sin git): rutas relativas y nombres sueltos de backlog resueltos contra el root, sesión pedida en el prompt («Sesión S3c de BACKLOG_MVP.md»), `seccionDe` entiende viñetas `- **S3c — …**` (tarea madre, casillas, fallback a la primera abierta), tarjeta con `H3 › Personas mal migradas › S3c  …` + hasta 4 casillas, y texto ajustado en vez de recortado. `claude plugin test` 11/11, `plugin validate` OK (solo aviso de `author`), `tsc` limpio. Con el `BACKLOG_MVP.md` real: pedida S3c → 3/3; sin pistas → S4c con 4 casillas. H7 cerrado.
 - 2026-10-04 · rama `plan-en-curso` · S14 hecha, tests en verde (93 pasan, 2 omitidos): huella del código en `/api/version` (`codigo`), `POST /api/salir` (solo local), `asegurarServidor()` recicla (salir → SIGTERM al pid de `lsof` → arrancar) y el servidor se relanza solo cada 30 s si cambia el código — comprobado con el servidor real (viejo de S11 reciclado por SIGTERM; `touch plantilla.html` → «reinicio por código nuevo» en 30 s). `construirFrente`: abiertas por sub-sesión (Falta = la siguiente), `planDelFrente` (mención en la siguiente → en la hecha → nombre con la clave y el backlog → lo de antes) con `planDe`; tarjeta «Falta · S3c — …», «S3c 0/3», «Plan (de S3)». Con el `BACKLOG_MVP.md` real: S3c siguiente, 3 casillas, plan `sesi-n-s3c-de-backlog-mvp-md-swift-ember.md`. No se miró la tarjeta en el navegador (solo `/api/datos`). Los cambios sin commit de `coherencia.*` (aviso «sesión sin casillas») no son de S14. Siguiente: **S15** (mod).
@@ -66,12 +67,84 @@ Prompt de arranque S19 (Sonnet, sin plugins/MCP):
 
 ### S19b — Azure DevOps: prueba en navegador y causa real · **Sonnet** · rama `integraciones-vista`
 Hecho en S19 (commit 1119f1a, 114 tests pasan, 2 omitidos): `api()` con timeout 20 s y un reintento por red, botón «Reintentar» en destinos, mensajes de ADO sin «undefined» y con el scope «Project and Team: Read», pruebas (incluido conector que nunca responde → 502). Decisión: la causa real no se confirmó (S19 no tiene navegador con la org real); el `servidor.log` muestra reinicios «por código nuevo» cada 1–2 min durante la edición.
-- [ ] Con tu org real: pestaña Red (¿pending o error?) y `datos/servidor.log`; anotar aquí la causa real
-- [ ] Prueba en navegador: org real, org falsa, servidor detenido a media petición (debe salir «El servidor no respondió; reintenta» y «Reintentar»)
-- [ ] Opcional: `generar.mjs` (~línea 773), que el reinicio por código nuevo espere a que no haya peticiones en vuelo; prueba en `generar.test.mjs`
+- [-] Con tu org real: pestaña Red (¿pending o error?) y `datos/servidor.log`; anotar aquí la causa real → S24 (el 400 ya se explica: URL pegada en «Organización», ver H9)
+- [-] Prueba en navegador: org real, org falsa, servidor detenido a media petición (debe salir «El servidor no respondió; reintenta» y «Reintentar») → S24
+- [-] Opcional: `generar.mjs` (~línea 773), que el reinicio por código nuevo espere a que no haya peticiones en vuelo; prueba en `generar.test.mjs` → S24
 
 Prompt de arranque S19b (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S19b) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+## H9 — Azure DevOps: organización, backlog del equipo y mis tareas
+
+Plan: `~/.claude/plans/generic-cuddling-hellman.md`. Rama `integraciones-vista`. Causa del 400: se pegó `https://dev.azure.com/CodeFactory2026-2` en «Organización» y `azure-devops.mjs:27` la deja en la ruta. EAP10 (org CodeFactory2026-2) es un proyecto nuevo **sin backlog local**: hace falta modo solo lectura antes de traer el backlog del equipo (si no, «Sincronizar» crearía work items por cada casilla de un backlog ajeno).
+
+### S20 — Normalizar la organización · **Sonnet**
+- [ ] `integraciones/azure-devops.mjs`: exportar `normalizarOrganizacion(texto) → { organizacion, proyecto? }` (casos: nombre solo; https/http; barra final; espacios; `dev.azure.com/Org[/Proyecto/…]`; `usuario@dev.azure.com/Org`; `Org.visualstudio.com[/DefaultCollection|/Proyecto]`; inválido → Error en español). Usarla en `api()`, y `encodeURIComponent` en `urlItem` (l.21) y en la URL de `leer` (l.70). Prueba: tabla de casos en `azure-devops.test.mjs`; una config guardada con URL completa llama a `https://dev.azure.com/CodeFactory2026-2/_apis/...`
+- [ ] (añadido en revisión Opus) Proyecto sacado de la URL con `decodeURIComponent` (`dev.azure.com/Org/Mi%20Proyecto/_boards` → «Mi Proyecto»). Caso en la tabla de `azure-devops.test.mjs`
+- [ ] `integraciones/config.mjs`: `validarIntegracion` guarda solo el nombre (y no pisa un `proyecto` ya escrito). Prueba en `config.test.mjs`
+- [ ] `generar.mjs`: `/api/integraciones/descubrir` y `/probar` devuelven `organizacion` normalizada. Prueba en `servidor.test.mjs`
+- [ ] `plantilla.html`: el campo «Organización» se reemplaza con la normalizada al buscar/probar; el placeholder/ayuda dice «acepta la URL». Prueba: `node --test 2>&1 | tail -40`
+- [ ] Con tu org real: pegar `https://dev.azure.com/CodeFactory2026-2` y pulsar «Buscar proyectos» (debe listar EAP10) — **del usuario**; anotar el resultado aquí
+
+Prompt de arranque S20 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S20) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S21 — Conector: varios tipos, asignado y «mías» · **Sonnet**
+- [ ] `azure-devops.mjs` `leer`: `tipoItem` texto o lista o `'*'` (WIQL `IN (...)` con comillas escapadas; sin campo = `Task`). Prueba: lista de 2 tipos, `'*'`, y config antigua `tipoItem: 'Task'` intacta
+- [ ] `leer`: pedir `System.AssignedTo,System.WorkItemType`; ítem `{ asignado: {nombre,correo}|null, tipo }` (identidad como objeto o como texto). Prueba con fixture nuevo en `fixtures/integraciones/azure-devops.json` (asignado, sin asignar, texto)
+- [ ] `leer`: segunda WIQL `[System.AssignedTo] = @Me` → `mio: true`; si falla, `avisos` y `mio` ausente (no tumba la lectura). Prueba: ambas rutas
+- [ ] Estados = unión por tipo con **una sola** llamada a `wit/workitemtypes` (ya trae `states`, como en `listar()`; vale también para `'*'`), fallback a deducir de los ítems (añadido en revisión Opus). Lotes de 200 en paralelo (máx. 4) y tope 500 con aviso «mostrando 500 de N». WIQL con `ORDER BY [System.ChangedDate] DESC` para que el tope conserve los recientes (añadido en revisión Opus). Prueba del tope
+- [ ] (añadido en revisión Opus) `crear()` (l.~98, `$${tipoItem(cfg)}`) con lista usa el primer tipo; `config.mjs` rechaza `tipoItem: '*'` si `modo` es `sincronizar` (no se sabe qué tipo crear). Prueba
+- [ ] `config.mjs`: `tipoItem` acepta texto o lista (≤10) o `'*'`. Prueba en `config.test.mjs`
+- [ ] `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S21 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S21) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S22 — Modo solo lectura sin backlog · **Opus**
+- [ ] `config.mjs`: campo `modo` (`'lectura'|'sincronizar'`, por defecto sincronizar). En `lectura`: `backlog` opcional, `auto` rechazado. Prueba: guarda sin backlog; sincronizar sigue exigiéndolo
+- [ ] (añadido en revisión Opus) `modo` en `COMUNES` (`config.mjs:8`) y en `configVisible` (`generar.mjs:~600`); si no, editar una integración de solo lectura la devuelve a `sincronizar` en silencio. Prueba: guardar → editar → sigue `modo: 'lectura'`
+- [ ] (añadido en revisión Opus) `/api/integraciones/probar` (`generar.mjs:~897`, usa `ctx.backlog.contenido`) y `--probar-conexiones`: en lectura no leen backlog y responden `vinculadas: 0`. Prueba en `servidor.test.mjs`
+- [ ] (añadido en revisión Opus) `sincronizar()` con `elegidas === 'auto'` y **sin instantánea** no aplica nada (aviso «primera sincronía: usa la vista previa»). Prueba: ningún `crear` llamado
+- [ ] `generar.mjs` `contextoIntegracion`: en `lectura` no exige backlog ni enlaza `crear`/`actualizar`; `sincronizar()` responde 400 «solo lectura» (también `/api/sincronia/aplicar`). Prueba en `servidor.test.mjs`: ningún `crear`/`actualizar` se llama y el `.md` no cambia
+- [ ] `generar.mjs` `leerIntegraciones`: en `lectura` sin `planificarSincronia`; pasar `asignado/tipo/mio` en el `.map` de ~l.622 (la caché ya guarda `fuera.items` completo). Prueba: aparecen en `datos.integraciones[].items`
+- [ ] Primera sincronía (sin instantánea): `/api/sincronia/previa` devuelve `primera: true` y el conteo de `crear-fuera`/`traer` (el desmarcado va en S23). Prueba en `generar.test.mjs`
+- [ ] Proyecto sin `docs` ni `repo` (como eap10) genera sin errores. Prueba con `proyectos` de fixture
+- [ ] `proyectos.ejemplo.json` y `README.md` (sección «Conectores y credenciales»): `modo`, `tipoItem` lista, organización como URL, ejemplo EAP10
+- [ ] `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S22 (Opus, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S22) y trabaja solo esa sesión en la rama `integraciones-vista`. Prioridad: que una integración de solo lectura NO pueda escribir nada, ni en Azure ni en ningún .md. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S23 — Vista: formulario y tarjeta · **Sonnet**
+- [ ] `plantilla.html` formulario: selector «Modo» (preseleccionar solo lectura si `archivosBacklog()` está vacío); paso 4 condicional con el texto «Este proyecto no tiene backlog: solo se mostrará lo de Azure…»; ocultar `auto`; «Tipo de work item» como casillas + «Todos»
+- [ ] `plantilla.html` `tarjetaIntegracion`: chip de asignado (nombre) / «Sin asignar» gris, insignia de tipo; filtro Todas / Mías / Sin asignar (desactivado con aviso si falta `mio`); sin botón «Sincronizar» ni «auto: no» en solo lectura; el filtro sobrevive al repintado (`hayEdicion`)
+- [ ] (añadido en revisión Opus) `cfgLimpia` (`plantilla.html:~1045`) manda `modo`; `filaAccion` (l.~917, `caja(true)`) deja `crear-fuera`/`traer` **sin marcar** cuando la previa trae `primera: true`, con aviso «se crearían N work items en el proyecto real»
+- [ ] Pruebas: `generar.test.mjs` con datos de fixture (HTML contiene chips y filtros; modo lectura sin «Sincronizar»); prueba rápida con Playwright `--reporter=line` si es barata
+- [ ] `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S23 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S23) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S24 — Org real (EAP10) y prueba en navegador · **Sonnet**, con el usuario
+- [ ] `proyectos.json`: añadir `{ "id": "eap10", "nombre": "EAP10", "integraciones": [{ "id": "ado", "tipo": "azure-devops", "modo": "lectura", "organizacion": "CodeFactory2026-2", "proyecto": "EAP10", "tipoItem": "*" }] }` (sin `docs`) y PAT en credenciales (scopes: Work Items Read; «Project and Team: Read» para buscar proyectos)
+- [ ] Confirmar con la org real: «Buscar proyectos» lista EAP10; la lectura trae el backlog; «Mías» coincide con lo que ves en Azure (confirma que `@Me` funciona con tu PAT); anotar aquí si el PAT no alcanzó algún scope
+- [ ] (añadido en revisión Opus) Ver en Azure si EAP10 tiene más de un equipo (el backlog del equipo es por *Area Path*); si sí, anotar aquí para una sesión con campo opcional `areaPath`
+- [ ] (S19b) Prueba en navegador: org real, org falsa, servidor detenido a media petición («El servidor no respondió; reintenta» + «Reintentar»); anotar causa real de «cargando»
+- [ ] (S19b, opcional) `generar.mjs` ~l.773: el reinicio por código nuevo espera a que no haya peticiones en vuelo; prueba en `generar.test.mjs`
+- [ ] Verificar que ningún `.md` cambió (`git status`), `node --test 2>&1 | tail -40`, actualizar PR #9 / abrir PR nuevo
+
+Prompt de arranque S24 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S24) y trabaja solo esa sesión en la rama `integraciones-vista`, con el usuario delante (necesita su PAT y navegador). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S25 — (opcional) Importar el backlog de EAP10 a un `.md` propio · **Sonnet**
+Solo si lo pides: hoy EAP10 no tiene dónde sincronizarse.
+- [ ] `generar.mjs`: `POST /api/integraciones/importar` → vista previa del `BACKLOG_<ID>.md` (casillas con `<!-- ado:ID -->`, agrupadas por estado/tipo) y creación solo si el archivo no existe y el proyecto tiene `docs`; nunca sobrescribe. Prueba: archivo existente → 409
+- [ ] `plantilla.html`: botón «Crear backlog local desde Azure» con la vista previa; al crear, la integración pasa a `modo: 'sincronizar'` con ese backlog
+- [ ] `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S25 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S25) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 
 ## H7 — Sub-sesión exacta y sus casillas
 
