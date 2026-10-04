@@ -92,6 +92,12 @@ test('estasAqui: «H3 CERRADO» salta a la siguiente sección no terminada (H4)'
   assert.equal(estasAqui(a, estadoDe(MVP)), porClave(a, 'H4').id)
 })
 
+test('estasAqui: «Siguiente: S5c» con S5c ya hecha apunta a la siguiente no hecha', () => {
+  const t = '## Estado\n- S5c hecha. Siguiente: **S5c**\n## S5 — Cinco\n- [x] a\n### S5b — b\n- [x] b\n### S5c — c\n- [x] c\n## S6 — Seis\n- [ ] d\n'
+  const a = estructura(t)
+  assert.equal(estasAqui(a, estadoDe(t)), porClave(a, 'S6').id)
+})
+
 test('estasAqui: sin Estado, la primera sección no terminada; sin pendientes, null', () => {
   const a = estructura(MVP)
   assert.equal(estasAqui(a, ''), porClave(a, 'H3').id)

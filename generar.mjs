@@ -181,7 +181,7 @@ export function estructura(texto) {
 export const aplanar = (arbol) => arbol.flatMap((s) => [s, ...aplanar(s.hijas)])
 
 // «Estás aquí»: lo que nombra la primera línea de «## Estado» (prefiere «Siguiente: X»;
-// si lo nombrado está cerrado, la sección siguiente); si no, la primera sección no terminada.
+// si lo nombrado está cerrado o ya hecho, la sección siguiente no hecha); si no, la primera sección no terminada.
 export function estasAqui(arbol, estadoTxt = '') {
   const pasos = aplanar(arbol).filter((s) => s.estado !== 'doc')
   const linea = String(estadoTxt).split('\n').find((l) => l.trim()) || ''
@@ -191,7 +191,7 @@ export function estasAqui(arbol, estadoTxt = '') {
     const i = pasos.findIndex((s) => s.clave === ref[1])
     if (i >= 0) {
       const cerrado = !sig && /CERRAD|terminad|complet|✅/i.test(linea.slice(ref.index, ref.index + 40))
-      const s = cerrado ? pasos.slice(i + 1).find((x) => x.estado !== 'hecho') : pasos[i]
+      const s = cerrado || pasos[i].estado === 'hecho' ? pasos.slice(i + 1).find((x) => x.estado !== 'hecho') : pasos[i]
       if (s) return s.id
     }
   }
