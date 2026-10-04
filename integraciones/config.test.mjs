@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, readFileSync, statSync, chmodSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { validarIntegracion, aplicarCambio, editarProyecto, escribirAtomico } from './config.mjs'
+import * as CONFIG from './config.mjs'
+const { validarIntegracion, aplicarCambio, editarProyecto, escribirAtomico } = CONFIG
 
 const dir = mkdtempSync(join(tmpdir(), 'tablero-config-'))
 const ctx = { backlogs: ['BACKLOG.md'], otras: ['gh'] }
@@ -158,4 +159,16 @@ test('editarProyecto: cambia solo los campos pedidos en su sitio; integraciones,
   assert.throws(() => editarProyecto(crudo, 'nada', { nombre: 'x' }), (e) => e.estado === 404)
   assert.throws(() => editarProyecto('{roto', 'eap10', { nombre: 'x' }), (e) => e.estado === 409)
   assert.equal(editarProyecto(crudo, 'eap10', {}), crudo, 'sin cambios, el texto queda igual')
+})
+
+test('modo participar (S37): sin backlog, «*» permitido, «auto» rechazado; solo Azure DevOps; noEscribeMd', () => {
+  assert.ok(CONFIG.MODOS.includes('participar'))
+  const ado = { id: 'ado', tipo: 'azure-devops', organizacion: 'Org', proyecto: 'P' }
+  const p = validarIntegracion({ ...ado, modo: 'participar', tipoItem: '*' }, { backlogs: [] })
+  assert.deepEqual(p.errores, [])
+  assert.deepEqual(p.limpia, { id: 'ado', tipo: 'azure-devops', modo: 'participar', organizacion: 'Org', proyecto: 'P', tipoItem: '*' })
+  assert.match(validarIntegracion({ ...ado, modo: 'participar', auto: true }, { backlogs: [] }).errores[0], /«auto» no sirve/)
+  assert.match(validarIntegracion({ id: 'g', tipo: 'github-projects', propietario: 'u', numero: 1, modo: 'participar' }, { backlogs: [] }).errores.join(' '), /aún no participa/)
+  assert.match(validarIntegracion({ id: 't', tipo: 'trello', tablero: 'b', modo: 'participar' }, { backlogs: [] }).errores.join(' '), /aún no participa/)
+  assert.deepEqual(['lectura', 'participar', 'sincronizar', undefined].map((modo) => CONFIG.noEscribeMd({ modo })), [true, true, false, false])
 })

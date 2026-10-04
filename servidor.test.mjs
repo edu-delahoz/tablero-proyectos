@@ -44,13 +44,18 @@ const falso = {
   async actualizar(cfg, cred, id, c) { Object.assign(fuera.get(id), c) },
   async listar(cfg, cred) { if (cfg.numero === 98) return new Promise(() => {}); if (cfg.numero === 99) throw new Error('GitHub Projects: Sin conexión con GitHub.'); return { recibido: cfg, cred, proyectos: [{ propietario: 'u', numero: 5, titulo: 'Falso' }] } },
 }
+const participaciones = []
 const escrituras = [] // crear/actualizar de Azure: en solo lectura nunca debe llamarse ninguno
 const ITEMS_ADO = [
   { id: '1', titulo: 'Mía', hecha: false, columna: 'Active', url: 'https://x/1', tipo: 'Task', asignado: { nombre: 'Yo', correo: 'yo@x' }, mio: true },
   { id: '2', titulo: 'Sin asignar', hecha: true, columna: 'Closed', url: 'https://x/2', tipo: 'Bug', asignado: null, mio: false },
 ]
 const adoFalso = {
-  async leer(cfg) { return { url: 'https://x', titulo: `${cfg.organizacion}/${cfg.proyecto}`, columnas: cfg.modo === 'lectura' ? ['Active', 'Closed'] : [], items: cfg.modo === 'lectura' ? ITEMS_ADO : [] } },
+  async leer(cfg) { const sinMd = cfg.modo === 'lectura' || cfg.modo === 'participar'; return { url: 'https://x', titulo: `${cfg.organizacion}/${cfg.proyecto}`, columnas: sinMd ? ['Active', 'Closed'] : [], items: sinMd ? ITEMS_ADO : [] } },
+  // Participar (S37): se registran en `participaciones`; el id 999 simula que Azure rechaza el cambio.
+  async quienSoy() { participaciones.push(['quienSoy']); return { id: 'u1', nombre: 'Yo', correo: 'yo@x' } },
+  async asignar(cfg, cred, id, correo) { participaciones.push(['asignar', id, correo]); if (id === '999') throw new Error('Azure DevOps rechazó el cambio: TF401320.'); return { id, columna: 'Active', hecha: false, asignado: correo ? { nombre: 'Yo', correo } : null } },
+  async cambiarEstado(cfg, cred, id, estado, deps, opciones) { participaciones.push(['cambiarEstado', id, estado, opciones?.columnas]); return { id, columna: estado, hecha: estado === 'Closed', asignado: null } },
   async crear(...a) { escrituras.push(['crear', ...a]); return { id: 'Z', url: 'https://x/Z' } },
   async actualizar(...a) { escrituras.push(['actualizar', ...a]) },
   async listar(cfg) { return { recibido: cfg, proyectos: ['EAP10'] } },
@@ -728,4 +733,62 @@ test('/api/carpetas: sin ruta → home + sugerencias; con ruta → subcarpetas y
   assert.ok(!('sugerencias' in r.json))
   for (const ruta of ['/etc', join(dir, '..'), join(dir, 'no-existe'), BACKLOG]) assert.equal((await post('/api/carpetas', { ruta })).estado, 400, ruta)
   assert.equal((await post('/api/carpetas', {}, { origin: 'http://evil.com' })).estado, 403)
+})
+
+test('participar (S37): asignar y estado solo en «participar» (400 en lectura/sincronizar/otros conectores), nunca crea ni toca .md; parchea externo-<p>.json', async () => {
+  process.env.AZURE_DEVOPS_PAT = 'pat-participar-12345'
+  const conf = JSON.parse(readFileSync(CONF, 'utf8'))
+  conf.push({ id: 'part', nombre: 'Participa', integraciones: [
+    { id: 'ado', tipo: 'azure-devops', modo: 'participar', organizacion: 'Org', proyecto: 'EAP10', tipoItem: '*' },
+    { id: 'gh3', tipo: 'github-projects', modo: 'participar', propietario: 'u', numero: 1 },
+  ] })
+  writeFileSync(CONF, JSON.stringify(conf))
+  const antesConf = readFileSync(CONF, 'utf8'), antesMd = readFileSync(BACKLOG, 'utf8'), nEscrituras = escrituras.length
+  const d = await get('/api/datos')
+  assert.equal(d.json.proyectos.find((x) => x.id === 'part').integraciones.find((x) => x.id === 'ado').modo, 'participar')
+  // Fuera de «participar» → 400 y no se llama a nada.
+  for (const [proyecto, integracion, patron] of [['eap10', 'ado', /participar/], ['prueba', 'gh', /participar/], ['part', 'gh3', /aún no participa/]]) {
+    for (const ruta of ['/api/integraciones/asignar', '/api/integraciones/estado']) {
+      const r = await post(ruta, { proyecto, integracion, id: '1', aMi: true, estado: 'Closed' })
+      assert.equal(r.estado, 400, `${ruta} ${proyecto}/${integracion}`)
+      assert.match(r.json.error, patron)
+    }
+  }
+  assert.deepEqual(participaciones, [])
+  assert.equal((await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'nada', id: '1', aMi: true })).estado, 404)
+  assert.equal((await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: 'abc', aMi: true })).estado, 400)
+  assert.equal((await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: '2' })).estado, 400, 'aMi debe ser sí o no')
+  assert.equal((await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: '2', aMi: true }, { origin: 'http://evil.com' })).estado, 403)
+  assert.deepEqual(participaciones, [])
+  // Asignarme: correo por quienSoy (una vez, caché 1 h), ítem parcheado en la respuesta, en datos y en externo-part.json.
+  const a = await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: '2', aMi: true })
+  assert.equal(a.estado, 200, a.json.error)
+  assert.deepEqual(a.json.item.asignado, { nombre: 'Yo', correo: 'yo@x' })
+  assert.equal(a.json.item.mio, true)
+  const enDatos = a.json.datos.proyectos.find((x) => x.id === 'part').integraciones.find((x) => x.id === 'ado').items.find((x) => x.id === '2')
+  assert.deepEqual([enDatos.asignado?.correo, enDatos.mio], ['yo@x', true])
+  const ext = JSON.parse(readFileSync(join(dir, 'datos', 'externo-part.json'), 'utf8'))
+  assert.equal(ext.ado.yo.correo, 'yo@x')
+  assert.equal(ext.ado.items.find((x) => x.id === '2').mio, true)
+  const q = await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: '2', aMi: false })
+  assert.equal(q.estado, 200, q.json.error)
+  assert.deepEqual([q.json.item.asignado, q.json.item.mio], [null, false])
+  assert.deepEqual(participaciones, [['quienSoy'], ['asignar', '2', 'yo@x'], ['asignar', '2', null]])
+  // Cambiar estado: solo estados conocidos (las columnas leídas); el adaptador recibe esas columnas.
+  assert.equal((await post('/api/integraciones/estado', { proyecto: 'part', integracion: 'ado', id: '1', estado: 'Inventado' })).estado, 400)
+  const e = await post('/api/integraciones/estado', { proyecto: 'part', integracion: 'ado', id: '1', estado: 'Closed' })
+  assert.equal(e.estado, 200, e.json.error)
+  assert.deepEqual([e.json.item.columna, e.json.item.hecha], ['Closed', true])
+  assert.deepEqual(participaciones.at(-1), ['cambiarEstado', '1', 'Closed', ['Active', 'Closed']])
+  // Azure rechaza → 502 con el mensaje y queda en servidor.log.
+  const mal = await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: '999', aMi: true })
+  assert.equal(mal.estado, 502)
+  assert.match(mal.json.error, /rechazó/)
+  assert.match(readFileSync(join(dir, 'datos', 'servidor.log'), 'utf8'), /asignar part\/ado #999/)
+  // Sincronía sigue cerrada; nada se crea afuera ni se escribe un .md ni proyectos.json.
+  assert.equal((await post('/api/sincronia/previa', { proyecto: 'part', integracion: 'ado' })).estado, 400)
+  assert.equal(escrituras.length, nEscrituras)
+  assert.equal(readFileSync(CONF, 'utf8'), antesConf)
+  assert.equal(readFileSync(BACKLOG, 'utf8'), antesMd)
+  assert.ok(!existsSync(join(dir, 'datos', 'sync-part-ado.json')))
 })

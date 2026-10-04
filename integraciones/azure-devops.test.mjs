@@ -4,7 +4,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { leer, crear, actualizar, listar, descripcionHtml, traducirError, normalizarOrganizacion } from './azure-devops.mjs'
+import * as ADO from './azure-devops.mjs'
+const { leer, crear, actualizar, listar, descripcionHtml, traducirError, normalizarOrganizacion } = ADO
 
 const R = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'integraciones', 'azure-devops.json'), 'utf8'))
 const CFG = { id: 'ado', tipo: 'azure-devops', organizacion: 'org-ejemplo', proyecto: 'proyecto-ejemplo', tipoItem: 'Task' }
@@ -43,7 +44,7 @@ test('leer: WIQL por tipo, ítems con estado/hecha/URL y estados del tipo; Autho
   assert.match(wiql.cuerpo.query, /\[System\.WorkItemType\] = 'Task' AND \[System\.State\] <> 'Removed'/)
   assert.equal(wiql.query['api-version'], '7.1')
   assert.equal(wiql.cabeceras.Authorization, `Basic ${Buffer.from(':PAT-secreto').toString('base64')}`)
-  assert.equal(d.llamadas[1].query.fields, 'System.Title,System.State,System.ChangedDate,System.AssignedTo,System.WorkItemType')
+  assert.equal(d.llamadas[1].query.fields, 'System.Title,System.State,System.ChangedDate,System.AssignedTo,System.WorkItemType,System.Description,Microsoft.VSTS.Common.Priority,System.IterationPath,System.Parent')
 })
 
 test('leer: lotes de 200 ids; estados configurables; aviso si fallan los estados', async () => {
@@ -209,4 +210,58 @@ test('crear con lista de tipos usa el primero', async () => {
   const d = ado({ 'POST wit/workitems/$Bug': R.nuevo })
   await crear({ ...CFG, tipoItem: ['Bug', 'Task'] }, CRED, { titulo: 'X' }, d)
   assert.equal(d.llamadas[0].clave, 'POST wit/workitems/$Bug')
+})
+
+// ---------- S37: modo participar (quienSoy, asignar, cambiarEstado) y campos para recomendar ----------
+test('leer: descripción (HTML → texto, ≤ 600), prioridad, iteración y padre; null si faltan', async () => {
+  const r = await leer(CFG, CRED, ado())
+  const [a, b] = r.items
+  assert.equal(a.descripcion, 'Crear las tablas base.\nVer el diseño & las notas\ndel equipo <v2>.')
+  assert.deepEqual([a.prioridad, a.iteracion, a.padre], [2, 'proyecto-ejemplo\\Sprint 3', '100'])
+  assert.deepEqual([b.descripcion, b.prioridad, b.iteracion, b.padre], [null, null, null, null])
+  const largo = { value: [{ id: 1, fields: { 'System.Title': 't', 'System.State': 'To Do', 'System.Description': `<p>${'palabra '.repeat(200)}</p>` } }] }
+  const r2 = await leer(CFG, CRED, ado({ 'GET wit/workitems': largo }))
+  assert.ok(r2.items[0].descripcion.length <= 600 && r2.items[0].descripcion.endsWith('…'))
+})
+
+test('quienSoy: connectionData de la organización (sin proyecto) → { id, nombre, correo }; sin correo, error claro', async () => {
+  const d = ado({ 'GET connectionData': R.yo })
+  assert.deepEqual(await ADO.quienSoy(CFG, CRED, d), { id: 'aaaa-1111', nombre: 'Ana Ejemplo', correo: 'ana@ejemplo.com' })
+  assert.match(d.llamadas[0].url, /^https:\/\/dev\.azure\.com\/org-ejemplo\/_apis\/connectionData\?/)
+  await assert.rejects(ADO.quienSoy(CFG, CRED, ado({ 'GET connectionData': { authenticatedUser: { id: 'x', properties: {} } } })), /correo/)
+  await assert.rejects(ADO.quienSoy(CFG, CRED, ado({ 'GET connectionData': res('no', 401) })), (e) => /Credencial inválida/.test(e.message) && !/PAT-secreto/.test(e.message))
+})
+
+test('asignar: PATCH add/remove de System.AssignedTo (json-patch) y devuelve el ítem; 400 traducido; nunca crea', async () => {
+  const d = ado({ 'PATCH wit/workitems/N': R.asignado })
+  const r = await ADO.asignar(CFG, CRED, '103', 'ana@ejemplo.com', d)
+  assert.equal(d.llamadas.length, 1)
+  assert.equal(d.llamadas[0].metodo, 'PATCH')
+  assert.match(d.llamadas[0].url, /\/_apis\/wit\/workitems\/103\?/)
+  assert.equal(d.llamadas[0].cabeceras['Content-Type'], 'application/json-patch+json')
+  assert.deepEqual(d.llamadas[0].cuerpo, [{ op: 'add', path: '/fields/System.AssignedTo', value: 'ana@ejemplo.com' }])
+  assert.deepEqual(r, { id: '103', columna: 'To Do', hecha: false, asignado: { nombre: 'Ana Ejemplo', correo: 'ana@ejemplo.com' } })
+  const d2 = ado({ 'PATCH wit/workitems/N': { id: 103, fields: { 'System.State': 'To Do' } } })
+  const r2 = await ADO.asignar(CFG, CRED, '103', null, d2)
+  assert.deepEqual(d2.llamadas[0].cuerpo, [{ op: 'remove', path: '/fields/System.AssignedTo' }])
+  assert.equal(r2.asignado, null)
+  const cuerpo400 = JSON.stringify({ message: "TF401320: Rule Error for field Assigned To. Error code: Required, HasValues, LimitedToValues, AllowsOldValue, InvalidEmpty." })
+  await assert.rejects(ADO.asignar(CFG, CRED, '103', 'otro@x.com', ado({ 'PATCH wit/workitems/N': res(cuerpo400, 400) })), (e) => /rechazó/.test(e.message) && /TF401320/.test(e.message) && !/PAT-secreto/.test(e.message))
+  await assert.rejects(ADO.asignar(CFG, CRED, 'abc', 'a@b.c', ado()), /id/)
+  assert.ok([...d.llamadas, ...d2.llamadas].every((l) => !l.clave.startsWith('POST')))
+})
+
+test('cambiarEstado: valida contra los estados (sin distinguir mayúsculas) antes del PATCH; con columnas dadas no las pide', async () => {
+  const d = ado({ 'PATCH wit/workitems/N': { id: 102, fields: { 'System.State': 'Done' } } })
+  const r = await ADO.cambiarEstado(CFG, CRED, '102', 'done', d)
+  const parche = d.llamadas.find((l) => l.metodo === 'PATCH')
+  assert.deepEqual(parche.cuerpo, [{ op: 'replace', path: '/fields/System.State', value: 'Done' }])
+  assert.deepEqual([r.id, r.columna, r.hecha], ['102', 'Done', true])
+  const d2 = ado()
+  await assert.rejects(ADO.cambiarEstado(CFG, CRED, '102', 'Inventado', d2), /no es un estado/)
+  assert.ok(d2.llamadas.every((l) => l.metodo !== 'PATCH'), 'no parchea un estado desconocido')
+  const d3 = ado({ 'PATCH wit/workitems/N': { id: 102, fields: { 'System.State': 'Active' } } })
+  await ADO.cambiarEstado(CFG, CRED, '102', 'Active', d3, { columnas: ['To Do', 'Active'] })
+  assert.deepEqual(d3.llamadas.map((l) => l.metodo), ['PATCH'])
+  await assert.rejects(ADO.cambiarEstado(CFG, CRED, '102', 'Done', ado(), { columnas: ['To Do', 'Active'] }), /no es un estado/)
 })
