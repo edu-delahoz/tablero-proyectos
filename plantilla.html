@@ -692,7 +692,7 @@ function mapaPlan(doc) {
 
 // ---------- Resumen: mapa en miniatura ----------
 function segmentos(b, secs = aplanar(b.estructura).filter((s) => s.estado !== 'doc'), aqui = b.aqui) {
-  return `<div class="segmentos" aria-label="Avance por sección">${secs.map((s) => `<button class="seg est-${s.estado}${s.id === aqui ? ' actual' : ''}" style="--p:${pct(s.hechas, s.total)}%" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${s.id}"
+  return `<div class="segmentos" aria-label="Avance por sección">${secs.map((s) => `<button class="seg est-${s.estado}${s.id === aqui || s.actual ? ' actual' : ''}" style="--p:${pct(s.hechas, s.total)}%" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${s.id}"
       title="${esc(plano(s.titulo))} · ${s.hechas}/${s.total}" aria-label="${esc(s.clave || plano(s.titulo))}: ${ETIQUETA[s.estado]}, ${s.hechas} de ${s.total}"><span class="bloque" aria-hidden="true">${GLIFO_SEG[s.estado]}</span><span class="clave" aria-hidden="true">${esc(s.clave || '·')}</span></button>`).join('')}</div>`;
 }
 
@@ -1250,39 +1250,54 @@ function filaPR(pr, sinFila) {
 
 // ---------- Plan en curso ----------
 // Puro: recibe un proyecto y devuelve el hito/plan en que se trabaja (o null si no hay backlog con «estás aquí»).
+// Si el backlog trae «activo» (frente sacado del historial de ediciones), manda sobre el «estás aquí» del Estado.
 function enCurso(p) {
   const b = resumenProyecto(p).principal;
-  const aqui = b && aplanar(b.estructura || []).find((x) => x.id === b.aqui);
+  const act = b?.activo || null;
+  const aqui = b && aplanar(b.estructura || []).find((x) => x.id === (act?.seccion || b.aqui));
   if (!aqui) return null;
   const hito = (b.estructura || []).find((x) => aplanar([x]).some((y) => y.id === aqui.id)) || aqui;
-  const sesiones = (hito.hijas.length ? hito.hijas : [hito]).filter((x) => x.estado !== 'doc');
-  const nombre = hito.plan || aqui.plan;
+  const subs = act?.subsesiones || [];
+  const siguiente = subs.find((x) => x.estado === 'siguiente') || null;
+  // Sub-sesiones como segmentos: todas llevan a la sección; la siguiente se marca como actual.
+  const sesiones = subs.length
+    ? subs.map((x) => ({ id: aqui.id, clave: x.clave, titulo: `${x.clave} — ${x.titulo}`, estado: x.estado === 'hecho' ? 'hecho' : x.estado === 'siguiente' || x.hechas ? 'en-curso' : 'pendiente', hechas: x.hechas, total: x.total, actual: x === siguiente }))
+    : (hito.hijas.length ? hito.hijas : [hito]).filter((x) => x.estado !== 'doc');
+  const nombre = act ? act.plan : hito.plan || aqui.plan;
   const plan = nombre ? p.planes.find((x) => x.nombre === nombre) : null;
-  const prompts = [...(plan ? aplanar(plan.estructura) : []), ...aplanar(b.estructura)].flatMap((x) => x.prompts);
-  const destacado = !hito.estado.startsWith('hecho') && aqui.clave ? prompts.find((x) => x.clave === aqui.clave) : null;
-  const rama = aqui.meta?.rama || hito.meta?.rama || null;
+  const delPlan = plan ? aplanar(plan.estructura).flatMap((x) => x.prompts) : [];
+  const prompts = [...delPlan, ...aplanar(b.estructura).flatMap((x) => x.prompts)];
+  const destacado = hito.estado.startsWith('hecho') ? null
+    : siguiente ? delPlan.find((x) => x.clave === siguiente.clave) || { etiqueta: `${siguiente.clave} — ${siguiente.titulo}`, texto: siguiente.texto, clave: siguiente.clave }
+    : aqui.clave ? prompts.find((x) => x.clave === aqui.clave) || null : null;
+  const rama = aqui.meta?.rama || hito.meta?.rama || (act ? p.git?.rama : null) || null;
+  const tarea = act?.tarea || null;
+  const falta = hito.estado === 'hecho' ? []
+    : tarea ? (tarea.abiertas.length ? tarea.abiertas : siguiente ? [siguiente.texto] : [])
+    : aplanar([aqui]).flatMap((x) => x.tareas.filter((t) => !t.hecha).map((t) => t.texto));
   const filas = rama ? (p.bitacora?.registro || []).filter((f) => f.rama === rama) : [];
   const gasto = filas.length ? { ...(agregarBit(filas, 'rama').grupos[0] || { costo: 0, minutos: 0, sesiones: 0 }), sesionesTotal: filas.length } : null;
-  return { backlog: b, hito, sesiones, aqui, plan, prompts, destacado, rama, gasto, completo: hito.estado === 'hecho' };
+  return { backlog: b, hito, sesiones, aqui, tarea, siguiente, falta, plan, prompts, destacado, rama, gasto, completo: hito.estado === 'hecho' };
 }
 function tarjetaEnCurso(p, compacta = false) {
   const c = enCurso(p);
   if (!c) return '';
-  const { backlog: b, hito, sesiones, aqui, plan, destacado, gasto } = c;
+  const { backlog: b, hito, sesiones, aqui, tarea, siguiente, plan, destacado, gasto } = c;
   const resto = c.prompts.filter((x) => x !== destacado);
   const hechas = sesiones.filter((x) => x.estado === 'hecho').length;
-  const falta = c.completo ? [] : aplanar([aqui]).flatMap((x) => x.tareas.filter((t) => !t.hecha)).slice(0, 3);
+  const falta = c.falta.slice(0, 3);
+  const titulo = `${corto(plano(hito.titulo), 70)}${tarea ? ` › ${corto(tarea.titulo, 60)}` : ''}`;
   const botones = compacta
     ? `<button class="boton" data-proy="${esc(p.id)}" data-pest="resumen">Abrir proyecto</button>`
     : `${plan ? `<button class="boton" data-ir="planes" data-sel="${esc(plan.nombre)}">Abrir plan</button> ` : ''}<button class="boton" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${aqui.id}">Ver en backlog</button>`;
   return `<section class="tarjeta en-curso" aria-label="Plan en curso">
-    <h2><span>${c.completo ? `✓ ${esc(corto(plano(hito.titulo), 70))} completo` : `▶ En curso · ${esc(corto(plano(hito.titulo), 70))}`}</span><small>${plan ? hace(plan.modificado) : hace(b.modificado)}</small></h2>
-    <div class="chips-proy">${compacta ? `<span class="etq">${esc(p.nombre)}</span>` : ''}${c.rama ? `<span class="etq" title="Rama">⎇ ${esc(c.rama)}</span>` : ''}${chips({ modelo: aqui.meta?.modelo || destacado?.modelo })}</div>
-    ${segmentos(b, sesiones, c.completo ? null : aqui.id)}
+    <h2><span>${c.completo ? `✓ ${esc(titulo)} completo` : `▶ En curso · ${esc(titulo)}`}</span><small>${plan ? hace(plan.modificado) : hace(b.modificado)}</small></h2>
+    <div class="chips-proy">${compacta ? `<span class="etq">${esc(p.nombre)}</span>` : ''}${c.rama ? `<span class="etq" title="Rama">⎇ ${esc(c.rama)}</span>` : ''}${plan ? `<span class="etq" title="${esc(plan.nombre)}">Plan: ${esc(corto(plan.titulo.replace(/^Plan\s*[:—–-]\s*/i, ''), 60))}</span>` : ''}${chips({ modelo: aqui.meta?.modelo || destacado?.modelo })}</div>
+    ${segmentos(b, sesiones, c.completo || siguiente ? null : aqui.id)}
     <div>${barra(hito.hechas, hito.total, 20)}</div>
-    <div class="suave">${hechas}/${sesiones.length} sesiones · ${hito.hechas}/${hito.total} tareas${gasto ? ` · ${usd(gasto.costo)} en la rama (${gasto.sesionesTotal} ses.)` : ''}</div>
-    ${!compacta && falta.length ? `<div class="rotulo">Falta</div><ul class="tareas">${falta.map((t) => `<li>${CASILLA()[0]} ${esc(corto(plano(t.texto), 110))}</li>`).join('')}</ul>` : ''}
-    ${destacado ? `<div class="rotulo">Siguiente prompt · ${esc(destacado.clave)}</div>${promptsHtml([destacado])}` : ''}
+    <div class="suave">${hechas}/${sesiones.length} sesiones${tarea ? ` · ${tarea.hechas}/${tarea.total} casillas de la tarea` : ''} · ${hito.hechas}/${hito.total} tareas${gasto ? ` · ${usd(gasto.costo)} en la rama (${gasto.sesionesTotal} ses.)` : ''}</div>
+    ${!compacta && falta.length ? `<div class="rotulo">Falta</div><ul class="tareas">${falta.map((t) => `<li>${CASILLA()[0]} ${esc(corto(plano(t), 110))}</li>`).join('')}</ul>` : ''}
+    ${destacado ? `<div class="rotulo">${siguiente ? 'Siguiente sesión' : 'Siguiente prompt'} · ${esc(destacado.clave)}</div>${promptsHtml([destacado])}` : ''}
     ${resto.length ? `<details class="grupo"><summary class="rotulo">Otros prompts (${resto.length})</summary>${promptsHtml(resto)}</details>` : ''}
     <p>${botones}</p></section>`;
 }
@@ -1293,7 +1308,7 @@ function resumenProyecto(p) {
   const bl = p.backlogs.filter((b) => !b.esPlan);
   const hechas = bl.reduce((a, b) => a + b.hechas, 0), total = bl.reduce((a, b) => a + b.total, 0);
   const principal = bl.find((b) => b.aqui) || bl[0];
-  const aqui = principal && aplanar(principal.estructura || []).find((s) => s.id === principal.aqui);
+  const aqui = principal && aplanar(principal.estructura || []).find((s) => s.id === (principal.activo?.seccion || principal.aqui));
   const hijo = aqui?.vinculo && p.backlogs.find((b) => b.archivo === aqui.vinculo);
   const sub = hijo && aplanar(hijo.estructura || []).find((s) => s.id === hijo.aqui);
   const g = p.git;

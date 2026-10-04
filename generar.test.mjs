@@ -6,7 +6,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
-import { estructura, analizarTitulo, estasAqui, hitosDePlan, vincular, aplanar, plano, grafoRamas, fusionarRamas, anadirNota, asignarPlanes } from './generar.mjs'
+import { estructura, analizarTitulo, estasAqui, hitosDePlan, vincular, aplanar, plano, grafoRamas, fusionarRamas, anadirNota, asignarPlanes, frenteActivo } from './generar.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const fixture = (f) => readFileSync(join(AQUI, 'fixtures', f), 'utf8')
@@ -265,4 +265,80 @@ test('asignarPlanes: cada plan va al proyecto con más menciones; la asignación
   assert.equal(r.get('a.md'), 'tablero') // 5 contra 1
   assert.equal(r.get('b.md'), 'tablero') // manual, aunque iep tenga más
   assert.equal(r.get('c.md'), 'iep') // empate: el primero
+})
+
+// ---------- Frente activo ----------
+const FRENTE = `# Backlog
+
+## Estado
+- H2 CERRADO. Siguiente: **H5**
+
+## H2 — Base ✅ CERRADO
+- [x] Uno
+- [x] Dos
+
+## H3 — Consulta
+- [x] Listas
+- [ ] **Revisión en iPhone**, rama \`fix\`:
+  - [x] Hoja de filtros
+  - [ ] **Personas mal migradas (PR aparte):** ~32 registros.
+    - **S1 — parche ETL (Opus)** — sin BD.
+      - [x] separar_personas
+      - [x] tests
+    - **S1b — continuación (Opus)**
+      - [x] mapeo
+    - **S2 — siguiente (Opus, Supabase local)**: migración formacion_persona + pgTAP.
+- [ ] **Fixes post-producción** — plan \`~/.claude/plans/fixes-pebble.md\`:
+  - [x] Rama 1
+
+## H5 — Dashboard
+- [ ] Tarjetas
+`
+const backlogFrente = (contenido = FRENTE) => ({ archivo: 'BACKLOG_MVP.md', contenido, estructura: estructura(contenido) })
+const PLANES_F = [
+  { nombre: 'otro.md', titulo: 'Plan: H3 en BACKLOG_OTRO.md' },
+  { nombre: 'federated-swing.md', titulo: 'Plan: cerrar los 5 pendientes de H3 en BACKLOG_MVP.md' },
+  { nombre: 'viejo.md', titulo: 'Plan: H3 viejo' },
+]
+
+test('estructura: linea en secciones y tareas', () => {
+  const a = estructura(FRENTE), h3 = porClave(a, 'H3')
+  assert.equal(FRENTE.split('\n')[h3.linea], '## H3 — Consulta')
+  assert.match(FRENTE.split('\n')[h3.tareas[1].hijas[1].linea], /^ {2}- \[ \] \*\*Personas mal migradas/)
+})
+
+test('frenteActivo: última edición en H3 → Personas mal migradas, S2 siguiente y plan por clave', () => {
+  const b = backlogFrente()
+  const h = [{ inicial: true, anadidas: [] }, { anadidas: ['      - [x] mapeo', '    - **S1b — continuación (Opus)**'] }]
+  const a = frenteActivo(b, h, PLANES_F)
+  assert.equal(a.seccion, porClave(b.estructura, 'H3').id)
+  assert.equal(a.tarea.titulo, 'Personas mal migradas')
+  assert.deepEqual([a.tarea.hechas, a.tarea.total, a.tarea.abiertas], [3, 3, []])
+  assert.deepEqual(a.subsesiones.map((s) => [s.clave, s.estado, s.hechas, s.total]), [['S1', 'hecho', 2, 2], ['S1b', 'hecho', 1, 1], ['S2', 'siguiente', 0, 0]])
+  assert.match(a.subsesiones[2].texto, /^S2 — siguiente .*pgTAP\.$/)
+  assert.equal(a.plan, 'federated-swing.md')
+})
+
+test('frenteActivo: hito completo o solo líneas de Estado → null', () => {
+  const b = backlogFrente()
+  assert.equal(frenteActivo(b, [{ anadidas: ['- [x] Dos'] }], PLANES_F), null)
+  assert.equal(frenteActivo(b, [{ anadidas: ['- H2 CERRADO. Siguiente: **H5**'] }], PLANES_F), null)
+  assert.equal(frenteActivo(b, [], PLANES_F), null)
+})
+
+test('frenteActivo: la entrada más reciente con una línea útil manda; las de Estado se ignoran', () => {
+  const b = backlogFrente()
+  const h = [{ anadidas: ['- [ ] Tarjetas'] }, { anadidas: ['  - [x] Rama 1'] }, { anadidas: ['- H2 CERRADO. Siguiente: **H5**', 'línea que ya no existe'] }]
+  const a = frenteActivo(b, h, PLANES_F)
+  assert.equal(a.tarea.titulo, 'Fixes post-producción')
+  assert.equal(a.plan, 'fixes-pebble.md', 'la mención dentro de la tarea manda sobre el título')
+  assert.deepEqual(a.subsesiones, [])
+})
+
+test('frenteActivo: sin tarea abierta usa la primera sección abierta del hito', () => {
+  const t = `## H6 — Plan\n\n### S12 — Hecha\n- [x] a\n\n### S13 — Pendiente\n- [ ] b\n`
+  const b = backlogFrente(t)
+  const a = frenteActivo(b, [{ anadidas: ['- [x] a'] }], [])
+  assert.equal(a.seccion, porClave(b.estructura, 'S13').id)
+  assert.equal(a.tarea, null)
 })

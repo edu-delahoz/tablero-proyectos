@@ -115,7 +115,7 @@ const textoDeCita = (lineas) => lineas.map((l) => l.replace(/^\s*>\s?/, '').trim
   .reduce((ps, l) => { if (!l) ps.push([]); else (ps.at(-1) || (ps[ps.push([]) - 1])).push(l); return ps }, [])
   .filter((p) => p.length).map((p) => p.join(' ')).join('\n\n')
 
-// Árbol de secciones: [{ id, titulo, tituloCrudo, clave, nivel, meta, hechas, total, estado, tareas:[{texto,hecha,hijas,marcas?}], items, prompts:[{etiqueta,texto,clave,modelo}], hijas:[sección] }]
+// Árbol de secciones: [{ id, linea, titulo, tituloCrudo, clave, nivel, meta, hechas, total, estado, tareas:[{texto,hecha,linea,hijas,marcas?}], items, prompts:[{etiqueta,texto,clave,modelo}], hijas:[sección] }]
 export function estructura(texto) {
   const raiz = []
   let padre = null, actual = null, pila = [], cerca = null, cita = null, rotulo = null, n = 0
@@ -127,7 +127,7 @@ export function estructura(texto) {
     const modelo = (etiqueta.match(/\b(Opus|Sonnet|Haiku|Fable)\b/i) || [])[1]
     actual.prompts.push({ etiqueta, texto: texto.slice(0, 20000), clave: (etiqueta.match(/\b([A-Z]\d+[a-z]?)\b/) || [])[1] || null, ...(modelo ? { modelo: modelo[0].toUpperCase() + modelo.slice(1).toLowerCase() } : {}) })
   }
-  for (const linea of String(texto).replace(/\t/g, '    ').split('\n')) {
+  for (const [i, linea] of String(texto).replace(/\t/g, '    ').split('\n').entries()) {
     if (RE_CERCA.test(linea)) {
       if (cita) { emitir(cita.lineas, cita.rotulo, true); cita = null }
       if (cerca) { emitir(cerca.lineas, cerca.rotulo, false); cerca = null } else cerca = { rotulo, lineas: [] }
@@ -145,7 +145,7 @@ export function estructura(texto) {
     const t = linea.match(RE_TITULO)
     if (t) {
       const nivel = t[1].length
-      const s = { id: `s${n++}`, nivel, tituloCrudo: t[2], ...analizarTitulo(t[2]), tareas: [], items: [], prompts: [], hijas: [] }
+      const s = { id: `s${n++}`, nivel, linea: i, tituloCrudo: t[2], ...analizarTitulo(t[2]), tareas: [], items: [], prompts: [], hijas: [] }
       if (nivel === 3 && padre) padre.hijas.push(s)
       else { raiz.push(s); if (nivel === 2) padre = s }
       actual = s; pila = []; rotulo = null
@@ -167,7 +167,7 @@ export function estructura(texto) {
     }
     const sangria = m[1].length
     const { texto: limpio, marcas } = extraerMarcas(m[3].trim())
-    const tarea = { texto: limpio.slice(0, 1500), hecha: m[2] !== ' ', hijas: [], ...(Object.keys(marcas).length ? { marcas } : {}) }
+    const tarea = { texto: limpio.slice(0, 1500), hecha: m[2] !== ' ', linea: i, hijas: [], ...(Object.keys(marcas).length ? { marcas } : {}) }
     while (pila.length && pila.at(-1).sangria >= sangria) pila.pop()
     ;(pila.length ? pila.at(-1).tarea.hijas : actual.tareas).push(tarea)
     pila.push({ sangria, tarea })
@@ -199,6 +199,81 @@ export function estasAqui(arbol, estadoTxt = '') {
     }
   }
   return pasos.find((s) => s.estado !== 'hecho')?.id || null
+}
+
+// Frente activo: dónde se está editando de verdad, según el historial del backlog (la entrada más reciente manda).
+// Devuelve { seccion, tarea, subsesiones, plan } del hito tocado si aún tiene casillas abiertas; si no, null (manda «estás aquí»).
+const RE_SUB = /^\s*[-*]\s+\*\*(S\d+[a-z]?)\b\s*[—–-]?\s*(.*?)\*\*(.*)$/
+const RE_CASILLA = /^\s*[-*] \[([ xX-])\]\s?(.*)$/
+const sangria = (l) => l.match(/^\s*/)[0].length
+const abierta = (s) => s.estado === 'en-curso' || s.estado === 'pendiente'
+// «**Personas mal migradas (PR aparte):** ~32 registros…» → «Personas mal migradas»
+const tituloTarea = (t) => plano((t.match(/^\*\*(.+?)\*\*/) || [, t])[1]).replace(/\s*:\s*$/, '').replace(/\s*\([^()]*\)\s*$/, '').slice(0, 120)
+export function frenteActivo(b, entradas = [], planes = []) {
+  const crudas = String(b.contenido || '').split('\n')
+  const lineas = crudas.map((l) => l.replace(/\t/g, '    '))
+  const arbol = b.estructura || []
+  const secciones = aplanar(arbol)
+  const hitoDe = (s) => arbol.find((h) => h === s || aplanar(h.hijas).includes(s)) || s
+  // Rango de una tarea: hasta la siguiente línea no vacía con igual o menor sangría, o un título.
+  const fin = (linea) => {
+    const base = sangria(lineas[linea])
+    let j = linea + 1
+    while (j < lineas.length && (!lineas[j].trim() || (!RE_TITULO.test(lineas[j]) && sangria(lineas[j]) > base))) j++
+    return j
+  }
+  const tareas = []
+  const recorrer = (ts, prof, sec) => ts.forEach((t) => { tareas.push({ t, prof, sec, fin: fin(t.linea) }); recorrer(t.hijas, prof + 1, sec) })
+  for (const s of secciones) recorrer(s.tareas, 0, s)
+
+  const ubicar = (L) => {
+    const sec = secciones.filter((s) => s.linea <= L).at(-1)
+    if (!sec || sec.estado === 'doc') return null
+    const hito = hitoDe(sec)
+    if (!abierta(hito)) return null
+    // La tarea abierta más profunda que contiene la línea y tiene hijas (si no, la abierta más profunda).
+    const cadena = tareas.filter((x) => x.sec === sec && x.t.linea <= L && L < x.fin && !x.t.hecha)
+    return { L, sec, hito, x: cadena.filter((x) => x.t.hijas.length).at(-1) || cadena.at(-1) || null }
+  }
+  for (const e of [...entradas].reverse()) {
+    if (e.inicial) continue
+    const cands = (e.anadidas || []).flatMap((a) => crudas.flatMap((l, L) => (l.trimEnd() === a ? [ubicar(L)] : []))).filter(Boolean)
+    if (!cands.length) continue
+    const elegido = cands.sort((p, q) => (!!p.x - !!q.x) || ((p.x?.prof ?? 0) - (q.x?.prof ?? 0)) || (p.L - q.L)).at(-1)
+    return construirFrente(b, lineas, elegido, planes)
+  }
+  return null
+}
+function construirFrente(b, lineas, { sec, hito, x }, planes) {
+  const seccion = abierta(sec) ? sec : aplanar(hito.hijas).find(abierta) || hito
+  if (seccion !== sec) x = null
+  let tarea = null
+  const subsesiones = []
+  if (x) {
+    const rango = lineas.slice(x.t.linea + 1, x.fin)
+    const abiertas = []
+    let hechas = 0, total = 0
+    for (const l of rango) {
+      const s = l.match(RE_SUB)
+      if (s) { subsesiones.push({ clave: s[1], titulo: plano(s[2]).replace(/\s*[—–-]\s*$/, ''), estado: 'pendiente', hechas: 0, total: 0, texto: plano(l.replace(/^\s*[-*]\s+/, '')) }); continue }
+      const c = l.match(RE_CASILLA)
+      if (!c) continue
+      const hecha = c[1] !== ' '
+      total++; if (hecha) hechas++; else abiertas.push(plano(c[2]))
+      const sub = subsesiones.at(-1)
+      if (sub) { sub.total++; if (hecha) sub.hechas++ }
+    }
+    for (const s of subsesiones) if (s.total && s.hechas === s.total) s.estado = 'hecho'
+    const sig = subsesiones.find((s) => s.estado !== 'hecho' && /\bsiguiente\b/i.test(s.texto)) || subsesiones.find((s) => s.estado !== 'hecho')
+    if (sig) sig.estado = 'siguiente'
+    tarea = { texto: x.t.texto, titulo: tituloTarea(x.t.texto), linea: x.t.linea, hechas, total, abiertas }
+  }
+  // Plan: mención dentro de la tarea; si no, el plan más reciente cuyo título nombra la clave del hito (y su backlog, si lo cita).
+  const mencion = x && lineas.slice(x.t.linea, x.fin).join('\n').match(/plans\/([A-Za-z0-9_-]+\.md)/)?.[1]
+  const clave = hito.clave || seccion.clave
+  const porTitulo = clave && planes.find((p) => new RegExp(`\\b${clave}\\b`).test(p.titulo) && (!/\bBACKLOG\w*\.md\b/i.test(p.titulo) || p.titulo.includes(b.archivo)))?.nombre
+  const plan = mencion || porTitulo || (x ? null : seccion.plan || hito.plan) || null
+  return { seccion: seccion.id, tarea, subsesiones, plan }
 }
 
 // Filas «| **N — nombre** (duración) | contenido | verificación |» de la tabla de hitos de un PLAN.
@@ -568,7 +643,10 @@ async function recolectar(opciones = {}) {
       for (const x of integraciones) if (fallos.has(x.id)) Object.assign(x, { estado: 'error', mensaje: fallos.get(x.id) })
     }
     for (const x of integraciones) delete x._auto
-    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial: actualizarHistorial(p, backlogs), planes: leerPlanes(p, menciones, duenos), git: leerGit(p), notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones }
+    const historial = actualizarHistorial(p, backlogs)
+    const planes = leerPlanes(p, menciones, duenos)
+    for (const b of backlogs) if (!b.esPlan) b.activo = frenteActivo(b, historial[b.archivo], planes)
+    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git: leerGit(p), notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones }
   }))
 }
 

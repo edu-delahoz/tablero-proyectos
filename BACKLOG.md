@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `plan-en-curso` · S13 hecha, tests en verde (88 pasan, 2 omitidos): `linea` en secciones y tareas de `estructura()`; `frenteActivo(b, historial, planes)` (la entrada más reciente del historial manda; ignora Estado y hitos completos → `null` y vuelve el «estás aquí»; tarea abierta más profunda con hijas; sub-sesiones `**S\d+**`; plan por mención en la tarea o por clave del hito en el título); `b.activo` en `recolectar()`; `enCurso`/`tarjetaEnCurso` y el «estás aquí» de «Todos los proyectos» lo usan. CDP con copia de `datos/`: IEP → «H3 › Personas mal migradas», plan «cerrar los 5 pendientes de H3», S1·S1b·S2 ✓ y **S2b** siguiente (el backlog real ya avanzó desde S2), rama `h3-personas-s2`; tablero → H6/S13. H6 completa. Pendiente: que el usuario la pruebe (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `plan-en-curso` · S12 hecha, tests en verde (83 pasan, 2 omitidos): `protegerProceso`/`protegerManejador`, `enviar` seguro, `datos/servidor.log` (ya ignorado por `datos/`), `--asegurar-servidor` en el hook, `asignarPlanes` (mayoría; `federated-swing` ya solo en IEP). Comprobado: matar el servidor y abrir sesión (hook) lo revive. Siguiente: **S13** (Opus, B+C). Plan `~/.claude/plans/pasted-content-id-9662-se-callo-harmonic-waffle.md`.
 - 2026-10-04 · rama `plan-en-curso` (sale de `notas-tablero`) · S11 hecha, tests en verde (80 pasan, 2 omitidos): `plan` y `modelo` en `estructura()`, `enCurso`/`tarjetaEnCurso` en `plantilla.html` (arriba del Resumen y franja en «Todos los proyectos»); probada por CDP con copia de `datos/` y con S10 desmarcada en una copia del backlog. Nota respondida. Pendiente: que el usuario la pruebe (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `notas-tablero` · S10 hecha, tests en verde (79 pasan, 2 omitidos): vista «Todos los proyectos» (`vistaTodos`, `resumenProyecto`, `abrirProyecto` en `plantilla.html`; `todos` es un flag aparte de `P`, `#p=todos`); probada por CDP con copia de `datos/` (clic en tarjeta/enlaces, hash, recarga, sin guardado). H5 completa. PR #7 (base `busqueda-favoritos`). Pendiente: que el usuario la pruebe (`node generar.mjs --abrir`).
@@ -32,9 +33,9 @@ Plan: `~/.claude/plans/pasted-content-id-9662-se-callo-harmonic-waffle.md` (secc
 
 ### S13 — Frente activo en la tarjeta «En curso» · **Opus** · rama `plan-en-curso`
 Plan: `~/.claude/plans/pasted-content-id-9662-se-callo-harmonic-waffle.md` (secciones B y C).
-- [ ] `linea` en secciones y tareas de `estructura()`; `frenteActivo(backlog, historial, planes)` puro con tests
-- [ ] Sub-sesiones `- **S\d+[a-z]? — …**` dentro de la tarea activa; plan por mención en la tarea o por clave del hito en el título
-- [ ] `enCurso`/`tarjetaEnCurso` usan `b.activo` (rama de `p.git` como respaldo); CDP: IEP → H3 › Personas mal migradas, S2 siguiente
+- [x] `linea` en secciones y tareas de `estructura()`; `frenteActivo(backlog, historial, planes)` puro con tests
+- [x] Sub-sesiones `- **S\d+[a-z]? — …**` dentro de la tarea activa; plan por mención en la tarea o por clave del hito en el título
+- [x] `enCurso`/`tarjetaEnCurso` usan `b.activo` (rama de `p.git` como respaldo); CDP: IEP → H3 › Personas mal migradas, S2 siguiente
 
 ## H5 — Notas del usuario y vista general
 
