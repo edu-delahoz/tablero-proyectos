@@ -29,6 +29,8 @@ Plan: `~/.claude/plans/problema-en-el-en-smooth-panda.md`. Rama `plan-en-curso`.
 - [x] `tarjetaEnCurso`: rótulo «Falta · S3c — …» con sus casillas, «S3c 0/3» junto a la barra, «Plan (de S3): …»
 - [x] Prueba con el `BACKLOG_MVP.md` real del IEP: S3c con sus 3 casillas; README
 
+Decisiones y trampas (S14): el bloque de una sub-sesión acaba en la siguiente línea con igual o menor sangría (por eso «- Después: **S4**» no se lleva casillas); con un plan propio de la sub-sesión en `~/.claude/plans` (p. ej. `sesi-n-s3c-…`), manda sobre el de una anterior y no se rotula «(de …)»; las fichas del nombre se comparan enteras («s3» no casa con «s3c»). Para matar un servidor viejo, el último «arranque (pid …)» del log no sirve (suele ser un intento muerto por EADDRINUSE): se usa `lsof -ti tcp:PUERTO -sTCP:LISTEN`. Antes de relanzarse, el servidor suelta el puerto (`close` + `closeAllConnections`) para que el nuevo no choque.
+
 ### S15 — Mod `panel-tablero`: rutas relativas, sub-sesiones y casillas · **Opus** · fuera del repo (`~/.claude/mods/panel-tablero`, sin git)
 `hooks/register.tsx`, `register.test.ts`, `types/index.d.ts` (parte B del plan). Cargar la skill `plugin-authoring`; en el `.tsx` ninguna variable puede llamarse `h`.
 - [ ] `focoDeSesion(mensajes, home, root)`: rutas `./`/`../…backlog*.md` y nombres sueltos `BACKLOG*.md` resueltos contra `$.session.root()`; test: prompt con ruta relativa → backlog encontrado
