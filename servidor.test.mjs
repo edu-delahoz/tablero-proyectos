@@ -37,7 +37,7 @@ const falso = {
   async leer() { return { url: 'https://x', titulo: 'Falso', columnas: ['Todo', 'Done'], items: [...fuera.values()] } },
   async crear(cfg, cred, t) { const id = `N${++n}`; fuera.set(id, { id, titulo: t.titulo, hecha: t.hecha, url: `https://x/${id}` }); return { id, url: `https://x/${id}` } },
   async actualizar(cfg, cred, id, c) { Object.assign(fuera.get(id), c) },
-  async listar(cfg, cred) { if (cfg.numero === 99) throw new Error('GitHub Projects: Sin conexión con GitHub.'); return { recibido: cfg, cred, proyectos: [{ propietario: 'u', numero: 5, titulo: 'Falso' }] } },
+  async listar(cfg, cred) { if (cfg.numero === 98) return new Promise(() => {}); if (cfg.numero === 99) throw new Error('GitHub Projects: Sin conexión con GitHub.'); return { recibido: cfg, cred, proyectos: [{ propietario: 'u', numero: 5, titulo: 'Falso' }] } },
 }
 const trelloFalso = { async listar(cfg, cred) { return { recibido: cfg, cred, tableros: [] } } }
 
@@ -293,6 +293,14 @@ test('integraciones: 409 si proyectos.json cambió, 400 con errores si no valida
   assert.equal((await post('/api/integraciones/guardar', { proyecto: 'prueba', integracion: cfg, mtime: m }, { origin: 'http://evil.com' })).estado, 403)
   assert.equal((await post('/api/integraciones/guardar', { proyecto: 'nada', integracion: cfg, mtime: m })).estado, 404)
   assert.ok(!JSON.parse(readFileSync(CONF, 'utf8'))[0].integraciones.some((x) => x.id === 'gh9'))
+})
+
+test('integraciones: descubrir con un conector que nunca responde → 502 en ≤ 16 s', async () => {
+  const t0 = Date.now()
+  const r = await post('/api/integraciones/descubrir', { tipo: 'github-projects', consulta: { propietario: 'u', numero: 98 } })
+  assert.equal(r.estado, 502)
+  assert.match(r.json.error, /no respondió/)
+  assert.ok(Date.now() - t0 <= 16000)
 })
 
 test('integraciones: probar lee con la config propuesta sin guardar', async () => {

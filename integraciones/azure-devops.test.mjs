@@ -121,3 +121,8 @@ test('listar: PAT inválido (203) traducido sin filtrar el PAT; exige organizaci
   await assert.rejects(listar({ organizacion: 'o' }, CRED, ado({ 'GET projects': res('<html>login</html>', 203) })), (e) => /Credencial inválida/.test(e.message) && !/PAT-secreto/.test(e.message))
   await assert.rejects(listar({}, CRED, ado()), /organización/)
 })
+
+test('listar sin proyecto: 404 sin «undefined»; 203 sugiere el scope «Project and Team: Read»', async () => {
+  await assert.rejects(listar({ organizacion: 'org-x' }, CRED, ado({ 'GET projects': res('no', 404) })), (e) => /No existe la organización org-x o el PAT/.test(e.message) && !/undefined/.test(e.message))
+  await assert.rejects(listar({ organizacion: 'o' }, CRED, ado({ 'GET projects': res('<html>login</html>', 203) })), (e) => /Project and Team: Read/.test(e.message) && /a mano/.test(e.message))
+})

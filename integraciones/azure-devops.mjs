@@ -10,7 +10,7 @@ const LOTE = 200
 
 export function traducirError(e, cfg = {}) {
   if (e?.status === 401 || e?.status === 203 || e?.status === 403) return 'Credencial inválida o vencida (revisa azure-devops.pat y su permiso Work Items: Read & write).'
-  if (e?.status === 404) return `No existe la organización/proyecto ${cfg.organizacion}/${cfg.proyecto} o tu PAT no tiene acceso.`
+  if (e?.status === 404) return cfg.proyecto ? `No existe la organización/proyecto ${cfg.organizacion}/${cfg.proyecto} o tu PAT no tiene acceso.` : `No existe la organización ${cfg.organizacion} o el PAT no tiene acceso.`
   if (e?.status === 429) return 'Azure DevOps limitó las peticiones (429): espera unos segundos y reintenta.'
   if (e?.status) return `Azure DevOps respondió ${e.status}${e.cuerpo ? `: ${String(e.cuerpo).replace(/\s+/g, ' ').slice(0, 200)}` : ''}.`
   if (e?.name === 'AbortError' || e?.name === 'TimeoutError') return `Sin conexión: Azure DevOps no respondió en ${TIMEOUT_MS / 1000} s.`
@@ -110,7 +110,11 @@ export async function actualizar(cfg, cred, id, cambios, deps = {}) {
 export async function listar(cfg = {}, cred = {}, deps = {}) {
   if (!cfg.organizacion) throw new Error('Falta la organización de Azure DevOps.')
   if (!cfg.proyecto) {
-    const r = await api(deps, cfg, cred, 'GET', 'projects?$top=200')
+    let r
+    try { r = await api(deps, cfg, cred, 'GET', 'projects?$top=200') } catch (e) {
+      if (/Credencial inválida/.test(e.message)) throw new Error(`${e.message} Para listar proyectos el PAT necesita el scope «Project and Team: Read»; si no, escribe el proyecto a mano.`)
+      throw e
+    }
     return { proyectos: (r.value || []).map((p) => p.name) }
   }
   const r = await api(deps, cfg, cred, 'GET', 'wit/workitemtypes')

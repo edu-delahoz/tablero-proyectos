@@ -775,7 +775,14 @@ function vistaEditor(ruta) {
       <span class="suave">⌘S / Ctrl+S guarda · Esc cancela</span></div></form>`;
 }
 async function api(ruta, cuerpo) {
-  const r = await fetch(ruta, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo) });
+  // Timeout de cliente (20 s) y un único reintento si falla por red (servidor reiniciándose, corte).
+  let r;
+  for (let intento = 0; ; intento++) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
+    try { r = await fetch(ruta, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo), signal: ctl.signal }); break; }
+    catch { if (intento) throw new Error('El servidor no respondió; reintenta.'); }
+    finally { clearTimeout(t); }
+  }
   const j = await r.json().catch(() => ({ error: `Respuesta inválida (${r.status})` }));
   if (!r.ok) throw Object.assign(new Error(j.error || `Error ${r.status}`), { estado: r.status, actual: j.actual });
   return j;
@@ -1085,7 +1092,7 @@ function pasoCredencial(c) {
 function pasoDestino(c) {
   const f = formInteg, op = f.op, cargando = f.cargando === 'destinos', manual = f.op.fallo === 'destinos';
   const estado = cargando ? '<p class="suave" role="status">Cargando opciones…</p>' : '';
-  const recargar = `<button class="boton" type="button" data-fi-accion="destinos"${cargando ? ' disabled' : ''}>${op.destinos ? 'Recargar lista' : 'Cargar opciones'}</button>`;
+  const recargar = `<button class="boton" type="button" data-fi-accion="destinos"${cargando ? ' disabled' : ''}>${op.fallo === 'destinos' ? 'Reintentar' : op.destinos ? 'Recargar lista' : 'Cargar opciones'}</button>`;
   if (c.tipo === 'github-projects') {
     const lista = (op.destinos || []).map((x) => [`${x.propietario}/${x.numero}`, `${x.propietario}/${x.numero} · ${x.titulo}`]);
     const actual = c.propietario ? `${c.propietario}/${c.numero}` : '';
