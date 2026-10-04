@@ -9,7 +9,7 @@ para Claude. Sin dependencias: solo Node.js.
 Cada proyecto tiene estas pestañas:
 
 - **Todos los proyectos** (primera opción del selector y vista por defecto; `#p=todos`): una tarjeta por proyecto con avance y «estás aquí», rama, PRs abiertos, notas y bitácora pendiente (enlazan a su pestaña) y costo de 7 días; totales globales arriba. Clic en la tarjeta abre su Resumen.
-- **Resumen**: avance global, «estás aquí» y pendientes más cercanos.
+- **Resumen**: arriba, la tarjeta **▶ En curso** (hito donde estás: mini gráfico de sesiones, avance, gasto de su rama, qué falta y el **prompt de la siguiente sesión** con «Copiar»; si el hito está completo sale «✓ completo»); debajo, avance global, «estás aquí» y pendientes más cercanos. «Todos los proyectos» muestra la misma tarjeta (compacta) del proyecto con actividad más reciente. Para enlazar el plan, pon en el hito una línea `Plan: ~/.claude/plans/x.md`; sus prompts de «Cómo ejecutarlo» (etiqueta «**S7 — Sonnet.** Prompt:») salen en la tarjeta.
 - **Backlogs**: mapa de hitos y sesiones con casillas `[ ]`/`[x]`, avance por sección y subtareas anidadas.
   Un campo de búsqueda filtra sesiones y tareas (abre las que coinciden y cuenta las coincidencias); la
   estrella ☆/★ de cada sesión `S…` la marca como favorita y «★ Solo favoritas» filtra por ellas. El Resumen

@@ -123,7 +123,8 @@ export function estructura(texto) {
     const texto = esCita ? textoDeCita(lineas) : lineas.join('\n')
     if (!actual || !texto.trim() || !(cuenta() || /prompt/i.test(rot || ''))) return
     const etiqueta = (/prompt/i.test(rot || '') ? plano(rot) : '').replace(/^(?:[-*]|\d+[.)])\s+/, '').replace(/\s*:\s*$/, '').slice(0, 80) || 'Prompt'
-    actual.prompts.push({ etiqueta, texto: texto.slice(0, 20000), clave: (etiqueta.match(/\b([A-Z]\d+[a-z]?)\b/) || [])[1] || null })
+    const modelo = (etiqueta.match(/\b(Opus|Sonnet|Haiku|Fable)\b/i) || [])[1]
+    actual.prompts.push({ etiqueta, texto: texto.slice(0, 20000), clave: (etiqueta.match(/\b([A-Z]\d+[a-z]?)\b/) || [])[1] || null, ...(modelo ? { modelo: modelo[0].toUpperCase() + modelo.slice(1).toLowerCase() } : {}) })
   }
   for (const linea of String(texto).replace(/\t/g, '    ').split('\n')) {
     if (RE_CERCA.test(linea)) {
@@ -150,6 +151,7 @@ export function estructura(texto) {
       continue
     }
     const m = actual && linea.match(RE_TAREA)
+    if (actual && !actual.plan) { const pl = linea.match(/plans\/([A-Za-z0-9_-]+\.md)/); if (pl) actual.plan = pl[1] }
     if (actual) {
       const celdas = linea.split(/(?<!\\)\|/).map((c) => c.trim())
       const mod = celdas.length >= 4 && celdas[2].match(/\*{0,2}(Opus|Sonnet|Haiku|Fable)\*{0,2}/i)

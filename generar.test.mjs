@@ -247,3 +247,11 @@ test('estructura: las marcas de integración salen del texto y quedan en «marca
   assert.deepEqual(s.tareas[0].hijas[0].marcas, { ado: '7' })
   assert.deepEqual([s.hechas, s.total], [2, 3])
 })
+
+test('estructura: «Plan: …/plans/x.md» da `plan` y la etiqueta «S7 — Sonnet. Prompt» da clave y modelo', () => {
+  const a = estructura('## H9 — Algo\n\nPlan: `~/.claude/plans/x-y.md`. Rama `r`.\n\n- [ ] tarea\n\n## Cómo ejecutarlo\n\n**S7 — Sonnet.** Prompt:\n> Haz S7.\n')
+  assert.equal(a[0].plan, 'x-y.md')
+  assert.equal(a[1].plan, undefined)
+  const p = a[1].prompts[0]
+  assert.deepEqual([p.clave, p.modelo], ['S7', 'Sonnet'])
+})
