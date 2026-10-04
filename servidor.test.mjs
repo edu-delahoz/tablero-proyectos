@@ -465,7 +465,7 @@ test('primera sincronía (sin instantánea): la previa lo dice con el conteo y �
 
 test('vista: la plantilla trae modo, filtro Mías/Sin asignar, chips y la primera sincronía sin marcar', async () => {
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
-  for (const marca of ['data-integ-filtro', 'chip-asig', 'chip-tipo', 'id="fi-modo"', 'data-fi="tipoItem-todos"', 'Primera sincronía.', 'modo: lectura ? \'lectura\' : \'sincronizar\'']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+  for (const marca of ['data-integ-filtro', 'chip-asig', 'chip-tipo', 'id="fi-modo"', 'data-fi="tipoItem-todos"', 'Primera sincronía.', "modo: ['lectura', 'participar'].includes(c.modo) ? c.modo : 'sincronizar'"]) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
   // En solo lectura no hay botón «Sincronizar» ni «auto: no»: el guardia está en la tarjeta.
   assert.match(html, /integ\.estado === 'conectado' && !lectura \? \(editable\(\)/)
   // Los datos que alimentan chips y filtros llegan a la vista (EAP10, solo lectura).
@@ -506,6 +506,11 @@ test('vista: la plantilla trae la pestaña «Tablero» (kanban), la franja de Cl
 test('vista: la plantilla trae el selector de carpeta (Elegir…, recientes de Claude, explorar)', async () => {
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
   for (const marca of ["'/api/carpetas'", 'function selectorCarpeta', 'Tus proyectos recientes', 'data-carpeta', 'Recientes de Claude', 'Explorar', 'Elige con el botón o pega la ruta', 'data-elegir-carpeta']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
+test('vista: la plantilla trae participar (Asignarme, estado, Terminé, descripción plegable)', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ["'/api/integraciones/asignar'", "'/api/integraciones/estado'", 'Asignarme', 'Quitarme', 'data-asignar', 'data-estado-item', 'data-termine', '✓ Terminé', 'value="participar"', 'Participar: ver el backlog del equipo', 'ver descripción', 'function controlesParticipar', 'function estadoHecho']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
 })
 
 test('crear proyecto: previa sin escribir, id inválido o duplicado y rutas inexistentes → 400, mtime viejo → 409', async () => {

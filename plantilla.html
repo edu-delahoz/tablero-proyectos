@@ -300,6 +300,10 @@ a.chip-ext:hover { border-color: var(--azul); }
 .campo-fi > span { font-size: .85em; color: var(--suave); }
 .campo-fi input:not([type=checkbox]), .campo-fi select { max-width: 100%; width: min(100%, 28em); padding: 4px 6px; background: var(--superficie); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio); font: inherit; }
 .chip-asig, .chip-tipo { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--borde); font: .78em/1.5 var(--mono); white-space: nowrap; vertical-align: baseline; }
+.controles-item, .confirma-item { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: 8px; }
+.controles-item .boton, .confirma-item .boton { padding: 0 8px; }
+.detalle-item { margin: 2px 0 6px 12px; font-size: .9em; }
+@media (max-width: 640px) { .controles-item .boton, .confirma-item .boton, .controles-item select { min-height: 44px; } }
 .chip-asig.sin { color: var(--suave); border-style: dashed; }
 .chip-tipo { color: var(--azul); }
 .filtro-integ { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; font-size: .9em; border: 0; padding: 0; }
@@ -984,6 +988,17 @@ function vistaPrevia(integ) {
     }).join('')}
     <div class="pie"><button class="boton primario" type="submit">Aplicar</button><button class="boton" type="button" data-cerrar-sync="${esc(integ.id)}">Cancelar</button></div></form>`;
 }
+async function confirmarItem(d) {
+  const { accion, estado } = pendItem, pid = d.proyecto;
+  pendItem.ocupado = true; pintar();
+  try {
+    const r = accion === 'estado'
+      ? await api('/api/integraciones/estado', { proyecto: pid, integracion: d.integracion, id: d.item, estado })
+      : await api('/api/integraciones/asignar', { proyecto: pid, integracion: d.integracion, id: d.item, aMi: accion === 'asignar' });
+    pendItem.clave = null; recargarDatos(r.datos); pintar();
+    avisar(accion === 'estado' ? `Pasó a «${r.item?.columna || estado}».` : accion === 'asignar' ? 'Te lo asignaste.' : 'Ya no está asignado a ti.');
+  } catch (e) { pendItem.clave = null; pintar(); avisar(`No se pudo: ${e.message}`, true); }
+}
 const filtroInteg = new Map(); // id de integración → 'todas' | 'mias' | 'sin'
 const FILTROS_INTEG = [['todas', 'Todas'], ['mias', 'Mías'], ['sin', 'Sin asignar']];
 const conAsignado = (xs) => xs.some((x) => 'asignado' in x);
@@ -998,9 +1013,37 @@ function filtroItems(integ) {
     return `<label${off ? ' title="No se pudo saber cuáles son tuyas"' : ''}><input type="radio" name="filtro-${esc(integ.id)}" data-integ-filtro="${esc(integ.id)}" value="${v}"${act === v ? ' checked' : ''}${off ? ' disabled' : ''}> ${t}</label>`;
   }).join('')}${mio ? '' : '<span class="suave">«Mías» no disponible: no se pudo saber cuáles son tuyas.</span>'}</fieldset>`;
 }
-function itemExterno(x) {
+// ---------- Participar (Azure): asignarme, quitarme, cambiar estado ----------
+const noEscribe = (m) => m === 'lectura' || m === 'participar';
+const pendItem = { clave: null, accion: null, estado: null, ocupado: false }; // confirmación en línea de un ítem
+const claveItem = (pid, iid, id) => `${pid}/${iid}/${id}`;
+// Primer estado de las columnas que Azure marca como «hecho» (se deduce de los ítems leídos; no existe el mismo en todos los procesos).
+function estadoHecho(integ) {
+  const hechas = new Set((integ.items || []).filter((x) => x.hecha && x.columna).map((x) => x.columna));
+  return (integ.columnas || []).find((c) => hechas.has(c)) || null;
+}
+function controlesParticipar(x, integ, pid, mias) {
+  const k = claveItem(pid, integ.id, x.id), a = `data-proyecto="${esc(pid)}" data-integracion="${esc(integ.id)}" data-item="${esc(x.id)}"`;
+  const pend = pendItem.clave === k ? pendItem : null;
+  if (pend) {
+    const txt = pend.accion === 'asignar' ? `¿Asignarte «${corto(x.titulo, 60)}»?` : pend.accion === 'quitar' ? `¿Quitarte «${corto(x.titulo, 60)}»?` : `¿Pasar «${corto(x.titulo, 60)}» a «${pend.estado}»?`;
+    return `<span class="confirma-item" role="group" aria-label="Confirmar">${esc(txt)} <button class="boton primario" type="button" data-confirmar-item ${a}${pend.ocupado ? ' disabled' : ''}>${pend.ocupado ? 'Enviando…' : 'Sí'}</button><button class="boton" type="button" data-cancelar-item${pend.ocupado ? ' disabled' : ''}>No</button></span>`;
+  }
+  const cols = integ.columnas || [], hecho = estadoHecho(integ);
+  return `<span class="controles-item">${x.mio ? `<button class="boton" type="button" data-asignar="quitar" ${a}>Quitarme</button>` : `<button class="boton" type="button" data-asignar="asignar" ${a}>Asignarme</button>`}
+    ${cols.length ? `<select data-estado-item ${a} aria-label="Cambiar estado de ${esc(corto(x.titulo, 40))}">${cols.map((c) => `<option value="${esc(c)}"${c === x.columna ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>` : ''}
+    ${mias && hecho && !x.hecha ? `<button class="boton" type="button" data-termine="${esc(hecho)}" ${a}>✓ Terminé</button>` : ''}</span>`;
+}
+function detalleItem(x) {
+  const meta = [x.prioridad ? `Prioridad ${x.prioridad}` : '', x.iteracion || '', x.padre ? `Padre #${x.padre}` : ''].filter(Boolean).join(' · ');
+  if (!x.descripcion && !meta) return '';
+  return `<details class="detalle-item"><summary>ver descripción</summary>${meta ? `<div class="suave">${esc(meta)}</div>` : ''}${x.descripcion ? `<div style="white-space:pre-wrap">${esc(x.descripcion)}</div>` : ''}</details>`;
+}
+function itemExterno(x, integ, pid = P?.id) {
+  const part = integ?.modo === 'participar' && editable();
+  const ayuda = integ?.modo === 'lectura' && integ.tipo === 'azure-devops' ? ' title="Solo lectura: para asignarte ítems o cambiar su estado, edita la integración y elige el modo «Participar»."' : '';
   const asig = 'asignado' in x ? (x.asignado ? `<span class="chip-asig" title="${esc(x.asignado.correo || 'Asignado')}">${esc(x.asignado.nombre || x.asignado.correo || String(x.asignado))}</span>` : '<span class="chip-asig sin">Sin asignar</span>') : '';
-  return `<li${x.hecha ? ' class="hecha"' : ''}><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a>${x.tipo ? `<span class="chip-tipo">${esc(x.tipo)}</span>` : ''}${asig}</li>`;
+  return `<li${x.hecha ? ' class="hecha"' : ''}${ayuda}><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a>${x.tipo ? `<span class="chip-tipo">${esc(x.tipo)}</span>` : ''}${asig}${part ? ` ${controlesParticipar(x, integ, pid, false)}` : ''}${detalleItem(x)}</li>`;
 }
 // Avance de todo lo que trae una integración (hecho = columna de hecho): barra, por estado, por tipo, mías y cierres por semana.
 function avanceIntegracion(integ) {
@@ -1024,18 +1067,18 @@ function avanceIntegracion(integ) {
 }
 function tarjetaIntegracion(integ) {
   if (formInteg?.original === integ.id) return formularioInteg();
-  const lectura = integ.modo === 'lectura', filtro = filtroInteg.get(integ.id) || 'todas';
+  const lectura = noEscribe(integ.modo), participar = integ.modo === 'participar', filtro = filtroInteg.get(integ.id) || 'todas';
   const [cls, punto, txt] = ESTADO_INTEG[integ.estado] || ESTADO_INTEG.error;
   const items = integ.items || [], itemsVis = items.filter((x) => pasaFiltro(x, filtro));
   const columnas = [...(integ.columnas || []), ...new Set(items.map((x) => x.columna || 'Sin estado').filter((c) => !(integ.columnas || []).includes(c)))];
   const porCol = columnas.map((c) => [c, itemsVis.filter((x) => (x.columna || 'Sin estado') === c)]).filter(([, xs]) => xs.length);
   const pt = integ.porTipo || {};
   return `<section class="tarjeta" style="margin-bottom:18px" aria-label="${esc(integ.nombre)} ${esc(integ.id)}">
-    <h2><span>${esc(integ.nombre)} · ${esc(integ.id)}</span><small>${lectura ? 'solo lectura' : esc(integ.backlog || '')}</small></h2>
+    <h2><span>${esc(integ.nombre)} · ${esc(integ.id)}</span><small>${participar ? 'participar' : lectura ? 'solo lectura' : esc(integ.backlog || '')}</small></h2>
     <p class="integ-estado"><span class="${cls}"><span class="punto" aria-hidden="true">${punto}</span> ${txt}</span>
       ${integ.titulo ? `<span>«${esc(integ.titulo)}»</span>` : ''}
       ${integ.leidoEn ? `<span class="suave">leído ${hace(integ.leidoEn)}${integ.desdeCache ? ' (caché)' : ''}</span>` : ''}
-      ${lectura ? '<span class="suave">solo lectura · no escribe nada afuera ni en backlogs</span>' : `<span class="suave">última sincronía: ${integ.ultimaSincronia ? hace(integ.ultimaSincronia) : 'nunca'}</span>
+      ${participar ? '<span class="suave">participar · puedes asignarte ítems y cambiar su estado; no crea nada ni toca backlogs</span>' : lectura ? '<span class="suave">solo lectura · no escribe nada afuera ni en backlogs</span>' : `<span class="suave">última sincronía: ${integ.ultimaSincronia ? hace(integ.ultimaSincronia) : 'nunca'}</span>
       <span class="suave">auto: ${integ.auto ? 'sí' : 'no'}</span>`}</p>
     ${integ.mensaje ? `<div class="integ-paso ${integ.estado === 'error' ? 'mal' : ''}">${esc(integ.mensaje)}${integ.paso ? `<br><span class="suave">${esc(integ.paso)}</span>` : ''}</div>` : ''}
     ${integ.aviso ? `<div class="integ-paso">${esc(integ.aviso)}</div>` : ''}
@@ -1049,7 +1092,7 @@ function tarjetaIntegracion(integ) {
       <button class="boton primario" type="button" data-integ-confirmar>Sí, quitar</button><button class="boton" type="button" data-integ-no-quitar>Cancelar</button></div>` : ''}
     ${vistaPrevia(integ)}
     ${filtroItems(integ)}
-    ${porCol.length ? `<div class="columnas-ext">${porCol.map(([c, xs]) => `<div class="columna-ext"><div class="rotulo">${esc(c)} · ${xs.length}</div><ul>${xs.map(itemExterno).join('')}</ul></div>`).join('')}</div>` : integ.estado === 'conectado' ? `<p class="suave">${items.length ? 'Ningún ítem coincide con el filtro.' : 'El tablero externo está vacío.'}</p>` : ''}
+    ${porCol.length ? `<div class="columnas-ext">${porCol.map(([c, xs]) => `<div class="columna-ext"><div class="rotulo">${esc(c)} · ${xs.length}</div><ul>${xs.map((x) => itemExterno(x, integ)).join('')}</ul></div>`).join('')}</div>` : integ.estado === 'conectado' ? `<p class="suave">${items.length ? 'Ningún ítem coincide con el filtro.' : 'El tablero externo está vacío.'}</p>` : ''}
   </section>`;
 }
 async function pedirPrevia(id, boton) {
@@ -1135,8 +1178,8 @@ async function guardarCred(boton) {
 }
 // Lo que se manda al servidor: solo campos con valor (el servidor vuelve a validar y filtra).
 function cfgLimpia(c, idFinal) {
-  const lectura = c.modo === 'lectura';
-  const o = { id: idFinal, tipo: c.tipo, modo: lectura ? 'lectura' : 'sincronizar' };
+  const lectura = noEscribe(c.modo);
+  const o = { id: idFinal, tipo: c.tipo, modo: ['lectura', 'participar'].includes(c.modo) ? c.modo : 'sincronizar' };
   if (!lectura) { o.backlog = c.backlog; o.auto = !!c.auto; }
   for (const k of ['propietario', 'numero', 'campoEstado', 'campoSeccion', 'tablero', 'organizacion', 'proyecto', 'tipoItem']) if (c[k] !== undefined && c[k] !== '') o[k] = c[k];
   const col = Object.fromEntries(Object.entries(c.columnas || {}).filter(([, v]) => v && v.length));
@@ -1210,7 +1253,7 @@ const tiposElegidos = (c) => c.tipoItem === '*' ? '*' : Array.isArray(c.tipoItem
 function tiposFi(c, nombres) {
   const sel = tiposElegidos(c), todos = sel === '*', lista = [...new Set([...nombres, ...(todos ? [] : sel)])];
   return `<fieldset class="tipos-fi" aria-label="Tipo de work item"><legend class="rotulo">Tipo de work item</legend>
-    ${c.modo === 'lectura' ? `<label><input type="checkbox" data-fi="tipoItem-todos"${todos ? ' checked' : ''}> Todos</label>` : ''}
+    ${noEscribe(c.modo) ? `<label><input type="checkbox" data-fi="tipoItem-todos"${todos ? ' checked' : ''}> Todos</label>` : ''}
     ${lista.map((n) => `<label><input type="checkbox" data-fi="tipoItem-op" value="${esc(n)}"${todos ? ' disabled' : sel.includes(n) ? ' checked' : ''}> ${esc(n)}</label>`).join('')}
     <small class="suave">${todos ? 'Se leen todos los tipos.' : sel.length ? '' : 'Sin marcar: Task.'}</small></fieldset>`;
 }
@@ -1237,7 +1280,7 @@ function pasoColumnas(c) {
 const avisoRenombra = (f) => f.original && f.cfg.id && f.cfg.id !== f.original ? `<div class="integ-paso">Cambiar el id deja huérfanas las marcas <code>&lt;!-- ${esc(f.original)}:… --&gt;</code> que ya tiene el backlog: no se renombran solas.</div>` : '';
 function formularioInteg() {
   const f = formInteg, c = f.cfg, editar = !!f.original, pr = f.prueba;
-  const cred = credOk(c.tipo), destino = c.tipo && cred && DESTINO_OK[c.tipo](c), lectura = c.modo === 'lectura';
+  const cred = credOk(c.tipo), destino = c.tipo && cred && DESTINO_OK[c.tipo](c), lectura = noEscribe(c.modo), participar = c.modo === 'participar';
   const paso = (n, t, cuerpo) => `<fieldset class="paso-fi"><legend class="rotulo">${n}. ${t}</legend>${cuerpo}</fieldset>`;
   return `<form class="form-integ tarjeta" id="form-integ" data-form-integ aria-label="${editar ? `Editar ${esc(f.original)}` : 'Nueva integración'}">
     <h2><span>${editar ? `Editar «${esc(f.original)}»` : 'Nueva integración'}</span></h2>
@@ -1246,8 +1289,9 @@ function formularioInteg() {
     ${c.tipo ? paso(2, 'Credencial', pasoCredencial(c)) : ''}
     ${c.tipo && cred ? paso(3, 'Destino', pasoDestino(c)) : ''}
     ${f.error ? `<div class="integ-paso mal" role="alert">${esc(f.error)}</div>` : ''}
-    ${destino ? paso(4, 'Modo y backlog', `<label class="campo-fi" for="fi-modo"><span>Modo</span><select id="fi-modo" data-fi="modo">${opcion('sincronizar', 'Sincronizar con un backlog', !lectura)}${opcion('lectura', 'Solo lectura (solo se muestra lo de afuera)', lectura)}</select></label>
-      ${lectura ? `<div class="integ-paso">${archivosBacklog().length ? 'Solo lectura:' : 'Este proyecto no tiene backlog:'} solo se mostrará lo de ${esc((TIPOS_INTEG.find(([v]) => v === c.tipo) || [, c.tipo])[1])}. No se crea, cambia ni borra nada afuera, y no se toca ningún backlog.</div>` : archivosBacklog().length ? selectFi('fi-backlog', 'Archivo', 'backlog', c.backlog, archivosBacklog()) : `<div class="integ-paso">Este proyecto no tiene backlog para sincronizar. ${editable() ? '<button class="boton" type="button" data-crear="backlog">＋ Crear backlog</button>' : ''}</div>`}`) : ''}
+    ${destino ? paso(4, 'Modo y backlog', `<label class="campo-fi" for="fi-modo"><span>Modo</span><select id="fi-modo" data-fi="modo">${opcion('sincronizar', 'Sincronizar con un backlog', !lectura)}${opcion('lectura', 'Solo lectura (solo se muestra lo de afuera)', c.modo === 'lectura')}${c.tipo === 'azure-devops' ? `<option value="participar"${participar ? ' selected' : ''}>Participar (ver, asignarme y cambiar estado)</option>` : ''}</select></label>
+      <p class="suave" style="margin:4px 0">${participar ? 'Participar: ver el backlog del equipo, asignarme ítems y cambiar su estado; no crea nada. Necesita un token con «Work Items: Read &amp; write».' : c.modo === 'lectura' ? 'Solo lectura: se muestra lo de afuera y no se cambia nada.' : 'Sincronizar: mantiene un backlog local y el tablero de afuera iguales.'}</p>
+      ${lectura ? `<div class="integ-paso">${participar ? 'Participar:' : archivosBacklog().length ? 'Solo lectura:' : 'Este proyecto no tiene backlog:'} solo se mostrará lo de ${esc((TIPOS_INTEG.find(([v]) => v === c.tipo) || [, c.tipo])[1])}. ${participar ? 'Podrás asignarte ítems y cambiar su estado afuera; nunca se crea ni borra nada, y no se toca ningún backlog.' : 'No se crea, cambia ni borra nada afuera, y no se toca ningún backlog.'}</div>` : archivosBacklog().length ? selectFi('fi-backlog', 'Archivo', 'backlog', c.backlog, archivosBacklog()) : `<div class="integ-paso">Este proyecto no tiene backlog para sincronizar. ${editable() ? '<button class="boton" type="button" data-crear="backlog">＋ Crear backlog</button>' : ''}</div>`}`) : ''}
     ${destino ? paso(5, 'Columnas', pasoColumnas(c)) : ''}
     ${destino ? paso(6, 'Nombre', `${textoFi('fi-id', 'Id', 'id', c.id ?? idPropuesto(c.tipo), 'minúsculas, números y guiones; es el prefijo de las marcas <code>&lt;!-- id:… --&gt;</code> del backlog')}
       <div id="fi-aviso-id">${avisoRenombra(f)}</div>
@@ -1274,7 +1318,7 @@ function alCambiarFi(el) {
   }
   if (k === 'modo') {
     c.modo = v;
-    if (v === 'lectura') c.auto = false;
+    if (noEscribe(v)) c.auto = false;
     else { if (c.tipoItem === '*') delete c.tipoItem; c.backlog = c.backlog || archivosBacklog()[0] || ''; }
     pintarF(); return;
   }
@@ -1894,7 +1938,7 @@ function vistaMias() {
     const cols = [...new Set(g.items.map((x) => x.columna || 'Sin estado'))];
     return `<section class="tarjeta" style="margin-bottom:14px" aria-label="${esc(g.p.nombre)} ${esc(g.integ.id)}">
       <h2><button class="enlace" data-proy="${esc(g.p.id)}" data-pest="integraciones">${esc(g.p.nombre)}</button><small>${esc(g.integ.nombre)} · ${esc(g.integ.id)} · ${g.items.length}</small></h2>
-      ${cols.map((c) => { const xs = g.items.filter((x) => (x.columna || 'Sin estado') === c); return `<div class="rotulo">${esc(c)} · ${xs.length}</div><ul class="tareas">${xs.map((x) => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a>${x.tipo ? `<span class="chip-tipo">${esc(x.tipo)}</span>` : ''} ${fechaItem(x)}</li>`).join('')}</ul>`; }).join('')}</section>`;
+      ${cols.map((c) => { const xs = g.items.filter((x) => (x.columna || 'Sin estado') === c); return `<div class="rotulo">${esc(c)} · ${xs.length}</div><ul class="tareas">${xs.map((x) => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a>${x.tipo ? `<span class="chip-tipo">${esc(x.tipo)}</span>` : ''} ${fechaItem(x)}${g.integ.modo === 'participar' && editable() ? ` ${controlesParticipar(x, g.integ, g.p.id, true)}` : ''}${detalleItem(x)}</li>`).join('')}</ul>`; }).join('')}</section>`;
   };
   const sinMio = gs.filter((g) => g.sinMio);
   const siguientes = DATOS.proyectos.map((p) => ({ p, c: enCurso(p) })).filter(({ c }) => c && !c.completo && c.falta.length);
@@ -2021,6 +2065,10 @@ document.addEventListener('click', (e) => {
   if (b.dataset.rama) { e.preventDefault(); irRama(b.dataset.rama); return; }
   if ('integNueva' in b.dataset) { abrirForm(); return; }
   if (b.dataset.integEditar) { abrirForm((P.integraciones || []).find((x) => x.id === b.dataset.integEditar)); return; }
+  if (b.dataset.asignar) { pendItem.clave = claveItem(b.dataset.proyecto, b.dataset.integracion, b.dataset.item); pendItem.accion = b.dataset.asignar; pendItem.estado = null; pendItem.ocupado = false; pintar(); document.querySelector('[data-confirmar-item]')?.focus(); return; }
+  if (b.dataset.termine) { pendItem.clave = claveItem(b.dataset.proyecto, b.dataset.integracion, b.dataset.item); pendItem.accion = 'estado'; pendItem.estado = b.dataset.termine; pendItem.ocupado = false; pintar(); document.querySelector('[data-confirmar-item]')?.focus(); return; }
+  if ('cancelarItem' in b.dataset) { pendItem.clave = null; pintar(); return; }
+  if ('confirmarItem' in b.dataset) { confirmarItem(b.dataset); return; }
   if (b.dataset.integQuitar) { quitandoInteg = b.dataset.integQuitar; pintar(); document.querySelector('[data-integ-confirmar]')?.focus(); return; }
   if ('integConfirmar' in b.dataset) { quitarInteg(quitandoInteg, b); return; }
   if ('integNoQuitar' in b.dataset) { const id = quitandoInteg; quitandoInteg = null; pintar(); document.querySelector(`[data-integ-quitar="${CSS.escape(id)}"]`)?.focus(); return; }
@@ -2087,6 +2135,7 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   const r = e.target;
   if (formInteg && r.dataset?.fi) { alCambiarFi(r); return; }
+  if (r.dataset?.estadoItem !== undefined) { pendItem.clave = claveItem(r.dataset.proyecto, r.dataset.integracion, r.dataset.item); pendItem.accion = 'estado'; pendItem.estado = r.value; pendItem.ocupado = false; pintar(); document.querySelector('[data-confirmar-item]')?.focus(); return; }
   if (r.dataset?.integFiltro) { const id = r.dataset.integFiltro; filtroInteg.set(id, r.value); pintar(); document.querySelector(`[data-integ-filtro="${CSS.escape(id)}"][value="${r.value}"]`)?.focus(); return; }
   if ('soloFav' in (r.dataset || {})) { soloFav = r.checked; pintar(); $('[data-solo-fav]')?.focus(); return; }
   if (r.dataset?.grafPor) { bitGraf.por = r.dataset.grafPor; pintar(); $(`[data-graf-por=${r.dataset.grafPor}]`)?.focus(); return; }
