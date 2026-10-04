@@ -1,7 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
-- 2026-10-04 · rama `mejoras-ui` (sale de `backlog-mejoras`) · S1 y S2 hechas (barra en tonos del tema, favicon, `/api/version` + `/api/datos`, sondeo en vivo). Pendiente: comprobar en el navegador (sin navegador en la sesión) y fusionar `mejoras-ui`. Siguiente: S3 en `bitacora`.
+- 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
 
 ## H1 — Ajustes visuales
@@ -28,11 +28,13 @@ Integrar `../BITACORA.md`: verla y completar Calidad / Seguridad / Notas de las 
 
 ### S3 — Núcleo de la bitácora · **Opus** · rama `bitacora`
 `bitacora.mjs`, `bitacora.test.mjs`, `generar.mjs`, `servidor.test.mjs`, `fixtures/BITACORA.md`. Respetar el formato de fila de `../registrar_sesion.sh`.
-- [ ] `bitacora.mjs`: parsear la tabla `## Registro` (fecha, tarea, sid corto entre paréntesis, modo, modelo, duración, costo, contexto ini→fin + semáforo, calidad, seguridad, notas), `## Resumen semanal`, `## Experimentos en curso` y `## Lecciones aprendidas`. Escapar/desescapar `|`
-- [ ] Asociar filas a proyectos: el sid corto se busca en `~/.claude/projects/<transcripciones>/<sid>*.jsonl` de cada proyecto; las que no casan van a «sin proyecto»
-- [ ] Campo opcional `bitacora` por proyecto en `proyectos.json` (documentar en `proyectos.ejemplo.json` y README); los proyectos sin el campo no muestran la pestaña
-- [ ] `POST /api/bitacora` `{ sid, calidad, seguridad, notas, hash }`: reescribe solo esa fila, valida valores (calidad ✅/🟡/🔴, texto sin saltos de línea), 409 si el archivo cambió desde que se cargó (mismo patrón que `/api/guardar`), añade la ruta a `permitidas`
-- [ ] Tests con `fixtures/BITACORA.md`: parseo, asociación, edición, 409, rechazo de ruta no permitida (nunca escribir la bitácora real)
+- [x] `bitacora.mjs`: parsear la tabla `## Registro` (fecha, tarea, sid corto entre paréntesis, modo, modelo, duración, costo, contexto ini→fin + semáforo, calidad, seguridad, notas), `## Resumen semanal`, `## Experimentos en curso` y `## Lecciones aprendidas`. Escapar/desescapar `|`
+- [x] Asociar filas a proyectos: el sid corto se busca en `~/.claude/projects/<transcripciones>/<sid>*.jsonl` de cada proyecto; las que no casan van a «sin proyecto»
+- [x] Campo opcional `bitacora` por proyecto en `proyectos.json` (documentar en `proyectos.ejemplo.json` y README); los proyectos sin el campo no muestran la pestaña
+- [x] `POST /api/bitacora` `{ sid, calidad, seguridad, notas, hash }`: reescribe solo esa fila, valida valores (calidad ✅/🟡/🔴, texto sin saltos de línea), 409 si el archivo cambió desde que se cargó (mismo patrón que `/api/guardar`), añade la ruta a `permitidas`
+- [x] Tests con `fixtures/BITACORA.md`: parseo, asociación, edición, 409, rechazo de ruta no permitida (nunca escribir la bitácora real)
+
+Para S4 (forma de los datos): `proyecto.bitacora` = `{ ruta, modificado, hash, registro: [{ sid, fecha, tarea, modo, modelo, duracion, minutos, costoTxt, costo, contextoTxt, contexto: { ini, fin, semaforo }, calidad, seguridad, notas, pendiente, proyecto }], semanal: { columnas, filas }, experimentos: [{ titulo, texto }], lecciones: [{ fecha, texto }] }` o `null` sin el campo. Guardar: `POST /api/bitacora` `{ ruta, sid, calidad, seguridad, notas, hash }` → `{ ok, datos }`; 409 si cambió, 400/404 con `error` legible. Filas sin sid (las antiguas) no son editables. El `proyectos.json` local ya tiene `bitacora` en los tres proyectos.
 
 ### S4 — Pestaña Bitácora · **Sonnet** · misma rama `bitacora`
 `plantilla.html`, README. PR de `bitacora` al terminar.
