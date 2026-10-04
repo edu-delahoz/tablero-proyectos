@@ -228,7 +228,27 @@ button.rama:hover { background: color-mix(in srgb, var(--rama, var(--aviso)) 26%
 .items li { margin: 3px 0; overflow-wrap: anywhere; }
 .items li::marker { color: var(--acento); }
 ul.items { list-style: "- "; }
+.prompt-copiable { margin: 8px 0; border: 1px solid var(--borde); background: var(--superficie); min-width: 0; }
+.prompt-copiable .prompt-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 8px; border-bottom: 1px solid var(--borde); }
+.prompt-copiable .prompt-cab .rotulo { margin: 0; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.prompt-copiable .boton { margin: 0; flex: none; }
+.prompt-copiable pre { margin: 0; padding: 10px 12px; max-height: 18em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; font: 13px/1.5 var(--mono); background: var(--codigo); }
+.prompt-copiable pre:focus-visible { outline-offset: -2px; }
+.atajo-prompts { margin: 8px 0 0; }
 .acciones-esquema { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+
+/* ---------- GitHub: ramas + grafo a la derecha ---------- */
+.gh-rejilla { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.gh-rejilla > section { margin: 0; min-width: 0; }
+.gh-rejilla .gh-prs { margin: 0; }
+@media (min-width: 980px) {
+  .gh-rejilla { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-areas: "ramas grafo" "prs prs"; }
+  .gh-ramas { grid-area: ramas; }
+  .gh-grafo { grid-area: grafo; position: sticky; top: 12px; max-height: calc(100dvh - 56px); overflow: auto; }
+  .gh-prs { grid-area: prs; }
+}
+@container (max-width: 520px) { .grafo-fila .cuando { display: none; } }
+.gh-grafo { container-type: inline-size; }
 
 /* ---------- Edición de .md ---------- */
 .editor-md textarea { display: block; width: 100%; min-height: 62vh; resize: vertical; padding: 12px; font-size: 13px; line-height: 1.55; background: var(--codigo); color: var(--texto); border: 1px solid var(--borde); tab-size: 2; }
@@ -434,9 +454,26 @@ function cuerpo(s) {
   const falta = s.tareas.filter((t) => !completa(t)), hecho = s.tareas.filter(completa);
   let html = s.meta.nota ? `<p class="nota">${inline(s.meta.nota)}</p>` : '';
   if (s.vinculo) html += vinculo(s.vinculo);
+  html += promptsHtml(s.prompts);
   if (falta.length) html += `<div class="grupo"><div class="rotulo">Falta · ${falta.reduce((a, t) => a + pendientes(t), 0)}</div><ul class="tareas">${falta.map(tarea).join('')}</ul></div>`;
   if (hecho.length) html += `<details class="grupo"><summary class="rotulo">Hecho · ${hecho.reduce((a, t) => a + cajas(t), 0)}</summary><ul class="tareas">${hecho.map(tarea).join('')}</ul></details>`;
   return html;
+}
+// Prompts de «Cómo ejecutarlo»: tarjeta con rótulo, modelo, texto y botón Copiar.
+function promptsHtml(prompts = []) {
+  return prompts.map((p) => `<div class="prompt-copiable"><div class="prompt-cab"><span class="rotulo">${esc(p.etiqueta)}</span>${chips({ modelo: p.modelo })}
+      <button class="boton" type="button" data-copiar aria-label="Copiar ${esc(p.etiqueta)}">Copiar</button></div>
+      <pre tabindex="0" aria-label="${esc(p.etiqueta)}">${esc(p.texto)}</pre></div>`).join('');
+}
+async function copiarTexto(texto) {
+  try { await navigator.clipboard.writeText(texto); return true; } catch { /* file:// o sin permiso: respaldo */ }
+  const t = document.createElement('textarea');
+  t.value = texto; t.setAttribute('readonly', ''); t.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(t); t.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  t.remove();
+  return ok;
 }
 function vinculo(archivo) {
   const hijo = P.backlogs.find((b) => b.archivo === archivo);
@@ -500,17 +537,18 @@ function vistaMapa(doc) {
 function esquema(doc) {
   const clave = doc.archivo || doc.nombre, arbol = (doc.estructura || []).filter((s) => !/^estado\b/i.test(plano(s.titulo)));
   if (!arbol.length) return `<div class="mapa-cab"><div class="rotulo">Esquema</div><p class="suave">Este documento no tiene secciones ## ni casillas. Míralo en «Documento».</p></div>`;
-  const todas = aplanar(arbol), nItems = todas.reduce((a, s) => a + s.items.length, 0);
+  const todas = aplanar(arbol), nItems = todas.reduce((a, s) => a + s.items.length, 0), nPrompts = todas.reduce((a, s) => a + s.prompts.length, 0);
+  const comoEj = todas.find((s) => /c[oó]mo ejecutarlo/i.test(plano(s.titulo)));
   const ramas = [...new Set(todas.map((s) => s.meta.rama).concat((doc.contenido.match(/rama\s+`([^`]+)`/gi) || []).map((m) => m.replace(/^rama\s+`|`$/gi, ''))).filter(Boolean))];
   const nodo = (s, i, lista) => {
-    const k = `${clave}#${s.id}`, abierto = abiertos.has(k) ? abiertos.get(k) : false;
-    const nItemsS = aplanar([s]).reduce((a, x) => a + x.items.length, 0);
+    const k = `${clave}#${s.id}`, abierto = abiertos.has(k) ? abiertos.get(k) : /c[oó]mo ejecutarlo/i.test(plano(s.titulo));
+    const nItemsS = aplanar([s]).reduce((a, x) => a + x.items.length, 0), nPromptsS = aplanar([s]).reduce((a, x) => a + x.prompts.length, 0);
     const lista_ = s.items.length ? `<${s.items[0].numero ? 'ol' : 'ul'} class="items">${s.items.map((it) => `<li${it.numero ? ` value="${esc(it.numero)}"` : ''}>${inline(corto(it.texto, 320))}</li>`).join('')}</${s.items[0].numero ? 'ol' : 'ul'}>` : '';
     return `<li class="paso est-doc" id="${idPaso(clave, s.id)}"><details data-k="${esc(k)}"${abierto ? ' open' : ''}>
       <summary>${glifo(i === lista.length - 1)}<span class="icono" aria-hidden="true">${s.hijas.length ? '▸' : '·'}</span>
         <span class="cab-paso"><span class="titulo">${inlineTitulo(s.titulo)}</span>${chips(s.meta)}</span>
-        ${nItemsS ? `<span class="avance"><span class="n">${nItemsS} paso${nItemsS === 1 ? '' : 's'}</span></span>` : ''}</summary>
-      <div class="cuerpo">${s.meta.nota ? `<p class="nota">${inline(s.meta.nota)}</p>` : ''}${lista_}
+        ${nPromptsS ? `<span class="avance"><span class="n">${nPromptsS} prompt${nPromptsS === 1 ? '' : 's'}</span></span>` : ''}${nItemsS ? `<span class="avance"><span class="n">${nItemsS} paso${nItemsS === 1 ? '' : 's'}</span></span>` : ''}</summary>
+      <div class="cuerpo">${s.meta.nota ? `<p class="nota">${inline(s.meta.nota)}</p>` : ''}${lista_}${promptsHtml(s.prompts)}
         <p><button class="enlace" data-doc="${esc(plano(s.tituloCrudo))}">Leer la sección completa</button></p>
         ${s.hijas.length ? `<ol class="linea">${s.hijas.map(nodo).join('')}</ol>` : ''}</div>
     </details></li>`;
@@ -518,6 +556,7 @@ function esquema(doc) {
   return `<div class="mapa-cab"><div class="rotulo">Esquema</div>
       <p style="margin-top:0"><strong>${todas.length}</strong> secciones · <strong>${nItems}</strong> pasos${ramas.length ? ` · ramas: ${ramas.map((r) => badgeRama(r)).join(' ')}` : ''}</p>
       <p class="suave">Los planes no llevan casillas: el avance real vive en el backlog. Aquí, su estructura para recorrerla rápido.</p>
+      ${nPrompts && comoEj ? `<p class="atajo-prompts"><button class="boton primario" data-saltar="${idPaso(clave, comoEj.id)}">▶ Cómo ejecutarlo · ${nPrompts} prompt${nPrompts === 1 ? '' : 's'}</button></p>` : ''}
       <div class="acciones-esquema"><button class="boton" data-plegar="abrir">Expandir todo</button><button class="boton" data-plegar="cerrar">Colapsar todo</button></div></div>
     <ol class="linea">${arbol.map(nodo).join('')}</ol>`;
 }
@@ -739,20 +778,21 @@ const VISTAS = {
     const orden = (a, b) => rango(a) - rango(b) || b.fecha.localeCompare(a.fecha);
     const act = ramas.filter(activa).sort(orden), resto = ramas.filter((r) => !activa(r));
     return `<p class="suave">${g.url ? `<a href="${esc(g.url)}">${esc(g.url)}</a> · ` : ''}datos de GitHub: ${g.actualizadoGh ? hace(g.actualizadoGh) : 'sin conexión'}</p>
-      <section class="tarjeta"><h2><span>Ramas</span><small>${ramas.length}</small></h2>
+      <div class="gh-rejilla">
+      <section class="tarjeta gh-grafo" aria-label="Grafo de ramas"><h2><span>Grafo de ramas</span><small>últimos ${g.commits.length} commits</small></h2>${vistaGrafo(g)}</section>
+      <section class="tarjeta gh-ramas"><h2><span>Ramas</span><small>${ramas.length}</small></h2>
         <p class="suave" style="margin-top:0">Cada rama con su PR y las sesiones de los backlogs y planes que la usan (por el «rama \`…\`» del título). Haz clic en una rama para verla en el grafo.</p>
         <div class="tabla-scroll"><table class="ramas"><tbody>${act.map((r) => filaRama(r, g)).join('')}</tbody></table></div>
         ${resto.length ? `<details style="margin-top:8px"><summary class="suave">${resto.length} ramas ya integradas</summary><div class="tabla-scroll"><table class="ramas"><tbody>${resto.map((r) => filaRama(r, g)).join('')}</tbody></table></div></details>` : ''}
       </section>
-      <section class="tarjeta" style="margin-top:18px"><h2><span>Grafo de ramas</span><small>últimos ${g.commits.length} commits</small></h2>${vistaGrafo(g)}</section>
-      <section class="tarjeta" style="margin-top:18px"><h2><span>Pull requests</span><small>${g.prs.length}</small></h2>
+      <section class="tarjeta gh-prs"><h2><span>Pull requests</span><small>${g.prs.length}</small></h2>
         ${g.prs.map((pr) => { const ses = sesionesDeRama(pr.headRefName); return `<details class="fila" style="display:block"><summary>${filaPR(pr, true)}</summary>
           <div class="suave">${badgeRama(pr.headRefName)} → ${esc(pr.baseRefName)} · creado ${fecha(pr.createdAt)}${pr.mergedAt ? ' · mergeado ' + fecha(pr.mergedAt) : ''}</div>
           ${ses.length ? `<div class="sesiones" style="display:flex;flex-wrap:wrap;gap:4px 6px;margin:4px 0">${ses.map(botonSesion).join('')}</div>` : ''}
           ${pr.commits.map((c) => `<div class="suave"><a class="hash" href="${esc(g.url)}/commit/${c.oid}">${c.oid.slice(0, 7)}</a> ${esc(c.titulo)}</div>`).join('')}
           ${pr.body ? `<details><summary class="suave">Descripción</summary>${md(pr.body)}</details>` : ''}
         </details>`; }).join('')}
-      </section>`;
+      </section></div>`;
   },
   notas() {
     if (!P.notas) return '<div class="vacio">Este proyecto no tiene archivo de notas configurado.</div>';
@@ -815,12 +855,23 @@ function irRama(nombre) {
   soltarEditor();
   ramaFoco = nombre; pestana = 'github'; guardar('tablero.pestana', pestana); pintar();
   const el = document.getElementById('foco-rama') || document.getElementById('foco-grafo');
+  const fg = document.getElementById('foco-grafo'), cont = fg?.closest('.gh-grafo');
+  if (cont) cont.scrollTo({ top: Math.max(0, fg.offsetTop - cont.clientHeight / 3), behavior: movimientoReducido() ? 'auto' : 'smooth' });
   if (el) { desplazar(el); el.querySelector('button')?.focus({ preventScroll: true }); } else alInicio();
 }
 
 document.addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;
+  if ('copiar' in b.dataset) {
+    const pre = b.closest('.prompt-copiable')?.querySelector('pre');
+    if (pre) copiarTexto(pre.textContent).then((ok) => {
+      if (!ok) { avisar('No se pudo copiar: selecciona el texto y usa Cmd/Ctrl+C.', true); return; }
+      avisar('Prompt copiado.'); b.textContent = '✓ Copiado';
+      clearTimeout(b._t); b._t = setTimeout(() => { b.textContent = 'Copiar'; }, 2000);
+    });
+    return;
+  }
   if (b.dataset.rama) { e.preventDefault(); irRama(b.dataset.rama); return; }
   if (b.dataset.editar) { editando = b.dataset.editar; pintar(); const t = $('#texto-md'); t?.focus(); t?.setSelectionRange(0, 0); t?.scrollTo(0, 0); return; }
   if ('cancelar' in b.dataset) { borradores.delete(editando); editando = null; pintar(); return; }

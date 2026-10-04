@@ -59,6 +59,7 @@ function contarCasillas(texto) {
 const RE_TITULO = /^(#{2,3})\s+(.+?)\s*#*\s*$/
 const RE_TAREA = /^(\s*)[-*] \[([ xX])\]\s?(.*)$/
 const RE_CERCA = /^\s*(```|~~~)/
+const RE_COMO = /c[oó]mo ejecutarlo/i
 const RE_ITEM = /^ ?(\d+[.)]|[-*])\s+(?!\[[ xX]\])(.+)$/
 const RE_DURACION = /\s*\(([^()]*\b(?:d[ií]as?|d|semanas?|sem|horas?|h)\b[^()]*)\)\s*$/i
 export const plano = (t) => String(t).replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*|__|`/g, '').trim()
@@ -98,23 +99,53 @@ function cerrarSeccion(s) {
     : s.hechas ? 'en-curso' : 'pendiente'
 }
 
-// Árbol de secciones: [{ id, titulo, tituloCrudo, clave, nivel, meta, hechas, total, estado, tareas:[{texto,hecha,hijas}], hijas:[sección] }]
+// Texto de un bloque de cita: quita «> », une las líneas de un párrafo con espacio y conserva los saltos entre párrafos.
+const textoDeCita = (lineas) => lineas.map((l) => l.replace(/^\s*>\s?/, '').trim())
+  .reduce((ps, l) => { if (!l) ps.push([]); else (ps.at(-1) || (ps[ps.push([]) - 1])).push(l); return ps }, [])
+  .filter((p) => p.length).map((p) => p.join(' ')).join('\n\n')
+
+// Árbol de secciones: [{ id, titulo, tituloCrudo, clave, nivel, meta, hechas, total, estado, tareas:[{texto,hecha,hijas}], items, prompts:[{etiqueta,texto,clave,modelo}], hijas:[sección] }]
 export function estructura(texto) {
   const raiz = []
-  let padre = null, actual = null, pila = [], enCerca = false, n = 0
+  let padre = null, actual = null, pila = [], cerca = null, cita = null, rotulo = null, n = 0
+  const cuenta = () => RE_COMO.test(plano(actual.titulo)) || (actual.nivel === 3 && padre && RE_COMO.test(plano(padre.titulo)))
+  const emitir = (lineas, rot, esCita) => {
+    const texto = esCita ? textoDeCita(lineas) : lineas.join('\n')
+    if (!actual || !texto.trim() || !(cuenta() || /prompt/i.test(rot || ''))) return
+    const etiqueta = (/prompt/i.test(rot || '') ? plano(rot) : '').replace(/^(?:[-*]|\d+[.)])\s+/, '').replace(/\s*:\s*$/, '').slice(0, 80) || 'Prompt'
+    actual.prompts.push({ etiqueta, texto: texto.slice(0, 20000), clave: (etiqueta.match(/\b([A-Z]\d+[a-z]?)\b/) || [])[1] || null })
+  }
   for (const linea of String(texto).replace(/\t/g, '    ').split('\n')) {
-    if (RE_CERCA.test(linea)) { enCerca = !enCerca; continue }
-    if (enCerca) continue
+    if (RE_CERCA.test(linea)) {
+      if (cita) { emitir(cita.lineas, cita.rotulo, true); cita = null }
+      if (cerca) { emitir(cerca.lineas, cerca.rotulo, false); cerca = null } else cerca = { rotulo, lineas: [] }
+      rotulo = null
+      continue
+    }
+    if (cerca) { cerca.lineas.push(linea); continue }
+    if (/^\s*>/.test(linea)) {
+      if (!cita) cita = { rotulo, lineas: [] }
+      cita.lineas.push(linea)
+      continue
+    }
+    if (cita) { emitir(cita.lineas, cita.rotulo, true); cita = null; rotulo = null }
+    if (linea.trim()) rotulo = linea
     const t = linea.match(RE_TITULO)
     if (t) {
       const nivel = t[1].length
-      const s = { id: `s${n++}`, nivel, tituloCrudo: t[2], ...analizarTitulo(t[2]), tareas: [], items: [], hijas: [] }
+      const s = { id: `s${n++}`, nivel, tituloCrudo: t[2], ...analizarTitulo(t[2]), tareas: [], items: [], prompts: [], hijas: [] }
       if (nivel === 3 && padre) padre.hijas.push(s)
       else { raiz.push(s); if (nivel === 2) padre = s }
-      actual = s; pila = []
+      actual = s; pila = []; rotulo = null
       continue
     }
     const m = actual && linea.match(RE_TAREA)
+    if (actual) {
+      const celdas = linea.split(/(?<!\\)\|/).map((c) => c.trim())
+      const mod = celdas.length >= 4 && celdas[2].match(/\*{0,2}(Opus|Sonnet|Haiku|Fable)\*{0,2}/i)
+      const k = mod && plano(celdas[1]).match(/^[A-Z]\d+[a-z]?\b/)
+      if (k) (actual.filas ||= []).push({ clave: k[0], modelo: mod[1] })
+    }
     if (!m) {
       // Planes de Claude: sin casillas; sus pasos son los ítems de lista de primer nivel.
       const li = actual && linea.match(RE_ITEM)
@@ -126,6 +157,12 @@ export function estructura(texto) {
     while (pila.length && pila.at(-1).sangria >= sangria) pila.pop()
     ;(pila.length ? pila.at(-1).tarea.hijas : actual.tareas).push(tarea)
     pila.push({ sangria, tarea })
+  }
+  if (cita) emitir(cita.lineas, cita.rotulo, true)
+  // El modelo de cada prompt sale de la fila de la tabla de sesiones de su sección.
+  for (const s of aplanar(raiz)) {
+    for (const p of s.prompts) { const f = p.clave && s.filas?.find((x) => x.clave === p.clave); if (f) p.modelo = f.modelo }
+    delete s.filas
   }
   raiz.forEach(cerrarSeccion)
   return raiz
