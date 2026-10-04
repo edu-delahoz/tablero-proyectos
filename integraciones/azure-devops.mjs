@@ -17,14 +17,41 @@ export function traducirError(e, cfg = {}) {
   return 'Sin conexión con Azure DevOps.'
 }
 
+// Acepta el nombre solo o cualquier URL de la organización → { organizacion, proyecto? }. Lanza Error en español si no se entiende.
+export function normalizarOrganizacion(texto) {
+  const t = String(texto ?? '').trim()
+  const invalido = () => new Error(`No entiendo la organización «${t}»: escribe su nombre (p. ej. MiOrg) o la URL de dev.azure.com/MiOrg.`)
+  if (!t) throw invalido()
+  const dec = (s) => { try { return decodeURIComponent(s) } catch { return s } }
+  const RE_NOMBRE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+  if (!/[/:@]/.test(t)) { if (!RE_NOMBRE.test(t)) throw invalido(); return { organizacion: t } }
+  let u
+  try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`) } catch { throw invalido() }
+  if (!/^https?:$/.test(u.protocol)) throw invalido()
+  const host = u.hostname.toLowerCase()
+  const hostOriginal = u.hostname // la URL pasa el host a minúsculas; el nombre de la organización se conserva tal cual
+  const trozos = u.pathname.split('/').filter(Boolean).map(dec)
+  let organizacion, resto
+  if (host === 'dev.azure.com') [organizacion, ...resto] = trozos
+  else if (host.endsWith('.visualstudio.com')) {
+    organizacion = (t.match(/([^/@.\s]+)\.visualstudio\.com/i) || [])[1] || hostOriginal.slice(0, -'.visualstudio.com'.length)
+    resto = trozos[0]?.toLowerCase() === 'defaultcollection' ? trozos.slice(1) : trozos
+  } else throw invalido()
+  if (!organizacion || !RE_NOMBRE.test(organizacion)) throw invalido()
+  const proyecto = resto[0] && !resto[0].startsWith('_') ? resto[0] : undefined
+  return proyecto ? { organizacion, proyecto } : { organizacion }
+}
+
 const tipoItem = (cfg) => cfg.tipoItem || 'Task'
-const urlItem = (cfg, id) => `https://dev.azure.com/${cfg.organizacion}/${cfg.proyecto}/_workitems/edit/${id}`
+const org = (cfg) => normalizarOrganizacion(cfg.organizacion).organizacion
+const urlItem = (cfg, id) => `https://dev.azure.com/${encodeURIComponent(org(cfg))}/${encodeURIComponent(cfg.proyecto)}/_workitems/edit/${id}`
 
 // Una llamada REST; `ruta` cuelga de …/{organizacion}/{proyecto}/_apis/. Lanza Error con mensaje ya traducido.
 async function api(deps, cfg, cred, metodo, ruta, { cuerpo, tipo = 'application/json' } = {}) {
   const f = deps.fetch || globalThis.fetch
+  const organizacion = normalizarOrganizacion(cfg.organizacion).organizacion
   const alcance = cfg.proyecto ? `/${encodeURIComponent(cfg.proyecto)}` : '' // sin proyecto: llamadas de la organización
-  const url = `https://dev.azure.com/${encodeURIComponent(cfg.organizacion)}${alcance}/_apis/${ruta}${ruta.includes('?') ? '&' : '?'}${API}`
+  const url = `https://dev.azure.com/${encodeURIComponent(organizacion)}${alcance}/_apis/${ruta}${ruta.includes('?') ? '&' : '?'}${API}`
   const ctl = new AbortController()
   const t = setTimeout(() => ctl.abort(), TIMEOUT_MS)
   try {
@@ -67,7 +94,8 @@ export async function leer(cfg, cred, deps = {}) {
     avisos.push(`No se pudieron leer los estados de «${tipo}» (${e.message}); se deducen de los ítems.`)
     columnas = [...new Set(items.map((x) => x.columna).filter(Boolean))]
   }
-  return { url: `https://dev.azure.com/${cfg.organizacion}/${cfg.proyecto}/_workitems`, titulo: `${cfg.organizacion}/${cfg.proyecto}`, columnas, items, avisos }
+  const o = org(cfg)
+  return { url: `https://dev.azure.com/${encodeURIComponent(o)}/${encodeURIComponent(cfg.proyecto)}/_workitems`, titulo: `${o}/${cfg.proyecto}`, columnas, items, avisos }
 }
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')

@@ -34,6 +34,17 @@ test('validarIntegracion: lista blanca, recorta, convierte el número y admite l
   assert.equal('auto' in ado.limpia, false)
 })
 
+test('validarIntegracion: la organización de Azure DevOps se guarda como nombre y no pisa un proyecto escrito', () => {
+  const base = { id: 'ado', tipo: 'azure-devops', backlog: 'BACKLOG.md' }
+  const url = validarIntegracion({ ...base, organizacion: 'https://dev.azure.com/CodeFactory2026-2', proyecto: 'EAP10' }, ctx)
+  assert.deepEqual([url.errores, url.limpia.organizacion, url.limpia.proyecto], [[], 'CodeFactory2026-2', 'EAP10'])
+  const conProy = validarIntegracion({ ...base, organizacion: 'https://dev.azure.com/Org/Otro/_boards', proyecto: 'Mio' }, ctx)
+  assert.equal(conProy.limpia.proyecto, 'Mio')
+  assert.deepEqual(validarIntegracion({ ...base, organizacion: 'https://dev.azure.com/Org/Otro/_boards' }, ctx).limpia.proyecto, 'Otro')
+  const mal = validarIntegracion({ ...base, organizacion: 'https://ejemplo.com/x', proyecto: 'p' }, ctx).errores
+  assert.match(mal[0], /^Azure DevOps: No entiendo la organización/)
+})
+
 const CRUDO = `[
   {
     "id": "a",

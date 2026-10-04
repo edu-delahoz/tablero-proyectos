@@ -39,6 +39,10 @@ const falso = {
   async actualizar(cfg, cred, id, c) { Object.assign(fuera.get(id), c) },
   async listar(cfg, cred) { if (cfg.numero === 98) return new Promise(() => {}); if (cfg.numero === 99) throw new Error('GitHub Projects: Sin conexión con GitHub.'); return { recibido: cfg, cred, proyectos: [{ propietario: 'u', numero: 5, titulo: 'Falso' }] } },
 }
+const adoFalso = {
+  async leer(cfg) { return { url: 'https://x', titulo: `${cfg.organizacion}/${cfg.proyecto}`, columnas: [], items: [] } },
+  async listar(cfg) { return { recibido: cfg, proyectos: ['EAP10'] } },
+}
 const trelloFalso = { async listar(cfg, cred) { return { recibido: cfg, cred, tableros: [] } } }
 
 let srv, puerto, salidas = 0
@@ -48,7 +52,7 @@ before(async () => {
   srv = createServer((q, r) => manejador(q, r))
   await new Promise((ok) => srv.listen(0, '127.0.0.1', ok))
   puerto = srv.address().port
-  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso, trello: trelloFalso }, codigo: 'c1', alSalir: () => { salidas++ } })
+  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso, trello: trelloFalso, 'azure-devops': adoFalso }, codigo: 'c1', alSalir: () => { salidas++ } })
 })
 after(() => srv.close())
 
@@ -322,7 +326,7 @@ test('integraciones: descubrir pasa solo los campos de la consulta, traduce erro
   const mal = await post('/api/integraciones/descubrir', { tipo: 'github-projects', consulta: { propietario: 'u', numero: 99 } })
   assert.deepEqual([mal.estado, mal.json.error], [502, 'GitHub Projects: Sin conexión con GitHub.'])
   assert.equal((await post('/api/integraciones/descubrir', { tipo: 'nada' })).estado, 400)
-  assert.equal((await post('/api/integraciones/descubrir', { tipo: 'azure-devops', consulta: { organizacion: 'o' } })).estado, 400, 'sin adaptador con listar')
+  assert.equal((await post('/api/integraciones/descubrir', { tipo: 'azure-devops', consulta: { organizacion: 'o' } })).json.estado, 'falta-credencial')
   assert.equal((await post('/api/integraciones/descubrir', { tipo: 'github-projects' }, { origin: 'http://evil.com' })).estado, 403)
   // Trello sin credencial: 400 con el paso a seguir; con ella, el conector la recibe y el JSON no la devuelve al guardarla.
   const entorno = [process.env.TRELLO_KEY, process.env.TRELLO_TOKEN]
@@ -338,6 +342,26 @@ test('integraciones: descubrir pasa solo los campos de la consulta, traduce erro
     await post('/api/credenciales', { clave: 'trello', campos: { key: '', token: '' } })
   } finally { if (entorno[0] !== undefined) process.env.TRELLO_KEY = entorno[0]; if (entorno[1] !== undefined) process.env.TRELLO_TOKEN = entorno[1] }
   assert.equal(readFileSync(CONF, 'utf8'), antes)
+})
+
+test('integraciones: Azure DevOps acepta la URL de la organización y responde el nombre normalizado', async () => {
+  const entorno = process.env.AZURE_DEVOPS_PAT
+  delete process.env.AZURE_DEVOPS_PAT
+  try {
+    await post('/api/credenciales', { clave: 'azure-devops', campos: { pat: 'pat-normaliza-12345' } })
+    const d = await post('/api/integraciones/descubrir', { tipo: 'azure-devops', consulta: { organizacion: ' https://dev.azure.com/CodeFactory2026-2/ ' } })
+    assert.equal(d.estado, 200, d.json.error)
+    assert.equal(d.json.organizacion, 'CodeFactory2026-2')
+    assert.deepEqual(d.json.recibido, { organizacion: 'CodeFactory2026-2' })
+    const mal = await post('/api/integraciones/descubrir', { tipo: 'azure-devops', consulta: { organizacion: 'https://ejemplo.com/x' } })
+    assert.equal(mal.estado, 400)
+    assert.match(mal.json.error, /No entiendo la organización/)
+    const p = await post('/api/integraciones/probar', { proyecto: 'prueba', integracion: { id: 'ado', tipo: 'azure-devops', organizacion: 'https://dev.azure.com/CodeFactory2026-2/EAP10/_boards', backlog: 'BACKLOG_PRUEBA.md' } })
+    assert.equal(p.estado, 200, p.json.error)
+    assert.equal(p.json.organizacion, 'CodeFactory2026-2')
+    assert.equal(p.json.titulo, 'CodeFactory2026-2/EAP10')
+    await post('/api/credenciales', { clave: 'azure-devops', campos: { pat: '' } })
+  } finally { if (entorno !== undefined) process.env.AZURE_DEVOPS_PAT = entorno }
 })
 
 test('credenciales: se guardan en 0600, la respuesta y /api/datos solo traen el resumen, nunca el valor', async () => {

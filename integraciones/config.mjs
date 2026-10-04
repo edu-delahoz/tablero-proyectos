@@ -3,6 +3,7 @@
 import { writeFileSync, renameSync, mkdirSync, unlinkSync, statSync } from 'node:fs'
 import { dirname, basename, join } from 'node:path'
 import { ADAPTADORES, NOMBRES } from './index.mjs'
+import { normalizarOrganizacion } from './azure-devops.mjs'
 
 // Lista blanca por tipo: solo estos campos llegan a proyectos.json. obligatorios ⊂ campos.
 const COMUNES = ['id', 'tipo', 'backlog', 'auto']
@@ -31,7 +32,8 @@ export function validarIntegracion(cfg, { backlogs = [], otras = [], adaptadores
   const limpia = { id: cfg.id, tipo: cfg.tipo, backlog: typeof cfg.backlog === 'string' ? cfg.backlog.trim() : cfg.backlog }
   const nombre = NOMBRES[cfg.tipo] || cfg.tipo
   for (const campo of [...def.obligatorios, ...def.opcionales]) {
-    const v = cfg[campo]
+    let v = cfg[campo]
+    if (campo === 'proyecto' && (v === undefined || v === null || v === '') && limpia.proyecto) v = limpia.proyecto // salió de la URL de la organización
     const falta = v === undefined || v === null || v === ''
     if (falta) { if (def.obligatorios.includes(campo)) errores.push(`${nombre}: falta «${campo}».`); continue }
     if (campo === 'numero') {
@@ -49,6 +51,12 @@ export function validarIntegracion(cfg, { backlogs = [], otras = [], adaptadores
         else errores.push(`${nombre}: la columna «${k}» debe ser un nombre (o lista de nombres).`)
       }
       if (Object.keys(col).length) limpia.columnas = col
+    } else if (campo === 'organizacion' && texto(v)) {
+      try {
+        const o = normalizarOrganizacion(v)
+        limpia.organizacion = o.organizacion
+        if (o.proyecto && !(typeof cfg.proyecto === 'string' && cfg.proyecto.trim())) limpia.proyecto = o.proyecto
+      } catch (e) { errores.push(`${nombre}: ${e.message}`) }
     } else if (texto(v)) limpia[campo] = v.trim()
     else errores.push(`${nombre}: «${campo}» debe ser texto (hasta 200 caracteres).`)
   }

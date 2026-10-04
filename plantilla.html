@@ -1026,6 +1026,7 @@ async function cargarOpciones(que) {
   try {
     const r = await api('/api/integraciones/descubrir', { tipo: c.tipo, clave: f.original || undefined, consulta: consultaDe(c, que === 'detalle') });
     if (formInteg !== f) return;
+    if (r.organizacion) c.organizacion = r.organizacion;
     if (que === 'destinos') f.op.destinos = r.proyectos || r.tableros || []; else f.op.detalle = r;
   } catch (e) { if (formInteg !== f) return; f.error = e.message; f.op.fallo = que; }
   finally { if (formInteg === f) { f.cargando = ''; pintarF(); } }
@@ -1050,7 +1051,7 @@ function cfgLimpia(c, idFinal) {
 }
 async function probarForm(boton) {
   const f = formInteg; f.prueba = null; boton.disabled = true; boton.textContent = 'Probando…';
-  try { f.prueba = { ok: true, ...(await api('/api/integraciones/probar', { proyecto: P.id, integracion: cfgLimpia(f.cfg, f.cfg.id) })) }; }
+  try { f.prueba = { ok: true, ...(await api('/api/integraciones/probar', { proyecto: P.id, integracion: cfgLimpia(f.cfg, f.cfg.id) })) }; if (f.prueba.organizacion) f.cfg.organizacion = f.prueba.organizacion; }
   catch (e) { f.prueba = { ok: false, error: e.message }; }
   pintarF(); document.getElementById('fi-prueba')?.focus();
 }
@@ -1107,7 +1108,7 @@ function pasoDestino(c) {
       ${manual || !op.destinos ? `<div class="manual-fi">${textoFi('fi-tablero', 'Id del tablero', 'tablero', c.tablero, 'el código de la URL trello.com/b/&lt;id&gt;')}</div>` : ''}`;
   }
   const lista = (op.destinos || []).slice(); if (c.proyecto && !lista.includes(c.proyecto)) lista.unshift(c.proyecto);
-  return `${textoFi('fi-organizacion', 'Organización', 'organizacion', c.organizacion, 'dev.azure.com/&lt;organización&gt;')}<button class="boton" type="button" data-fi-accion="destinos"${cargando || !c.organizacion ? ' disabled' : ''}>Buscar proyectos</button>${estado}
+  return `${textoFi('fi-organizacion', 'Organización', 'organizacion', c.organizacion, 'Nombre o URL: dev.azure.com/&lt;organización&gt;')}<button class="boton" type="button" data-fi-accion="destinos"${cargando || !c.organizacion ? ' disabled' : ''}>Buscar proyectos</button>${estado}
     ${op.destinos ? selectFi('fi-destino', 'Proyecto', 'destino', c.proyecto, lista, '— elige un proyecto —') : ''}${manual || !op.destinos ? textoFi('fi-proyecto', 'Proyecto (a mano)', 'proyecto', c.proyecto) : ''}`;
 }
 function pasoColumnas(c) {

@@ -20,6 +20,7 @@ import { extraerMarcas, tareasLocales, planificarSincronia, aplicarSincronia } f
 import { leerCredenciales, credencialesPara, guardarCredencial, resumenCredenciales, REQUISITOS, RUTA_CREDENCIALES } from './integraciones/credenciales.mjs'
 import { validarIntegracion, aplicarCambio, escribirAtomico, ErrorConfig, CAMPOS } from './integraciones/config.mjs'
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
+import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
 import { parsearBitacora, sidsPorProyecto, asociar, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
 
@@ -896,7 +897,7 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         let r
         try { r = await conTiempo(ctx.adaptador.leer(), 15000) } catch (e) { return enviar(res, 502, { error: String(e?.message || e) }) }
         const vinculadas = tareasLocales(ctx.backlog.contenido, limpia.id).filter((t) => t.marca).length
-        return enviar(res, 200, { ok: true, titulo: r.titulo || null, url: r.url || null, columnas: r.columnas || [], items: r.items.length, avisos: [...(ctx.aviso ? [ctx.aviso] : []), ...(r.avisos || [])], vinculadas })
+        return enviar(res, 200, { ok: true, titulo: r.titulo || null, url: r.url || null, columnas: r.columnas || [], items: r.items.length, avisos: [...(ctx.aviso ? [ctx.aviso] : []), ...(r.avisos || [])], vinculadas, ...(limpia.organizacion ? { organizacion: limpia.organizacion } : {}) })
       }
       // Descubrir para los desplegables (solo lectura): `consulta` parcial según el tipo; `clave` = id de una integración con credencial propia.
       if (ruta === '/api/integraciones/descubrir') {
@@ -906,10 +907,13 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         const consulta = b.consulta && typeof b.consulta === 'object' && !Array.isArray(b.consulta) ? b.consulta : {}
         const cfg = {}
         for (const k of ['propietario', 'numero', 'tablero', 'organizacion', 'proyecto']) if (consulta[k] != null && consulta[k] !== '') cfg[k] = consulta[k]
+        if (b.tipo === 'azure-devops' && cfg.organizacion) {
+          try { Object.assign(cfg, { organizacion: normalizarOrganizacion(cfg.organizacion).organizacion }) } catch (e) { return enviar(res, 400, { error: e.message }) }
+        }
         const clave = typeof b.clave === 'string' ? b.clave : undefined
         const { cred, faltan, paso } = credencialesPara({ id: clave, tipo: b.tipo }, leerCredenciales().datos)
         if (faltan.length) return enviar(res, 400, { error: `Falta credencial: ${faltan.join(', ')}.`, estado: 'falta-credencial', paso })
-        try { return enviar(res, 200, { ok: true, ...(await conTiempo(mod.listar(cfg, cred, { memo: new Map() }), 15000)) }) } catch (e) { return enviar(res, 502, { error: String(e?.message || e) }) }
+        try { return enviar(res, 200, { ok: true, ...(cfg.organizacion && b.tipo === 'azure-devops' ? { organizacion: cfg.organizacion } : {}), ...(await conTiempo(mod.listar(cfg, cred, { memo: new Map() }), 15000)) }) } catch (e) { return enviar(res, 502, { error: String(e?.message || e) }) }
       }
       // Credenciales: se guardan en el archivo (0600) y la respuesta solo trae el resumen, nunca un valor.
       if (ruta === '/api/credenciales') {

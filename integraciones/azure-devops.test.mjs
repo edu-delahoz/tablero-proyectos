@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { leer, crear, actualizar, listar, descripcionHtml, traducirError } from './azure-devops.mjs'
+import { leer, crear, actualizar, listar, descripcionHtml, traducirError, normalizarOrganizacion } from './azure-devops.mjs'
 
 const R = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'integraciones', 'azure-devops.json'), 'utf8'))
 const CFG = { id: 'ado', tipo: 'azure-devops', organizacion: 'org-ejemplo', proyecto: 'proyecto-ejemplo', tipoItem: 'Task' }
@@ -125,4 +125,35 @@ test('listar: PAT inválido (203) traducido sin filtrar el PAT; exige organizaci
 test('listar sin proyecto: 404 sin «undefined»; 203 sugiere el scope «Project and Team: Read»', async () => {
   await assert.rejects(listar({ organizacion: 'org-x' }, CRED, ado({ 'GET projects': res('no', 404) })), (e) => /No existe la organización org-x o el PAT/.test(e.message) && !/undefined/.test(e.message))
   await assert.rejects(listar({ organizacion: 'o' }, CRED, ado({ 'GET projects': res('<html>login</html>', 203) })), (e) => /Project and Team: Read/.test(e.message) && /a mano/.test(e.message))
+})
+
+test('normalizarOrganizacion: nombre, URLs de dev.azure.com y visualstudio.com, proyecto con decodeURIComponent', () => {
+  const casos = [
+    ['CodeFactory2026-2', { organizacion: 'CodeFactory2026-2' }],
+    ['  Org  ', { organizacion: 'Org' }],
+    ['https://dev.azure.com/Org', { organizacion: 'Org' }],
+    ['http://dev.azure.com/Org/', { organizacion: 'Org' }],
+    ['dev.azure.com/Org', { organizacion: 'Org' }],
+    ['https://usuario@dev.azure.com/Org', { organizacion: 'Org' }],
+    ['https://Org.visualstudio.com', { organizacion: 'Org' }],
+    ['https://Org.visualstudio.com/DefaultCollection', { organizacion: 'Org' }],
+    ['https://Org.visualstudio.com/Proy', { organizacion: 'Org', proyecto: 'Proy' }],
+    ['https://dev.azure.com/Org/Proy/_boards/board', { organizacion: 'Org', proyecto: 'Proy' }],
+    ['https://dev.azure.com/Org/_settings', { organizacion: 'Org' }],
+    ['https://dev.azure.com/Org/Mi%20Proyecto/_boards', { organizacion: 'Org', proyecto: 'Mi Proyecto' }],
+  ]
+  for (const [entrada, esperado] of casos) assert.deepEqual(normalizarOrganizacion(entrada), esperado, entrada)
+  for (const mal of ['', '   ', 'https://ejemplo.com/Org', 'https://dev.azure.com', 'ftp://dev.azure.com/Org', 'con espacios', undefined]) {
+    assert.throws(() => normalizarOrganizacion(mal), /No entiendo la organización/, String(mal))
+  }
+})
+
+test('una config guardada con la URL completa llama a dev.azure.com/<organización>/_apis', async () => {
+  const d = ado()
+  await leer({ ...CFG, organizacion: 'https://dev.azure.com/org-ejemplo/' }, CRED, d)
+  assert.ok(d.llamadas.length > 0)
+  for (const l of d.llamadas) assert.match(l.url, /^https:\/\/dev\.azure\.com\/org-ejemplo\/proyecto-ejemplo\/_apis\//)
+  const r = await leer({ ...CFG, organizacion: 'https://dev.azure.com/org-ejemplo/', proyecto: 'Mi Proyecto' }, CRED, ado({ 'GET wit/workitemtypes/Task/states': R.estados }))
+  assert.ok(r.items.every((x) => x.url.startsWith('https://dev.azure.com/org-ejemplo/Mi%20Proyecto/_workitems/edit/')), 'urlItem codifica el proyecto')
+  assert.equal(r.url, 'https://dev.azure.com/org-ejemplo/Mi%20Proyecto/_workitems')
 })
