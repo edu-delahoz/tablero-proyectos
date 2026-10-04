@@ -481,6 +481,11 @@ test('vista: la plantilla trae «Editar proyecto», la guía de configuración y
   assert.ok(html.includes('data-crear="backlog"'), 'el paso backlog reutiliza «Crear backlog»')
 })
 
+test('vista: la plantilla trae «Mis tareas» (#p=mias), los bloques y el contador en «Todos»', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['value="mias"', 'Mis tareas', 'function vistaMias', 'id="mis-asignadas"', 'id="mis-siguientes"', 'Asignadas a mí', 'Siguientes pasos en mis backlogs', 'asignadas a mí', "=== 'mias'"]) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
 test('crear proyecto: previa sin escribir, id inválido o duplicado y rutas inexistentes → 400, mtime viejo → 409', async () => {
   const docsNuevo = join(dir, 'docs-nuevo')
   mkdirSync(docsNuevo)

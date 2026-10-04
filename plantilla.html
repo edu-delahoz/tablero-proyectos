@@ -460,7 +460,7 @@ const CASILLA = () => ['[ ]', '[x]'];
 const GLIFO_SEG = { hecho: '██', 'en-curso': '▒▒', pendiente: '░░' };
 const ESTADO_PR = (pr) => pr.isDraft && pr.state === 'OPEN' ? ['DRAFT', 'borrador'] : [pr.state, { MERGED: 'mergeado', OPEN: 'abierto', CLOSED: 'cerrado' }[pr.state]];
 
-let P = null, todos = false, pestana = leer('tablero.pestana') || 'resumen', sel = {}, ramaFoco = null;
+let P = null, todos = false, mias = false, pestana = leer('tablero.pestana') || 'resumen', sel = {}, ramaFoco = null;
 let modo = { backlogs: 'mapa', planes: 'mapa' };
 try { Object.assign(modo, JSON.parse(leer('tablero.modo') || '{}')); } catch {}
 const abiertos = new Map(); // «archivo#sección» → abierta/cerrada por el usuario
@@ -1656,14 +1656,46 @@ function vistaTodos() {
         <span class="suave" title="Costo de los últimos 7 días (bitácora)">${usd(r.costo7)} · 7 d</span>
       </div></section>`;
   const reciente = rs.filter((r) => enCurso(r.p)).sort((a, b) => new Date(b.ultima || 0) - new Date(a.ultima || 0))[0];
-  return `<div class="bit-totales" aria-label="Totales globales"><span><b>${rs.length}</b> proyectos</span><span><b>${suma('hechas')}/${suma('total')}</b> tareas</span><span><b>${suma('prs')}</b> PR abiertos</span><span><b>${suma('notas')}</b> notas abiertas</span><span><b>${suma('bit')}</b> bitácora pendiente</span><span><b>${usd(suma('costo7'))}</b> costo 7 d</span></div>
+  return `<div class="bit-totales" aria-label="Totales globales"><span><b>${rs.length}</b> proyectos</span><span><b>${totalAsignadas()}</b> asignadas a mí</span><span><b>${suma('hechas')}/${suma('total')}</b> tareas</span><span><b>${suma('prs')}</b> PR abiertos</span><span><b>${suma('notas')}</b> notas abiertas</span><span><b>${suma('bit')}</b> bitácora pendiente</span><span><b>${usd(suma('costo7'))}</b> costo 7 d</span></div>
     ${reciente ? tarjetaEnCurso(reciente.p, true) : ''}
     <div class="rejilla" style="margin-top:14px">${rs.map(tarjeta).join('')}</div>`;
+}
+// ---------- Vista «Mis tareas» ----------
+// Ítems asignados a mí (mio) de las integraciones, sin los ya hechos, por proyecto → integración → estado.
+function asignadasAMi() {
+  return DATOS.proyectos.flatMap((p) => (p.integraciones || []).map((integ) => {
+    const items = integ.items || [];
+    return { p, integ, sinMio: items.length > 0 && !conMio(items), items: items.filter((x) => x.mio === true && !x.hecha) };
+  }));
+}
+const totalAsignadas = () => asignadasAMi().reduce((a, g) => a + g.items.length, 0);
+function vistaMias() {
+  const gs = asignadasAMi(), con = gs.filter((g) => g.items.length), total = con.reduce((a, g) => a + g.items.length, 0);
+  const fechaItem = (x) => x.actualizado ? `<span class="suave">${hace(x.actualizado)}</span>` : '';
+  const grupo = (g) => {
+    const cols = [...new Set(g.items.map((x) => x.columna || 'Sin estado'))];
+    return `<section class="tarjeta" style="margin-bottom:14px" aria-label="${esc(g.p.nombre)} ${esc(g.integ.id)}">
+      <h2><button class="enlace" data-proy="${esc(g.p.id)}" data-pest="integraciones">${esc(g.p.nombre)}</button><small>${esc(g.integ.nombre)} · ${esc(g.integ.id)} · ${g.items.length}</small></h2>
+      ${cols.map((c) => { const xs = g.items.filter((x) => (x.columna || 'Sin estado') === c); return `<div class="rotulo">${esc(c)} · ${xs.length}</div><ul class="tareas">${xs.map((x) => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a>${x.tipo ? `<span class="chip-tipo">${esc(x.tipo)}</span>` : ''} ${fechaItem(x)}</li>`).join('')}</ul>`; }).join('')}</section>`;
+  };
+  const sinMio = gs.filter((g) => g.sinMio);
+  const siguientes = DATOS.proyectos.map((p) => ({ p, c: enCurso(p) })).filter(({ c }) => c && !c.completo && c.falta.length);
+  const siguiente = ({ p, c }) => `<section class="tarjeta" style="margin-bottom:14px" aria-label="${esc(p.nombre)}">
+    <h2><button class="enlace" data-proy="${esc(p.id)}" data-pest="resumen">${esc(p.nombre)}</button><small>${c.siguiente ? esc(corto(`${c.siguiente.clave} — ${c.siguiente.titulo}`, 60)) : esc(corto(plano(c.hito.titulo), 60))}</small></h2>
+    <ul class="tareas falta">${c.falta.slice(0, 6).map((t) => `<li>${CASILLA()[0]} ${esc(corto(plano(t), 200))}</li>`).join('')}</ul>${c.falta.length > 6 ? `<div class="suave">… y ${c.falta.length - 6} más</div>` : ''}
+    ${c.destacado ? promptsHtml([c.destacado]) : ''}
+    <p><button class="boton" data-proy="${esc(p.id)}" data-pest="backlogs">Ver en Backlogs</button></p></section>`;
+  return `<div class="bit-totales" aria-label="Totales"><span><b>${total}</b> asignadas a mí</span><span><b>${siguientes.length}</b> proyecto${siguientes.length === 1 ? '' : 's'} con pasos abiertos</span></div>
+    <h2 class="rotulo" id="mis-asignadas">Asignadas a mí</h2>
+    ${sinMio.map((g) => `<div class="integ-paso">${esc(g.p.nombre)} · ${esc(g.integ.id)}: no se pudo saber cuáles son tuyas (la integración no trae «mío»).</div>`).join('')}
+    ${con.length ? con.map(grupo).join('') : '<div class="vacio">Nada asignado a ti en las integraciones.</div>'}
+    <h2 class="rotulo" id="mis-siguientes" style="margin-top:18px">Siguientes pasos en mis backlogs</h2>
+    ${siguientes.length ? siguientes.map(siguiente).join('') : '<div class="vacio">Ningún backlog tiene pasos abiertos.</div>'}`;
 }
 function abrirProyecto(id, pest) {
   const p = buscarProyecto(id);
   if (!p) return;
-  soltarEditor(); todos = false; P = p; sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null;
+  soltarEditor(); todos = false; mias = false; P = p; sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null;
   pestana = pest || 'resumen'; guardar('tablero.pestana', pestana);
   recordarProyecto(); pintar(); alInicio();
 }
@@ -1672,7 +1704,7 @@ function pintar() {
   if (todos) {
     $('#pestanas').innerHTML = ''; $('#rama-cab').innerHTML = '';
     $('#barra-estado').innerHTML = `<span class="${enVivo ? 'vivo' : 'manual'}">${enVivo ? '● en vivo' : '◌ manual'}</span><span class="derecha opcional">Actualizado ${esc(fecha(DATOS.generado))}</span>`;
-    $('#contenido').innerHTML = '<div class="prompt" aria-hidden="true"><b>❯</b> tablero --todos</div>' + vistaTodos();
+    $('#contenido').innerHTML = mias ? '<div class="prompt" aria-hidden="true"><b>❯</b> tablero --mis-tareas</div>' + vistaMias() : '<div class="prompt" aria-hidden="true"><b>❯</b> tablero --todos</div>' + vistaTodos();
     return;
   }
   pintarNavegacion();
@@ -1899,8 +1931,8 @@ async function enviarCrear() {
   }
 }
 function refrescarSelectorProyectos() {
-  $('#proyecto').innerHTML = `<option value="todos">Todos los proyectos</option>` + DATOS.proyectos.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');
-  $('#proyecto').value = todos ? 'todos' : P.id;
+  $('#proyecto').innerHTML = `<option value="todos">Todos los proyectos</option><option value="mias">Mis tareas</option>` + DATOS.proyectos.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');
+  $('#proyecto').value = todos ? (mias ? 'mias' : 'todos') : P.id;
 }
 const botonCrearBacklog = () => editable() ? '<p><button class="boton primario" type="button" data-crear="backlog">＋ Crear backlog</button></p>' : '';
 $('#nuevo-proyecto').hidden = !editable();
@@ -1927,20 +1959,21 @@ $('#tema').addEventListener('change', (e) => {
 const idEnHash = () => decodeURIComponent((location.hash.match(/[#&]p=([^&]*)/) || [])[1] || '');
 const buscarProyecto = (id) => DATOS.proyectos.find((p) => p.id === id);
 function recordarProyecto() {
-  const id = todos ? 'todos' : P.id;
+  const id = todos ? (mias ? 'mias' : 'todos') : P.id;
   guardar('tablero.proyecto', id);
   try { history.replaceState(null, '', `#p=${encodeURIComponent(id)}`); } catch {}
   $('#proyecto').value = id;
 }
-$('#proyecto').innerHTML = `<option value="todos">Todos los proyectos</option>` + DATOS.proyectos.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');
-$('#proyecto').addEventListener('change', (e) => { soltarEditor(); todos = e.target.value === 'todos'; if (!todos) P = buscarProyecto(e.target.value); sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null; recordarProyecto(); pintar(); });
+$('#proyecto').innerHTML = `<option value="todos">Todos los proyectos</option><option value="mias">Mis tareas</option>` + DATOS.proyectos.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');
+$('#proyecto').addEventListener('change', (e) => { soltarEditor(); mias = e.target.value === 'mias'; todos = e.target.value === 'todos' || mias; if (!todos) P = buscarProyecto(e.target.value); sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null; recordarProyecto(); pintar(); });
 window.addEventListener('hashchange', () => {
-  if (idEnHash() === 'todos') { if (!todos) { soltarEditor(); todos = true; recordarProyecto(); pintar(); } return; }
+  if (idEnHash() === 'todos' || idEnHash() === 'mias') { const m = idEnHash() === 'mias'; if (!todos || mias !== m) { soltarEditor(); todos = true; mias = m; recordarProyecto(); pintar(); } return; }
   const p = buscarProyecto(idEnHash());
-  if (p && (p !== P || todos)) { soltarEditor(); todos = false; P = p; sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null; recordarProyecto(); pintar(); }
+  if (p && (p !== P || todos)) { soltarEditor(); todos = false; mias = false; P = p; sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null; recordarProyecto(); pintar(); }
 });
 const idInicial = idEnHash() || leer('tablero.proyecto') || 'todos';
-todos = idInicial === 'todos' || !buscarProyecto(idInicial);
+mias = idInicial === 'mias';
+todos = idInicial === 'todos' || mias || !buscarProyecto(idInicial);
 P = buscarProyecto(idInicial) || DATOS.proyectos[0];
 if (P) recordarProyecto();
 if (P) pintar(); else $('#contenido').innerHTML = '<div class="vacio">No hay proyectos en proyectos.json.</div>';

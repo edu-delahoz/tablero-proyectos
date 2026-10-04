@@ -212,11 +212,11 @@ Prompt de arranque S29 (Sonnet, sin plugins/MCP):
 
 ### S30 — Vista «Mis tareas» · **Sonnet**
 Archivos: `plantilla.html`, `generar.mjs` (solo si a los ítems les falta `url`/estado), `servidor.test.mjs`.
-- [ ] `plantilla.html`: «Mis tareas» en el selector de proyectos junto a «Todos los proyectos» (`#p=mias`, mismo patrón que el flag `todos` y `vistaTodos`)
-- [ ] Bloque «Asignadas a mí»: ítems `mio: true` de todas las integraciones que no estén en la columna de hecho (`col.hecho` o la última), agrupados por proyecto → estado, con tipo, enlace al ítem y fecha; aviso si alguna integración no trae `mio`
-- [ ] Bloque «Siguientes pasos en mis backlogs»: por proyecto, casillas abiertas de la siguiente sesión (`enCurso(p).falta`) con enlace a Backlogs y prompt copiable
-- [ ] Contador «N asignadas a mí» en la cabecera de «Todos los proyectos»
-- [ ] Verificar por CDP con `datos/` de prueba (ítems `mio` en varias integraciones); test de plantilla; `node --test 2>&1 | tail -40`, commit
+- [x] (test de plantilla escrito primero y visto fallar: 1 fallo) `plantilla.html`: «Mis tareas» en el selector de proyectos junto a «Todos los proyectos» (`#p=mias`, mismo patrón que el flag `todos` y `vistaTodos`)
+- [x] Bloque «Asignadas a mí»: ítems `mio: true` de todas las integraciones que no estén en la columna de hecho (`col.hecho` o la última), agrupados por proyecto → estado, con tipo, enlace al ítem y fecha; aviso si alguna integración no trae `mio`
+- [x] Bloque «Siguientes pasos en mis backlogs»: por proyecto, casillas abiertas de la siguiente sesión (`enCurso(p).falta`) con enlace a Backlogs y prompt copiable
+- [x] Contador «N asignadas a mí» en la cabecera de «Todos los proyectos»
+- [x] Verificar por CDP con `datos/` de prueba (ítems `mio` en varias integraciones); test de plantilla; `node --test 2>&1 | tail -40`, commit
 
 Prompt de arranque S30 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S30) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
