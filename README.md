@@ -71,6 +71,24 @@ En `~/.claude/settings.json` (ajusta la ruta):
 `Stop` regenera el tablero al terminar cada respuesta; `SessionStart` entrega a
 Claude el estado del backlog y las notas abiertas, y regenera en segundo plano.
 
+### Backlog obligatoriamente al día (`coherencia.mjs` + `verificar_backlog.mjs`)
+
+Casillas: `[x]` hecho · `[ ]` pendiente · `[~]` a medias (cuenta como pendiente) · `[-]` movido o
+descartado, con nota («→ S5b»). Se detectan dos desajustes: **sesión con PR mergeado y casillas
+abiertas**, y **sub-backlog `BACKLOG_Hn` ↔ hito «## Hn» del padre** (hijo completo con padre abierto,
+o padre cerrado con hijo abierto).
+
+- `SessionStart` (`--hook-inicio`) los muestra como «⚠️ BACKLOG DESACTUALIZADO» para que la sesión
+  los corrija antes de empezar (también cubre los merges hechos desde la web de GitHub).
+- `PreToolUse` sobre Bash bloquea `gh pr create` (casillas de trabajo abiertas o «Resultado» vacío en las
+  secciones de esa rama; tolera las de PR/commit/CI) y `gh pr merge` (cualquier casilla abierta):
+
+```json
+"PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "node \"$HOME/ruta/tablero/verificar_backlog.mjs\" --hook", "timeout": 15 }] }]
+```
+
+- A mano: `node verificar_backlog.mjs <carpeta del repo>` (exit 1 si hay desajustes).
+
 ## Servidor local
 
 ```sh
