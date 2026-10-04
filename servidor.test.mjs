@@ -174,3 +174,22 @@ test('bitácora: POST reescribe solo la fila pedida; 409 si cambió; 400 si no v
   assert.equal(c.estado, 409)
   assert.equal(readFileSync(BITACORA, 'utf8'), despues)
 })
+
+test('/api/favoritos: guarda por título en datos/favoritos.json, alterna, valida y exige Origin', async () => {
+  const archivo = join(dir, 'datos', 'favoritos.json')
+  assert.deepEqual((await get('/api/datos')).json.favoritos, [])
+  for (const opts of [{ host: `evil.com:${puerto}` }, { origin: 'http://evil.com' }, { tipo: 'text/plain' }]) assert.equal((await post('/api/favoritos', { titulo: 'S1 — Base', favorito: true }, opts)).estado, 403)
+  assert.equal(existsSync(archivo), false)
+  for (const malo of [{}, { titulo: '', favorito: true }, { titulo: 'S1', favorito: 'sí' }, { titulo: 'x'.repeat(201), favorito: true }]) assert.equal((await post('/api/favoritos', malo)).estado, 400)
+
+  const a = await post('/api/favoritos', { titulo: ' S1 —  Base ', favorito: true })
+  assert.equal(a.estado, 200)
+  assert.deepEqual(a.json.datos.favoritos, ['S1 — Base'])
+  assert.deepEqual(JSON.parse(readFileSync(archivo, 'utf8')), { favoritos: ['S1 — Base'] })
+  await post('/api/favoritos', { titulo: 'S1 — Base', favorito: true }) // idempotente
+  const b = await post('/api/favoritos', { titulo: 'S2 — Otra', favorito: true })
+  assert.deepEqual(b.json.datos.favoritos, ['S1 — Base', 'S2 — Otra'])
+  const c = await post('/api/favoritos', { titulo: 'S1 — Base', favorito: false })
+  assert.deepEqual(c.json.datos.favoritos, ['S2 — Otra'])
+  await post('/api/favoritos', { titulo: 'S2 — Otra', favorito: false })
+})

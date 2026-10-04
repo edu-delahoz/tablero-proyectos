@@ -296,6 +296,11 @@ a.chip-ext:hover { border-color: var(--azul); }
 .boton[disabled] { opacity: .55; cursor: progress; }
 .bit-totales { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0 0 10px; }
 .bit-totales b { font-family: var(--mono); font-size: 1.15em; }
+.buscador { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0 0 10px; font-size: .9em; }
+.buscador input[type=search] { flex: 1 1 220px; max-width: 360px; font: inherit; padding: 4px 8px; color: var(--texto); background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio); }
+.paso[hidden], .lista button[hidden] { display: none; }
+.estrella { background: none; border: 0; padding: 0 2px; cursor: pointer; color: var(--suave); font: inherit; line-height: 1; }
+.estrella.on { color: var(--aviso); } .estrella:hover:not(:disabled) { color: var(--aviso); } .estrella:disabled { cursor: default; opacity: .6; }
 .bit-filtros { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0 0 10px; font-size: .9em; }
 .bit-tabla { overflow-x: auto; }
 .bit-tabla table { border-collapse: collapse; width: 100%; font-size: .85em; }
@@ -420,6 +425,7 @@ let enVivo = false; // true mientras el sondeo de /api/version responde
 const borradores = new Map(); // ruta → texto sin guardar
 let bitFiltro = { todas: false, pendientes: false }, bitBorrador = new Map(); // bitácora: filtros y campos sin guardar por sid
 let editando = null; // ruta del .md en edición
+const busqueda = { backlogs: '', planes: '' }; let soloFav = false; // búsqueda por pestaña y filtro de favoritas
 
 // Enlaza «PR #N», «#N» y hashes de commits conocidos con GitHub antes de renderizar el markdown.
 function enlazar(md) {
@@ -502,8 +508,11 @@ function chips(meta = {}) {
     + (meta.duracion ? `<span class="chip ch-dur">${esc(meta.duracion)}</span>` : '');
 }
 const glifo = (ultimo) => `<span class="glifo" aria-hidden="true">${ultimo ? '└─' : '├─'}</span>`;
-function cabeceraPaso({ titulo, meta, esAqui, ultimo, hechas, total, estado }) {
-  return `<summary>${glifo(ultimo)}<span class="icono" aria-hidden="true">${ICONO[estado]}</span>
+const favoritos = () => new Set(DATOS.favoritos || []);
+const esFavorita = (s) => !!s.clave && /^S/.test(s.clave) && favoritos().has(plano(s.titulo));
+const estrella = (s) => !s.clave || !/^S/.test(s.clave) ? '' : `<button type="button" class="estrella${esFavorita(s) ? ' on' : ''}" data-fav="${esc(plano(s.titulo))}" aria-pressed="${esFavorita(s)}" aria-label="Favorita: ${esc(plano(s.titulo))}" title="${editable() ? 'Marcar o quitar de favoritas' : 'Abre el tablero con el servidor para marcar favoritas'}"${editable() ? '' : ' disabled'}>${esFavorita(s) ? '★' : '☆'}</button>`;
+function cabeceraPaso({ titulo, meta, esAqui, ultimo, hechas, total, estado, extra = '' }) {
+  return `<summary>${glifo(ultimo)}<span class="icono" aria-hidden="true">${ICONO[estado]}</span>${extra}
     <span class="cab-paso"><span class="sr">${ETIQUETA[estado]}: </span><span class="titulo">${inlineTitulo(titulo)}</span>${chips(meta)}${esAqui ? '<span class="etq-aqui">◀ estás aquí</span>' : ''}</span>
     ${total ? `<span class="avance">${barra(hechas, total, 10)}<span class="n">${hechas}/${total}</span></span>` : ''}</summary>`;
 }
@@ -516,9 +525,9 @@ function paso(s, ctx) {
   const contieneAqui = aplanar(s.hijas).some((x) => x.id === doc.aqui);
   const abierto = abiertos.has(k) ? abiertos.get(k) : (esAqui || contieneAqui || s.estado === 'pendiente');
   const hijas = s.hijas.filter((x) => x.estado !== 'doc');
-  return `<li class="paso est-${s.estado}${esAqui ? ' actual' : ''}" id="${idPaso(clave, s.id)}">
+  return `<li class="paso est-${s.estado}${esAqui ? ' actual' : ''}${esFavorita(s) ? ' fav' : ''}" id="${idPaso(clave, s.id)}">
     <details data-k="${esc(k)}"${abierto ? ' open' : ''}>
-      ${cabeceraPaso({ titulo: s.titulo, meta: s.meta, esAqui, ultimo, hechas: s.hechas, total: s.total, estado: s.estado })}
+      ${cabeceraPaso({ titulo: s.titulo, meta: s.meta, esAqui, ultimo, hechas: s.hechas, total: s.total, estado: s.estado, extra: estrella(s) })}
       <div class="cuerpo">${cuerpo(s)}${hijas.length ? `<ol class="linea">${hijas.map((x, i) => paso(x, { ...ctx, ultimo: i === hijas.length - 1 })).join('')}</ol>` : ''}</div>
     </details></li>`;
 }
@@ -686,6 +695,35 @@ function barraVista(doc, p) {
   return `<div class="barra-vista"><div class="conmutador" role="group" aria-label="Vista">
       <button data-modo="mapa" aria-pressed="${modo[p] !== 'documento'}">Mapa</button><button data-modo="documento" aria-pressed="${modo[p] === 'documento'}">Documento</button></div>
     <div>${acciones(doc.ruta)}</div></div>`;
+}
+// Búsqueda (se aplica sobre el DOM ya pintado, sin repintar: el foco del campo no se pierde).
+const barraBusqueda = (p, conFav) => `<div class="buscador"><label class="sr" for="buscar">Buscar</label>
+  <input id="buscar" type="search" data-buscar="${p}" placeholder="${p === 'planes' ? 'Buscar en los planes…' : 'Buscar sesiones y tareas…'}" value="${esc(busqueda[p])}" autocomplete="off">
+  ${conFav ? `<label><input type="checkbox" data-solo-fav${soloFav ? ' checked' : ''}> ★ Solo favoritas (${favoritos().size})</label>` : ''}<span class="suave" id="cuenta-busqueda" aria-live="polite"></span></div>`;
+let filtrando = false;
+function aplicarBusqueda() {
+  const q = (busqueda[pestana] || '').trim().toLowerCase(), fav = soloFav && pestana === 'backlogs';
+  const cont = $('#contenido');
+  if (!cont || !['backlogs', 'planes'].includes(pestana)) return;
+  let n = 0;
+  filtrando = true;
+  const pasos = [...cont.querySelectorAll('li.paso')];
+  for (const li of pasos) {
+    const ok = (!q || li.textContent.toLowerCase().includes(q)) && (!fav || li.classList.contains('fav') || !!li.querySelector('li.paso.fav'));
+    li.hidden = !ok;
+    if (ok && q) { const propio = [...li.querySelectorAll(':scope > details > summary, :scope > details > .cuerpo > :not(ol)')].some((x) => x.textContent.toLowerCase().includes(q)); if (propio) n++; }
+  }
+  if (q) for (const li of pasos) if (!li.hidden) { const d = li.querySelector(':scope > details'); if (d && [...d.querySelectorAll(':scope > .cuerpo > :not(ol)')].some((x) => x.textContent.toLowerCase().includes(q))) d.open = true; }
+  if (!q && fav) n = pasos.filter((li) => !li.hidden && li.classList.contains('fav')).length;
+  const actual = P.planes.find((p) => p.nombre === sel.planes) || P.planes[0];
+  if (pestana === 'planes') for (const b of cont.querySelectorAll('.lista button[data-busca]')) {
+    const coincide = !q || b.dataset.busca.includes(q);
+    b.hidden = !coincide && b.dataset.sel !== actual?.nombre;
+    if (coincide && q) n++;
+  }
+  setTimeout(() => { filtrando = false; });
+  const c = $('#cuenta-busqueda');
+  if (c) c.textContent = q || fav ? `${n} coincidencia${n === 1 ? '' : 's'}` : '';
 }
 const promptLinea = () => `<div class="prompt" aria-hidden="true"><b>❯</b> tablero --proyecto ${esc(P.id)} --vista ${esc(pestana)}${sel[pestana] ? ' ' + esc(sel[pestana]) : ''}</div>`;
 
@@ -913,7 +951,9 @@ function vistaBitacora() {
   const b = P.bitacora;
   const propias = b.registro.filter((f) => f.proyecto === P.id);
   const base = bitFiltro.todas ? b.registro : propias;
-  const filas = bitFiltro.pendientes ? base.filter((f) => f.pendiente) : base;
+  // Más recientes arriba; las fechas incompletas («2026-10-0?») al final.
+  const clave = (f) => (/^\d{4}-\d\d-\d\d/.test(f.fecha || '') ? f.fecha : '');
+  const filas = (bitFiltro.pendientes ? base.filter((f) => f.pendiente) : base).slice().sort((a, b) => clave(b).localeCompare(clave(a)));
   const costo = base.reduce((a, f) => a + (f.costo || 0), 0), min = base.reduce((a, f) => a + (f.minutos || 0), 0);
   const conCtx = base.filter((f) => f.contexto?.semaforo), rojas = conCtx.filter((f) => f.contexto.semaforo === '🔴').length;
   const horas = min >= 60 ? `${nf.format(min / 60)} h` : `${nf.format(min)} min`;
@@ -940,6 +980,12 @@ function vistaBitacora() {
     ${b.lecciones?.length ? `<section class="tarjeta" style="margin-top:18px"><h2><span>Lecciones aprendidas</span><small>${b.lecciones.length}</small></h2>${b.lecciones.map((l) => `<div class="fila"><span>${inline(l.texto)}</span><span class="suave">${esc(l.fecha)}</span></div>`).join('')}</section>` : ''}`;
 }
 const PENDIENTE_TXT = '_pendiente_';
+async function alternarFav(titulo, boton) {
+  const poner = !favoritos().has(titulo);
+  boton.disabled = true;
+  try { recargarDatos((await api('/api/favoritos', { titulo, favorito: poner })).datos); pintar(); document.querySelector(`[data-fav="${CSS.escape(titulo)}"]`)?.focus({ preventScroll: true }); }
+  catch (e) { boton.disabled = false; avisar(`No se pudo guardar el favorito: ${e.message}`, true); }
+}
 async function guardarBitacora(sid, boton) {
   const tr = boton.closest('tr'), campo = (k) => tr.querySelector(`[data-bit=${k}]`).value.trim();
   const cuerpo = { ruta: P.bitacora.ruta, sid, calidad: campo('calidad'), seguridad: campo('seguridad'), notas: campo('notas'), hash: P.bitacora.hash };
@@ -964,6 +1010,7 @@ const VISTAS = {
     const g = P.git;
     const abiertosPR = (g?.prs || []).filter((p) => p.state === 'OPEN');
     const ult = P.planes[0];
+    const favs = P.backlogs.flatMap((b) => aplanar(b.estructura || []).filter(esFavorita).map((s) => ({ b, s })));
     const sesActual = g?.rama ? sesionesDeRama(g.rama) : [];
     return `<div class="rejilla">
       ${bl.map((b) => `<section class="tarjeta">
@@ -988,6 +1035,7 @@ const VISTAS = {
         ${P.notas?.abiertas.length ? P.notas.abiertas.map((a) => `<div class="fila"><span>${CASILLA()[0]} ${inline(a)}</span></div>`).join('') : '<div class="suave">Sin notas abiertas.</div>'}
         <p>${P.notas ? `<button class="boton" data-p="notas">${editable() ? 'Añadir nota' : 'Ver notas'}</button>` : ''}</p>
       </section>
+      ${favs.length ? `<section class="tarjeta"><h2><span>★ Sesiones favoritas</span><small>${favs.length}</small></h2><div class="sesiones">${favs.map(botonSesion).join('')}</div></section>` : ''}
       ${ult ? `<section class="tarjeta"><h2><span>Último plan</span><small>${hace(ult.modificado)}</small></h2>
         <div>${esc(ult.titulo)}</div><p><button class="boton" data-ir="planes" data-sel="${esc(ult.nombre)}">Abrir plan</button></p></section>` : ''}
     </div>`;
@@ -996,14 +1044,15 @@ const VISTAS = {
     if (!P.backlogs.length) return '<div class="vacio">No hay backlogs en las carpetas configuradas.</div>';
     const actual = P.backlogs.find((b) => b.archivo === sel.backlogs) || P.backlogs[0];
     return `<div class="archivos" aria-label="Archivos">${P.backlogs.map((b) => `<button data-sel="${esc(b.archivo)}" aria-current="${b === actual}">${esc(b.archivo)}${b.total ? `<span class="n">${b.hechas}/${b.total}</span>` : ''}</button>`).join('')}</div>
+      ${modo.backlogs !== 'documento' && editando !== actual.ruta ? barraBusqueda('backlogs', true) : ''}
       ${editando === actual.ruta ? vistaEditor(actual.ruta) : `${barraVista(actual, 'backlogs')}
       ${modo.backlogs === 'documento' ? `<div class="tarjeta">${md(actual.contenido)}</div>` : vistaMapa(actual)}`}`;
   },
   planes() {
     if (!P.planes.length) return '<div class="vacio">Aún no hay planes de Claude asociados a este proyecto.</div>';
     const actual = P.planes.find((p) => p.nombre === sel.planes) || P.planes[0];
-    return `<div class="lateral">
-      <div class="tarjeta lista">${P.planes.map((p) => `<button data-sel="${esc(p.nombre)}" aria-current="${p === actual}">
+    return `${barraBusqueda('planes', false)}<div class="lateral">
+      <div class="tarjeta lista">${P.planes.map((p) => `<button data-sel="${esc(p.nombre)}" data-busca="${esc((p.titulo + ' ' + p.nombre + ' ' + p.contenido).toLowerCase())}" aria-current="${p === actual}">
         <strong>${esc(p.titulo)}</strong><br><span class="suave">${fecha(p.modificado)} · ${esc(p.carpetas.join(', '))}</span></button>`).join('')}</div>
       <div style="min-width:0">${editando === actual.ruta ? vistaEditor(actual.ruta) : `<p class="suave hash" style="margin-top:0;overflow-wrap:anywhere">${esc(actual.ruta)}</p>${barraVista(actual, 'planes')}
         ${modo.planes === 'documento' ? `<div class="tarjeta">${md(actual.contenido)}</div>` : vistaMapa(actual)}`}</div></div>`;
@@ -1082,6 +1131,7 @@ function pintar() {
   pintarNavegacion();
   if (pestana === 'bitacora' && !P.bitacora) pestana = 'resumen';
   $('#contenido').innerHTML = promptLinea() + (VISTAS[pestana] || VISTAS.resumen)();
+  aplicarBusqueda();
 }
 
 const desplazar = (el) => el.scrollIntoView({ block: 'start', behavior: movimientoReducido() ? 'auto' : 'smooth' });
@@ -1163,6 +1213,7 @@ document.addEventListener('click', (e) => {
     });
     return;
   }
+  if (b.dataset.fav) { alternarFav(b.dataset.fav, b); return; }
   if (b.dataset.guardarBit) { guardarBitacora(b.dataset.guardarBit, b); return; }
   if (b.dataset.rama) { e.preventDefault(); irRama(b.dataset.rama); return; }
   if (b.dataset.sincronizar) { pedirPrevia(b.dataset.sincronizar, b); return; }
@@ -1213,17 +1264,19 @@ window.addEventListener('beforeunload', (e) => {
 });
 // En un conflicto, elegir un lado marca su casilla.
 document.addEventListener('input', (e) => {
+  if (e.target.dataset?.buscar) { busqueda[e.target.dataset.buscar] = e.target.value; aplicarBusqueda(); return; }
   const c = e.target, k = c.dataset?.bit, sid = c.closest?.('tr')?.dataset.sid;
   if (k && sid) bitBorrador.set(sid, { ...bitBorrador.get(sid), [k]: c.value });
 });
 document.addEventListener('change', (e) => {
   const r = e.target;
+  if ('soloFav' in (r.dataset || {})) { soloFav = r.checked; pintar(); $('[data-solo-fav]')?.focus(); return; }
   if (r.dataset?.bitFiltro) { bitFiltro[r.dataset.bitFiltro] = r.checked; pintar(); $(`[data-bit-filtro=${r.dataset.bitFiltro}]`)?.focus(); return; }
   if (r.dataset?.bit && r.closest('tr')?.dataset.sid) bitBorrador.set(r.closest('tr').dataset.sid, { ...bitBorrador.get(r.closest('tr').dataset.sid), [r.dataset.bit]: r.value });
   if (r.type === 'radio' && r.name.startsWith('lado:')) { const c = r.closest('.accion')?.querySelector('input[name=accion]'); if (c) c.checked = true; }
 });
 // Recuerda qué secciones abrió/cerró el usuario.
-document.addEventListener('toggle', (e) => { const k = e.target.dataset?.k; if (k) abiertos.set(k, e.target.open); }, true);
+document.addEventListener('toggle', (e) => { const k = e.target.dataset?.k; if (k && !filtrando) abiertos.set(k, e.target.open); }, true);
 
 // ---------- Controles de cabecera ----------
 const TEMAS = [['auto', 'Auto'], ['light', 'Claro'], ['dark', 'Oscuro']];
