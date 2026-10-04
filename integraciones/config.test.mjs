@@ -105,3 +105,14 @@ test('escribirAtomico: reemplaza sin temporales sueltos; con modo deja 0600; sin
   assert.equal(statSync(p).mode & 0o777, 0o640)
   assert.deepEqual(readdirSync(dir).filter((f) => f.endsWith('.tmp')), [])
 })
+
+test('azure-devops: tipoItem acepta texto, lista (≤10) o «*» solo en modo lectura', () => {
+  const base = { id: 'ado', tipo: 'azure-devops', backlog: 'BACKLOG.md', organizacion: 'Org', proyecto: 'P' }
+  const v = (extra) => validarIntegracion({ ...base, ...extra }, { backlogs: ['BACKLOG.md'] })
+  assert.equal(v({ tipoItem: ' Bug ' }).limpia.tipoItem, 'Bug')
+  assert.deepEqual(v({ tipoItem: ['Task', ' Bug'] }).limpia.tipoItem, ['Task', 'Bug'])
+  assert.equal(v({ tipoItem: Array.from({ length: 11 }, (_, i) => `T${i}`) }).errores.length, 1)
+  assert.equal(v({ tipoItem: [] }).errores.length, 1)
+  assert.match(v({ tipoItem: '*' }).errores[0], /solo sirve en modo solo lectura/)
+  assert.deepEqual(v({ tipoItem: '*', modo: 'lectura' }).errores, [])
+})

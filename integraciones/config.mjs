@@ -51,6 +51,11 @@ export function validarIntegracion(cfg, { backlogs = [], otras = [], adaptadores
         else errores.push(`${nombre}: la columna «${k}» debe ser un nombre (o lista de nombres).`)
       }
       if (Object.keys(col).length) limpia.columnas = col
+    } else if (campo === 'tipoItem') {
+      if (v === '*') { if (cfg.modo !== 'lectura') errores.push(`${nombre}: «tipoItem» «*» (todos los tipos) solo sirve en modo solo lectura: al sincronizar no se sabría qué tipo crear.`); else limpia.tipoItem = '*' }
+      else if (Array.isArray(v) && v.length && v.length <= 10 && v.every(texto)) limpia.tipoItem = v.map((s) => s.trim())
+      else if (texto(v)) limpia.tipoItem = v.trim()
+      else errores.push(`${nombre}: «tipoItem» debe ser un tipo, una lista de tipos (hasta 10) o «*».`)
     } else if (campo === 'organizacion' && texto(v)) {
       try {
         const o = normalizarOrganizacion(v)
