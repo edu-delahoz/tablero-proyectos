@@ -982,6 +982,7 @@ function tarjetaIntegracion(integ) {
     ${(integ.estado === 'conectado' || integ.desdeCache) && !lectura ? `<p class="suave" style="margin:4px 0 8px">${integ.pendientes ? `⇄ ${integ.pendientes} cambio${integ.pendientes === 1 ? '' : 's'} por sincronizar` : '✓ sin cambios por sincronizar'}${Object.entries(pt).length ? ` · ${Object.entries(pt).map(([k, v]) => `${v} ${k}`).join(' · ')}` : ''}</p>` : ''}
     <p style="margin:0">${integ.url ? `<a class="boton" href="${esc(integ.url)}" target="_blank" rel="noopener">Abrir en ${esc(integ.nombre)} ↗</a>` : ''}
       ${editable() ? `<button class="boton" type="button" data-integ-editar="${esc(integ.id)}">Editar</button><button class="boton" type="button" data-integ-quitar="${esc(integ.id)}">Quitar</button>` : '<button class="boton" type="button" disabled title="Requiere el servidor local">Editar</button><button class="boton" type="button" disabled title="Requiere el servidor local">Quitar</button>'}
+      ${lectura && editable() ? (docsDe().length ? `<button class="boton" type="button" data-crear="importar" data-integ="${esc(integ.id)}"${integ.estado === 'conectado' ? '' : ' disabled'}>Crear backlog local desde Azure</button>` : '<span class="suave">Para crear un backlog local, añade una carpeta de documentos con «Editar proyecto».</span>') : ''}
       ${integ.estado === 'conectado' && !lectura ? (editable() ? `<button class="boton primario" type="button" data-sincronizar="${esc(integ.id)}">Sincronizar</button>` : '<span class="suave">Sincronizar requiere el servidor local: abre el tablero con Tablero.app o <code>node generar.mjs --abrir</code>. Como archivo suelto es solo lectura.</span>') : ''}</p>
     ${quitandoInteg === integ.id ? `<div class="integ-paso mal" role="group" aria-label="Confirmar quitar ${esc(integ.id)}">Se quita solo el bloque «${esc(integ.id)}» de <code>proyectos.json</code>. No se borra nada afuera (en ${esc(integ.nombre)} todo se queda) ni en el backlog: sus marcas <code>&lt;!-- ${esc(integ.id)}:… --&gt;</code> quedan sin uso.<br>
       <button class="boton primario" type="button" data-integ-confirmar>Sí, quitar</button><button class="boton" type="button" data-integ-no-quitar>Cancelar</button></div>` : ''}
@@ -1033,6 +1034,7 @@ const idPropuesto = (tipo) => {
   let id = base; for (let n = 2; usados.has(id); n++) id = `${base}-${n}`;
   return id;
 };
+const docsDe = () => [].concat(P?.editable?.docs || []);
 const nuevoForm = (integ) => ({ original: integ?.id || null, cfg: integ ? { ...structuredClone(integ.config || {}), modo: integ.modo || integ.config?.modo || 'sincronizar' } : { tipo: '', backlog: archivosBacklog()[0] || '', auto: false, modo: archivosBacklog().length ? 'sincronizar' : 'lectura' }, op: {}, cargando: '', error: '', prueba: null, cred: {}, cambiarCred: false, idTocado: !!integ });
 function abrirForm(integ) {
   quitandoInteg = null; formInteg = nuevoForm(integ);
@@ -1879,9 +1881,10 @@ document.addEventListener('toggle', (e) => { const k = e.target.dataset?.k; if (
 let crear = null; // { tipo: 'proyecto'|'backlog'|'editar', campos, previa, error, ocupado }
 const CAMPOS_PROY = [['id', 'Id', 'minúsculas, números y guiones'], ['nombre', 'Nombre', ''], ['repo', 'Carpeta del repo (opcional)', 'ruta absoluta o con ~'], ['docs', 'Carpeta de documentos (opcional)', 'donde vivirá el backlog; ruta absoluta o con ~']];
 const CAMPOS_EDITAR = [['nombre', 'Nombre', ''], ['repo', 'Carpeta del repo', 'ruta absoluta o con ~; vacío la quita'], ['docs', 'Carpetas de documentos', 'separadas por comas; donde vivirá el backlog'], ['notas', 'Archivo de notas', 'vacío lo quita'], ['bitacora', 'Archivo de bitácora', 'vacío lo quita']];
-function abrirCrear(tipo) {
+function abrirCrear(tipo, integ) {
   const e = P?.editable || {};
   const campos = tipo === 'proyecto' ? { id: '', nombre: '', repo: '', docs: '' }
+    : tipo === 'importar' ? { integracion: integ, soloMias: false }
     : tipo === 'editar' ? { nombre: e.nombre ?? P.nombre, repo: e.repo || '', docs: [].concat(e.docs || []).join(', '), notas: e.notas || '', bitacora: e.bitacora || '' } : {};
   crear = { tipo, campos, previa: null, error: '', ocupado: false };
   pintarCrear(); $('#panel-crear [data-crear-campo], #panel-crear button')?.focus();
@@ -1890,6 +1893,7 @@ function cerrarCrear() { const t = crear?.tipo; crear = null; pintarCrear(); doc
 function cuerpoCrear(previa) {
   const c = crear.campos;
   if (crear.tipo === 'backlog') return { proyecto: P.id, previa };
+  if (crear.tipo === 'importar') return { proyecto: P.id, integracion: c.integracion, soloMias: !!c.soloMias, previa };
   const lista = (t) => String(t || '').split(',').map((x) => x.trim()).filter(Boolean);
   if (crear.tipo === 'editar') return { id: P.id, cambios: { nombre: c.nombre.trim(), repo: c.repo.trim(), docs: lista(c.docs), notas: c.notas.trim(), bitacora: c.bitacora.trim() }, mtime: DATOS.configMtime ?? undefined, previa };
   return { id: c.id.trim(), nombre: c.nombre.trim(), repo: c.repo.trim() || undefined, docs: lista(c.docs).length ? lista(c.docs) : undefined, mtime: DATOS.configMtime ?? undefined, previa };
@@ -1897,21 +1901,25 @@ function cuerpoCrear(previa) {
 function pintarCrear() {
   const el = $('#panel-crear'); if (!el) return;
   if (!crear) { el.innerHTML = ''; return; }
-  const pr = crear.previa, ed = crear.tipo === 'editar', proy = crear.tipo === 'proyecto' || ed;
+  const pr = crear.previa, ed = crear.tipo === 'editar', imp = crear.tipo === 'importar', proy = crear.tipo === 'proyecto' || ed;
   const accion = ed ? 'Guardar cambios' : proy ? 'Crear proyecto' : 'Crear backlog';
-  el.innerHTML = `<form id="form-crear" class="tarjeta" aria-label="${ed ? 'Editar proyecto' : proy ? 'Nuevo proyecto' : 'Crear backlog'}">
-    <h2><span>${ed ? `Editar «${esc(P.nombre)}»` : proy ? 'Nuevo proyecto' : `Crear backlog de «${esc(P.nombre)}»`}</span></h2>
+  const integ = imp ? (P.integraciones || []).find((x) => x.id === crear.campos.integracion) : null;
+  const sinMio = imp && !(integ?.items || []).some((x) => x.mio);
+  el.innerHTML = `<form id="form-crear" class="tarjeta" aria-label="${ed ? 'Editar proyecto' : proy ? 'Nuevo proyecto' : imp ? 'Crear backlog desde Azure' : 'Crear backlog'}">
+    <h2><span>${ed ? `Editar «${esc(P.nombre)}»` : proy ? 'Nuevo proyecto' : imp ? `Crear backlog local de «${esc(P.nombre)}»` : `Crear backlog de «${esc(P.nombre)}»`}</span></h2>
     ${proy ? (ed ? CAMPOS_EDITAR : CAMPOS_PROY).map(([k, t, ayuda]) => `<label class="campo-fi" for="cr-${k}"><span>${t}</span><input id="cr-${k}" data-crear-campo="${k}" value="${esc(crear.campos[k])}" autocomplete="off" spellcheck="false"${k === 'id' || k === 'nombre' ? ' required' : ''}>${ayuda ? `<small class="suave">${ayuda}</small>` : ''}</label>`).join('')
+      : imp ? `<p class="suave">Se crea un <code>BACKLOG_${esc(P.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_'))}.md</code> en la primera carpeta de documentos, con una casilla por ítem de «${esc(integ?.nombre || crear.campos.integracion)}» (agrupadas por estado y tipo, con su vínculo). Nunca sobrescribe un archivo que ya exista ni cambia nada en Azure.</p>
+        <label><input type="checkbox" data-crear-check="soloMias"${crear.campos.soloMias ? ' checked' : ''}${sinMio ? ' disabled' : ''}> Solo las asignadas a mí${sinMio ? ' <span class="suave">(esta integración no dice cuáles son tuyas)</span>' : ''}</label>`
       : '<p class="suave">Se crea <code>BACKLOG.md</code> con una plantilla mínima en la primera carpeta de documentos del proyecto. Nunca sobrescribe un archivo que ya exista.</p>'}
     ${crear.error ? `<div class="integ-paso mal" role="alert">${esc(crear.error)}</div>` : ''}
     ${pr ? (proy ? `<div class="integ-paso" role="status">${ed ? 'Quedará en' : 'Se añadirá a'} <code>${esc(pr.archivo)}</code>:<pre>${esc(JSON.stringify(pr.proyecto, null, 2))}</pre></div>`
-      : `<div class="integ-paso" role="status">Se creará <code>${esc(pr.ruta)}</code>:<pre>${esc(pr.contenido)}</pre></div>`) : ''}
+      : `<div class="integ-paso" role="status">Se creará <code>${esc(pr.ruta)}</code>${imp ? ` con ${pr.total} ítems` : ''}:${(pr.avisos || []).map((a) => `<br><span class="suave">${esc(a)}</span>`).join('')}<pre>${esc(pr.contenido)}</pre></div>`) : ''}
     <div class="pie">${pr ? `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>${accion}</button>` : `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>Vista previa</button>`}<button class="boton" type="button" data-crear-cerrar>Cancelar</button></div>
   </form>`;
 }
 async function enviarCrear() {
   const c = crear; if (!c || c.ocupado) return;
-  const ruta = c.tipo === 'proyecto' ? '/api/proyectos/crear' : c.tipo === 'editar' ? '/api/proyectos/editar' : '/api/backlog/crear', previa = !c.previa;
+  const ruta = c.tipo === 'proyecto' ? '/api/proyectos/crear' : c.tipo === 'editar' ? '/api/proyectos/editar' : c.tipo === 'importar' ? '/api/integraciones/importar' : '/api/backlog/crear', previa = !c.previa;
   c.ocupado = true; c.error = ''; pintarCrear();
   try {
     const r = await api(ruta, cuerpoCrear(previa));
@@ -1919,6 +1927,14 @@ async function enviarCrear() {
     crear = null; recargarDatos(r.datos); refrescarSelectorProyectos();
     if (c.tipo === 'proyecto') { abrirProyecto(r.proyecto.id, 'backlogs'); avisar(`Proyecto «${r.proyecto.nombre}» creado.`); }
     else if (c.tipo === 'editar') { pintar(); avisar(`Proyecto «${r.proyecto.nombre}» guardado.`); }
+    else if (c.tipo === 'importar') {
+      // La integración pasa a sincronizar con ese backlog: se abre el formulario ya preparado; queda por pulsar Guardar.
+      sel.backlogs = r.archivo; pestana = 'integraciones'; guardar('tablero.pestana', pestana);
+      const integ = (P.integraciones || []).find((x) => x.id === c.campos.integracion);
+      pintar();
+      if (integ) { abrirForm(integ); const cfg = formInteg.cfg; cfg.modo = 'sincronizar'; cfg.auto = false; cfg.backlog = r.archivo; if (r.tipos.length) cfg.tipoItem = r.tipos.length === 1 ? r.tipos[0] : r.tipos.slice(0, 10); else delete cfg.tipoItem; pintarF(); }
+      avisar(`${r.archivo} creado con ${r.total} ítems. Revisa la integración y pulsa Guardar para sincronizar con él.`);
+    }
     else {
       sel.backlogs = r.archivo;
       if (formInteg) { formInteg.cfg.backlog = r.archivo; formInteg.prueba = null; pintarF(); } // sigue el formulario de integración, con el archivo ya elegido
@@ -1939,10 +1955,13 @@ $('#nuevo-proyecto').hidden = !editable();
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-crear], [data-crear-cerrar]');
   if (!b) return;
-  if ('crearCerrar' in b.dataset) cerrarCrear(); else abrirCrear(b.dataset.crear);
+  if ('crearCerrar' in b.dataset) cerrarCrear(); else abrirCrear(b.dataset.crear, b.dataset.integ);
 });
 document.addEventListener('input', (e) => {
   if (crear && e.target.dataset?.crearCampo) { crear.campos[e.target.dataset.crearCampo] = e.target.value; if (crear.previa) { crear.previa = null; pintarCrear(); const el = document.getElementById(e.target.id); el?.focus(); el?.setSelectionRange(el.value.length, el.value.length); } }
+});
+document.addEventListener('change', (e) => {
+  if (crear && e.target.dataset?.crearCheck) { crear.campos[e.target.dataset.crearCheck] = e.target.checked; crear.previa = null; pintarCrear(); document.querySelector('[data-crear-check]')?.focus(); }
 });
 document.addEventListener('submit', (e) => { if (e.target.id === 'form-crear') { e.preventDefault(); enviarCrear(); } });
 document.addEventListener('keydown', (e) => { if (crear && e.key === 'Escape' && e.target.closest?.('#form-crear')) cerrarCrear(); });

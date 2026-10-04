@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `integraciones-vista` · S25 hecha, tests en verde (138 pasan, 2 omitidos): `POST /api/integraciones/importar` `{proyecto, integracion, soloMias?, archivo?, carpeta?, previa?}` (`importarBacklog` en `generar.mjs`; solo integraciones de solo lectura; `BACKLOG_<ID>.md` en la primera `docs`, `## estado` › `### tipo`, marcas `<!-- ado:ID -->`, título intacto; 409 si existe, 400 sin `docs`; respuesta con `total`/`tipos`) y botón «Crear backlog local desde Azure» en la tarjeta de la integración (panel `#panel-crear` con `tipo: 'importar'`, casilla «solo las asignadas a mí»); al crear abre el formulario de la integración en `sincronizar` con ese backlog y los tipos importados (queda pulsar Guardar). Tests escritos primero (fallaron 1+1). Verificado con la org real solo en vista previa (204 ítems, 37 míos; no se creó ningún archivo). Servidor reiniciado con el código nuevo. Siguiente: **S24b** (tests/PR, Sonnet). Los cambios sin commit de `coherencia*.mjs` no son de H10.
 - 2026-10-04 · rama `integraciones-vista` · S30 hecha, tests en verde (136 pasan, 2 omitidos): vista «Mis tareas» (`#p=mias`, flag `mias` junto a `todos`; opción en el selector; `vistaMias`, `asignadasAMi`, `totalAsignadas` en `plantilla.html`): ítems `mio` no hechos (`!x.hecha`) por proyecto → integración → estado, aviso si una integración no trae `mio`, «Siguientes pasos» con `enCurso(p).falta` + prompt copiable, y contador «N asignadas a mí» en «Todos». Test de plantilla escrito primero (falló 1). Verificado en Chrome headless con datos de prueba y con los reales (sin ítems `mio` en caché). Sin cambios en `generar.mjs`. Siguiente: **S25** (Sonnet). Los cambios sin commit de `coherencia*.mjs` no son de H10.
 - 2026-10-04 · rama `integraciones-vista` · EAP10 configurado desde la vista (sin cambios de código): `proyectos.json` (ignorado por git) con `repo`, `docs` = [`.tablero`, `documentacion`], `notas` en `.tablero/NOTAS_EAP10.md` y `bitacora` compartida; `.tablero/` ignorada con `.git/info/exclude` del repo (local, no sale) y `.tablero/BACKLOG.md` creado desde el servidor. Siguiente: **S30** (Sonnet), luego S25 (puede apuntar a `.tablero/`). Los cambios sin commit de `coherencia*.mjs` no son de H10.
 - 2026-10-04 · rama `integraciones-vista` · S29 hecha, tests en verde (135 pasan, 2 omitidos): «Editar proyecto» (botón en el Resumen; reutiliza `#panel-crear` con `tipo: 'editar'`, precarga de `P.editable`, vista previa y guardado con `mtime`), tarjeta «⚙ Configurar este proyecto» con acción por paso (comandos copiables para git/GitHub/`claude`) y «Ocultar guía» por proyecto, chip «⚙ N de M pasos» en «Todos». Verificado en Chrome headless con un proyecto vacío. Siguiente: **S30** (Sonnet), luego S25. Los cambios sin commit de `coherencia*.mjs` no son de H10.
@@ -224,10 +225,10 @@ Prompt de arranque S30 (Sonnet, sin plugins/MCP):
 
 ### S25 — Importar el backlog de EAP10 a un `.md` propio · **Sonnet**
 El usuario lo pidió (2026-10-04). Depende de S28: EAP10 necesita `docs` (o ponerlos a mano en `proyectos.json`).
-- [ ] `generar.mjs`: `POST /api/integraciones/importar` → vista previa del `BACKLOG_<ID>.md` (casillas con `<!-- ado:ID -->`, agrupadas por estado/tipo) y creación solo si el archivo no existe y el proyecto tiene `docs`; nunca sobrescribe. Prueba: archivo existente → 409
-- [ ] (añadido en H10) Opción «solo las mías» (`mio: true`) en la vista previa de la importación. Prueba
-- [ ] `plantilla.html`: botón «Crear backlog local desde Azure» con la vista previa; al crear, la integración pasa a `modo: 'sincronizar'` con ese backlog
-- [ ] `node --test 2>&1 | tail -40`, commit
+- [x] `generar.mjs`: `POST /api/integraciones/importar` → vista previa del `BACKLOG_<ID>.md` (casillas con `<!-- ado:ID -->`, agrupadas por estado/tipo) y creación solo si el archivo no existe y el proyecto tiene `docs`; nunca sobrescribe. Prueba: archivo existente → 409
+- [x] (añadido en H10) Opción «solo las mías» (`mio: true`) en la vista previa de la importación. Prueba
+- [x] `plantilla.html`: botón «Crear backlog local desde Azure» con la vista previa; al crear, la integración pasa a `modo: 'sincronizar'` con ese backlog
+- [x] `node --test 2>&1 | tail -40`, commit
 
 Prompt de arranque S25 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S25) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.

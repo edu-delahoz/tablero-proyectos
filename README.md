@@ -158,6 +158,8 @@ primera carpeta `docs` del proyecto, o en `carpeta` si es una de ellas. Nunca so
 el nombre es simple (sin `/` ni `..`), termina en `.md` y debe cumplir `patronBacklogs`. Sin `docs` → 400.
 Con `previa: true` devuelve el contenido sin escribir.
 
+**Importar a un `.md`.** `POST /api/integraciones/importar` `{ proyecto, integracion, soloMias?, archivo?, carpeta?, previa? }` crea `BACKLOG_<ID>.md` (por defecto) en la primera carpeta `docs` con una casilla por ítem de una integración de **solo lectura** (`## estado` › `### tipo`, vínculo `<!-- ado:ID -->`; `soloMias` deja solo los `mio`). Nunca sobrescribe (409) y no escribe nada afuera. La respuesta trae `total` y `tipos`; la vista abre después el formulario de la integración en modo `sincronizar` con ese backlog (hay que pulsar Guardar).
+
 ## Conectores y credenciales
 
 **Lo normal es hacerlo desde la vista.** Con el tablero abierto con el servidor local (Tablero.app o

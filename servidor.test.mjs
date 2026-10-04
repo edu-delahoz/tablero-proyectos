@@ -594,3 +594,51 @@ test('editar proyecto: 404, 400, 409 y previa no escriben; editar deja integraci
   assert.ok(!('notas' in eap()))
   assert.deepEqual(eap().integraciones, integ)
 })
+
+test('importar a .md: previa no escribe; crea BACKLOG_<ID>.md con marcas ado:; «solo mías»; existente → 409; sin docs o sin lectura → 400', async () => {
+  process.env.AZURE_DEVOPS_PAT = 'pat-importar-12345'
+  const docs = join(dir, 'docs-imp')
+  mkdirSync(docs, { recursive: true })
+  const integ = { id: 'ado', tipo: 'azure-devops', modo: 'lectura', organizacion: 'Org', proyecto: 'EAP10', tipoItem: '*' }
+  const conf = JSON.parse(readFileSync(CONF, 'utf8'))
+  conf.push({ id: 'imp', nombre: 'Importa', docs: [docs], integraciones: [integ, { id: 'gh2', tipo: 'github-projects', propietario: 'u', numero: 1, backlog: 'BACKLOG_PRUEBA.md' }] })
+  conf.push({ id: 'sd', nombre: 'Sin docs', integraciones: [integ] })
+  writeFileSync(CONF, JSON.stringify(conf))
+  const destino = join(docs, 'BACKLOG_IMP.md')
+  const base = { proyecto: 'imp', integracion: 'ado' }
+  const pv = await post('/api/integraciones/importar', { ...base, previa: true })
+  assert.equal(pv.estado, 200, pv.json.error)
+  assert.equal(pv.json.archivo, 'BACKLOG_IMP.md')
+  assert.ok(!existsSync(destino), 'la previa no escribe')
+  assert.match(pv.json.contenido, /^- \[ \] Mía <!-- ado:1 -->$/m)
+  assert.match(pv.json.contenido, /^- \[x\] Sin asignar <!-- ado:2 -->$/m)
+  assert.match(pv.json.contenido, /^## Active$/m)
+  assert.match(pv.json.contenido, /^### Bug$/m)
+  assert.deepEqual([pv.json.total, pv.json.tipos.sort()], [2, ['Bug', 'Task']])
+  // Solo mías: nada más que el ítem 1.
+  const mias = await post('/api/integraciones/importar', { ...base, soloMias: true, previa: true })
+  assert.equal(mias.json.total, 1)
+  assert.ok(!mias.json.contenido.includes('ado:2'))
+  // Validaciones: no escriben.
+  assert.equal((await post('/api/integraciones/importar', { proyecto: 'sd', integracion: 'ado' })).estado, 400, 'sin docs')
+  assert.equal((await post('/api/integraciones/importar', { proyecto: 'imp', integracion: 'gh2' })).estado, 400, 'no es de solo lectura')
+  assert.equal((await post('/api/integraciones/importar', { proyecto: 'imp', integracion: 'nada' })).estado, 404)
+  assert.equal((await post('/api/integraciones/importar', { ...base, archivo: '../BACKLOG_X.md' })).estado, 400)
+  assert.equal((await post('/api/integraciones/importar', { ...base }, { origin: 'http://evil.com' })).estado, 403)
+  assert.ok(!existsSync(destino))
+  const r = await post('/api/integraciones/importar', base)
+  assert.equal(r.estado, 200, r.json.error)
+  assert.equal(readFileSync(destino, 'utf8'), pv.json.contenido)
+  assert.ok(r.json.datos.proyectos.find((p) => p.id === 'imp').backlogs.some((b) => b.archivo === 'BACKLOG_IMP.md'))
+  // Nunca sobrescribe.
+  const antes = readFileSync(destino, 'utf8')
+  assert.equal((await post('/api/integraciones/importar', base)).estado, 409)
+  assert.equal((await post('/api/integraciones/importar', { ...base, previa: true })).estado, 409)
+  assert.equal(readFileSync(destino, 'utf8'), antes)
+  assert.equal(escrituras.length, 0, 'no se escribe nada en Azure')
+})
+
+test('vista: «Crear backlog local desde Azure» con vista previa, «solo las mías» y paso a modo sincronizar', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['data-crear="importar"', "'/api/integraciones/importar'", 'data-crear-check="soloMias"', 'Crear backlog local desde Azure', 'abrirForm(']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})

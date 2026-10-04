@@ -159,6 +159,25 @@ export function rutaBacklogNuevo(p, archivo = 'BACKLOG.md', carpeta) {
   return ruta
 }
 
+// Backlog local a partir de los ítems de una integración de solo lectura: un «## estado» por columna (en su orden) y un
+// «### tipo» dentro, con la marca «<!-- id:ID -->» para que la sincronía los reconozca. El título no se toca (si no, saldría conflicto).
+export function importarBacklog(nombre, integracion, items, columnas, fecha, soloMias = false) {
+  const lista = items.filter((x) => !soloMias || x.mio === true)
+  const orden = [...new Set([...(columnas || []), ...lista.map((x) => x.columna || 'Sin estado')])]
+  const tipos = [...new Set(lista.map((x) => x.tipo).filter(Boolean))]
+  const out = [`# Backlog — ${nombre}`, '', '## Estado', `- ${fecha} · importado de ${integracion}${soloMias ? ' (solo lo asignado a mí)' : ''}: ${lista.length} ítems.`]
+  for (const col of orden) {
+    const delEstado = lista.filter((x) => (x.columna || 'Sin estado') === col)
+    if (!delEstado.length) continue
+    out.push('', `## ${col}`)
+    for (const tipo of [...new Set(delEstado.map((x) => x.tipo || null))]) {
+      if (tipos.length > 1 || tipo) out.push('', `### ${tipo || 'Sin tipo'}`)
+      for (const x of delEstado.filter((y) => (y.tipo || null) === tipo)) out.push(`- [${x.hecha ? 'x' : ' '}] ${String(x.titulo).replace(/\s*\n\s*/g, ' ')} <!-- ${integracion}:${x.id} -->`)
+    }
+  }
+  return { contenido: out.join('\n') + '\n', total: lista.length, tipos }
+}
+
 // ---------- Backlogs ----------
 function contarCasillas(texto) {
   const hechas = (texto.match(/^\s*[-*] \[x\]/gim) || []).length
@@ -1052,6 +1071,27 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
           throw e
         }
         return enviar(res, 200, { ok: true, archivo: basename(destino), ruta: destino, contenido, datos: (await fresco(true)).datos })
+      }
+      // Importar una integración de solo lectura a un BACKLOG_<ID>.md propio (nunca sobrescribe; `previa` no escribe).
+      if (ruta === '/api/integraciones/importar') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const p = integracionDe(b)
+        const cfg = (p.integraciones || []).find((x) => x.id === b.integracion)
+        if (!cfg) throw new ErrorConfig('Esa integración no está en proyectos.json.', 404)
+        if (!esLectura(cfg)) throw new ErrorConfig('Solo se importa desde una integración de solo lectura (las demás ya tienen su backlog).')
+        const destino = rutaBacklogNuevo(p, b.archivo ?? `BACKLOG_${p.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}.md`, b.carpeta ?? undefined)
+        const ctx = contextoIntegracion(p, cfg, [], adaptadores)
+        let fuera
+        try { fuera = await conTiempo(ctx.adaptador.leer(), 15000) } catch (e) { return enviar(res, 502, { error: String(e?.message || e) }) }
+        const d = new Date(), fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const { contenido, total, tipos } = importarBacklog(p.nombre || p.id, cfg.id, fuera.items, fuera.columnas, fecha, b.soloMias === true)
+        const resumen = { archivo: basename(destino), ruta: destino, contenido, total, tipos, avisos: fuera.avisos || [] }
+        if (b.previa === true) return enviar(res, 200, { ok: true, previa: true, ...resumen })
+        try { writeFileSync(destino, contenido, { flag: 'wx' }) } catch (e) {
+          if (e.code === 'EEXIST') throw new ErrorConfig(`Ya existe ${basename(destino)}: el tablero nunca sobrescribe un backlog.`, 409)
+          throw e
+        }
+        return enviar(res, 200, { ok: true, ...resumen, datos: (await fresco(true)).datos })
       }
       // Probar sin guardar: una lectura con la config propuesta (lo mismo que --probar-conexiones).
       if (ruta === '/api/integraciones/probar') {
