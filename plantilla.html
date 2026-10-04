@@ -1407,6 +1407,37 @@ async function guardarBitacora(sid, boton) {
   }
 }
 
+// ---------- Guía de configuración (pasos de p.configuracion) ----------
+const ocultaGuia = (p) => leer(`tablero.guia.${p.id}`) === 'oculta';
+const pasosPendientes = (p) => (p.configuracion || []).filter((x) => !x.hecho);
+const comando = (c) => `<div class="prompt-copiable"><div class="prompt-cab"><span class="rotulo">Terminal</span><button class="boton" type="button" data-copiar aria-label="Copiar comando">Copiar</button></div><pre tabindex="0" aria-label="Comando">${esc(c)}</pre></div>`;
+function accionPaso(x, p) {
+  const ed = editable();
+  const editar = ed ? '<button class="boton" type="button" data-crear="editar">Editar proyecto</button>' : '<span class="suave">Requiere el servidor local.</span>';
+  const ir = (pest, txt) => `<button class="boton" type="button" data-proy="${esc(p.id)}" data-pest="${pest}">${txt}</button>`;
+  const repo = p.editable?.repo || p.repo || '<carpeta>', q = (t) => /^~\//.test(t) ? `~/"${t.slice(2).replace(/"/g, '\\"')}"` : `"${String(t).replace(/"/g, '\\"')}"`;
+  switch (x.paso) {
+    case 'repo': case 'docs': return editar;
+    case 'git': return comando(`cd ${q(repo)} && git init`);
+    case 'github': return comando(`gh auth login\ncd ${q(repo)} && gh repo create --source=. --push   # o: gh repo clone <dueño>/<repo>`);
+    case 'backlog': return ed ? '<button class="boton" type="button" data-crear="backlog">＋ Crear backlog</button>' : '<span class="suave">Requiere el servidor local.</span>';
+    case 'sesiones': return comando(`cd ${q(repo)} && claude`);
+    case 'notas': return editar;
+    case 'integraciones': return ir('integraciones', 'Ir a Integraciones');
+    default: return '';
+  }
+}
+const ROTULO_PASO = { repo: 'Carpeta del repo', git: 'Repositorio git', github: 'Remoto en GitHub', docs: 'Carpeta de documentos', backlog: 'Backlog', sesiones: 'Sesiones de Claude', notas: 'Notas', integraciones: 'Integraciones' };
+function tarjetaGuia(p) {
+  const pasos = p.configuracion || [], pend = pasosPendientes(p);
+  if (!pend.length || ocultaGuia(p)) return '';
+  return `<section class="tarjeta" aria-label="Configurar este proyecto" id="guia-config">
+    <h2><span>⚙ Configurar este proyecto</span><small>${pasos.length - pend.length} de ${pasos.length} pasos</small></h2>
+    <ul class="tareas">${pasos.map((x) => `<li>${x.hecho ? '✓' : '○'} <b>${esc(ROTULO_PASO[x.paso] || x.paso)}</b> <span class="suave">${esc(x.detalle)}</span>${x.hecho ? '' : `<div>${accionPaso(x, p)}</div>`}</li>`).join('')}</ul>
+    <p><button class="boton" type="button" data-guia-ocultar>Ocultar guía</button></p></section>`;
+}
+const botonEditarProyecto = () => editable() ? '<p><button class="boton" type="button" data-crear="editar">Editar proyecto</button></p>' : '';
+
 const VISTAS = {
   resumen() {
     const bl = P.backlogs.filter((b) => !b.esPlan);
@@ -1416,7 +1447,7 @@ const VISTAS = {
     const favs = P.backlogs.flatMap((b) => aplanar(b.estructura || []).filter(esFavorita).map((s) => ({ b, s })));
     const sesActual = g?.rama ? sesionesDeRama(g.rama) : [];
     const ec = enCurso(P);
-    return `${tarjetaEnCurso(P)}<div class="rejilla"${ec ? ' style="margin-top:14px"' : ''}>
+    return `${tarjetaGuia(P)}${tarjetaEnCurso(P)}${botonEditarProyecto()}<div class="rejilla"${ec ? ' style="margin-top:14px"' : ''}>
       ${bl.map((b) => `<section class="tarjeta">
         <h2><span>${esc(b.archivo)}</span><small>${hace(b.modificado)}</small></h2>
         <div>${barra(b.hechas, b.total, 20)}</div><div class="suave">${b.hechas} de ${b.total} tareas (${pct(b.hechas, b.total)} %)</div>
@@ -1616,6 +1647,7 @@ function vistaTodos() {
       ${r.total ? `<div>${barra(r.hechas, r.total, 20)}</div><div class="suave">${r.hechas} de ${r.total} tareas</div>` : '<div class="suave">Sin backlog</div>'}
       ${r.aqui ? `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> ${esc(corto(plano(r.aqui.titulo), 70))}${r.sub ? ` <span class="suave">→</span> ${esc(corto(plano(r.sub.titulo), 50))}` : ''}</p>` : ''}
       <div class="chips-proy">
+        ${pasosPendientes(r.p).length ? `<span class="etq DRAFT" title="Pasos de configuración pendientes">⚙ ${(r.p.configuracion || []).length - pasosPendientes(r.p).length} de ${(r.p.configuracion || []).length} pasos</span>` : ''}
         ${r.g?.rama ? `<span class="etq" title="Rama actual">⎇ ${esc(r.g.rama)}</span>` : ''}
         ${r.sinPush ? `<span class="etq DRAFT">↑ ${r.sinPush} sin subir</span>` : ''}
         ${r.g ? ir(r, 'github', `⊙ ${r.prs} PR abiertos`) : ''}
@@ -1728,6 +1760,7 @@ document.addEventListener('click', (e) => {
     });
     return;
   }
+  if ('guiaOcultar' in b.dataset) { guardar(`tablero.guia.${P.id}`, 'oculta'); pintar(); avisar('Guía oculta para este proyecto.'); return; }
   if (b.dataset.proy) { abrirProyecto(b.dataset.proy, b.dataset.pest); return; }
   if (b.dataset.fav) { alternarFav(b.dataset.fav, b); return; }
   if (b.dataset.guardarBit) { guardarBitacora(b.dataset.guardarBit, b); return; }
@@ -1811,10 +1844,14 @@ document.addEventListener('change', (e) => {
 document.addEventListener('toggle', (e) => { const k = e.target.dataset?.k; if (k && !filtrando) abiertos.set(k, e.target.open); }, true);
 
 // ---------- Crear proyecto y backlog (con vista previa; el servidor nunca sobrescribe) ----------
-let crear = null; // { tipo: 'proyecto'|'backlog', campos, previa, error, ocupado }
+let crear = null; // { tipo: 'proyecto'|'backlog'|'editar', campos, previa, error, ocupado }
 const CAMPOS_PROY = [['id', 'Id', 'minúsculas, números y guiones'], ['nombre', 'Nombre', ''], ['repo', 'Carpeta del repo (opcional)', 'ruta absoluta o con ~'], ['docs', 'Carpeta de documentos (opcional)', 'donde vivirá el backlog; ruta absoluta o con ~']];
+const CAMPOS_EDITAR = [['nombre', 'Nombre', ''], ['repo', 'Carpeta del repo', 'ruta absoluta o con ~; vacío la quita'], ['docs', 'Carpetas de documentos', 'separadas por comas; donde vivirá el backlog'], ['notas', 'Archivo de notas', 'vacío lo quita'], ['bitacora', 'Archivo de bitácora', 'vacío lo quita']];
 function abrirCrear(tipo) {
-  crear = { tipo, campos: tipo === 'proyecto' ? { id: '', nombre: '', repo: '', docs: '' } : {}, previa: null, error: '', ocupado: false };
+  const e = P?.editable || {};
+  const campos = tipo === 'proyecto' ? { id: '', nombre: '', repo: '', docs: '' }
+    : tipo === 'editar' ? { nombre: e.nombre ?? P.nombre, repo: e.repo || '', docs: [].concat(e.docs || []).join(', '), notas: e.notas || '', bitacora: e.bitacora || '' } : {};
+  crear = { tipo, campos, previa: null, error: '', ocupado: false };
   pintarCrear(); $('#panel-crear [data-crear-campo], #panel-crear button')?.focus();
 }
 function cerrarCrear() { const t = crear?.tipo; crear = null; pintarCrear(); document.querySelector(`[data-crear="${t}"]`)?.focus(); }
@@ -1822,31 +1859,34 @@ function cuerpoCrear(previa) {
   const c = crear.campos;
   if (crear.tipo === 'backlog') return { proyecto: P.id, previa };
   const lista = (t) => String(t || '').split(',').map((x) => x.trim()).filter(Boolean);
+  if (crear.tipo === 'editar') return { id: P.id, cambios: { nombre: c.nombre.trim(), repo: c.repo.trim(), docs: lista(c.docs), notas: c.notas.trim(), bitacora: c.bitacora.trim() }, mtime: DATOS.configMtime ?? undefined, previa };
   return { id: c.id.trim(), nombre: c.nombre.trim(), repo: c.repo.trim() || undefined, docs: lista(c.docs).length ? lista(c.docs) : undefined, mtime: DATOS.configMtime ?? undefined, previa };
 }
 function pintarCrear() {
   const el = $('#panel-crear'); if (!el) return;
   if (!crear) { el.innerHTML = ''; return; }
-  const pr = crear.previa, proy = crear.tipo === 'proyecto';
-  el.innerHTML = `<form id="form-crear" class="tarjeta" aria-label="${proy ? 'Nuevo proyecto' : 'Crear backlog'}">
-    <h2><span>${proy ? 'Nuevo proyecto' : `Crear backlog de «${esc(P.nombre)}»`}</span></h2>
-    ${proy ? CAMPOS_PROY.map(([k, t, ayuda]) => `<label class="campo-fi" for="cr-${k}"><span>${t}</span><input id="cr-${k}" data-crear-campo="${k}" value="${esc(crear.campos[k])}" autocomplete="off" spellcheck="false"${k === 'id' ? ' required' : ''}>${ayuda ? `<small class="suave">${ayuda}</small>` : ''}</label>`).join('')
+  const pr = crear.previa, ed = crear.tipo === 'editar', proy = crear.tipo === 'proyecto' || ed;
+  const accion = ed ? 'Guardar cambios' : proy ? 'Crear proyecto' : 'Crear backlog';
+  el.innerHTML = `<form id="form-crear" class="tarjeta" aria-label="${ed ? 'Editar proyecto' : proy ? 'Nuevo proyecto' : 'Crear backlog'}">
+    <h2><span>${ed ? `Editar «${esc(P.nombre)}»` : proy ? 'Nuevo proyecto' : `Crear backlog de «${esc(P.nombre)}»`}</span></h2>
+    ${proy ? (ed ? CAMPOS_EDITAR : CAMPOS_PROY).map(([k, t, ayuda]) => `<label class="campo-fi" for="cr-${k}"><span>${t}</span><input id="cr-${k}" data-crear-campo="${k}" value="${esc(crear.campos[k])}" autocomplete="off" spellcheck="false"${k === 'id' || k === 'nombre' ? ' required' : ''}>${ayuda ? `<small class="suave">${ayuda}</small>` : ''}</label>`).join('')
       : '<p class="suave">Se crea <code>BACKLOG.md</code> con una plantilla mínima en la primera carpeta de documentos del proyecto. Nunca sobrescribe un archivo que ya exista.</p>'}
     ${crear.error ? `<div class="integ-paso mal" role="alert">${esc(crear.error)}</div>` : ''}
-    ${pr ? (proy ? `<div class="integ-paso" role="status">Se añadirá a <code>${esc(pr.archivo)}</code>:<pre>${esc(JSON.stringify(pr.proyecto, null, 2))}</pre></div>`
+    ${pr ? (proy ? `<div class="integ-paso" role="status">${ed ? 'Quedará en' : 'Se añadirá a'} <code>${esc(pr.archivo)}</code>:<pre>${esc(JSON.stringify(pr.proyecto, null, 2))}</pre></div>`
       : `<div class="integ-paso" role="status">Se creará <code>${esc(pr.ruta)}</code>:<pre>${esc(pr.contenido)}</pre></div>`) : ''}
-    <div class="pie">${pr ? `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>${proy ? 'Crear proyecto' : 'Crear backlog'}</button>` : `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>Vista previa</button>`}<button class="boton" type="button" data-crear-cerrar>Cancelar</button></div>
+    <div class="pie">${pr ? `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>${accion}</button>` : `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>Vista previa</button>`}<button class="boton" type="button" data-crear-cerrar>Cancelar</button></div>
   </form>`;
 }
 async function enviarCrear() {
   const c = crear; if (!c || c.ocupado) return;
-  const ruta = c.tipo === 'proyecto' ? '/api/proyectos/crear' : '/api/backlog/crear', previa = !c.previa;
+  const ruta = c.tipo === 'proyecto' ? '/api/proyectos/crear' : c.tipo === 'editar' ? '/api/proyectos/editar' : '/api/backlog/crear', previa = !c.previa;
   c.ocupado = true; c.error = ''; pintarCrear();
   try {
     const r = await api(ruta, cuerpoCrear(previa));
     if (previa) { c.previa = r; c.ocupado = false; pintarCrear(); $('#form-crear [type=submit]')?.focus(); return; }
     crear = null; recargarDatos(r.datos); refrescarSelectorProyectos();
     if (c.tipo === 'proyecto') { abrirProyecto(r.proyecto.id, 'backlogs'); avisar(`Proyecto «${r.proyecto.nombre}» creado.`); }
+    else if (c.tipo === 'editar') { pintar(); avisar(`Proyecto «${r.proyecto.nombre}» guardado.`); }
     else {
       sel.backlogs = r.archivo;
       if (formInteg) { formInteg.cfg.backlog = r.archivo; formInteg.prueba = null; pintarF(); } // sigue el formulario de integración, con el archivo ya elegido
@@ -1855,7 +1895,7 @@ async function enviarCrear() {
     }
     pintarCrear();
   } catch (e) {
-    c.ocupado = false; c.error = e.estado === 409 && c.tipo === 'proyecto' ? `${e.message} Recarga la página: proyectos.json cambió.` : e.message; c.previa = null; pintarCrear();
+    c.ocupado = false; c.error = e.estado === 409 && c.tipo !== 'backlog' ? `${e.message} Recarga la página: proyectos.json cambió.` : e.message; c.previa = null; pintarCrear();
   }
 }
 function refrescarSelectorProyectos() {
