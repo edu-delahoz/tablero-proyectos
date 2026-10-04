@@ -292,6 +292,18 @@ a.chip-ext:hover { border-color: var(--azul); }
 .resultado-sync { margin-top: 10px; font-size: .92em; }
 .resultado-sync .mal { color: var(--peligro); }
 
+/* ---------- Formulario de integración ---------- */
+.form-integ { margin-bottom: 18px; }
+.paso-fi { border: 0; border-top: 1px dashed var(--borde); margin: 0; padding: 4px 0 8px; min-width: 0; }
+.paso-fi legend { padding: 0; }
+.campo-fi { display: grid; gap: 2px; margin: 0 0 8px; min-width: 0; }
+.campo-fi > span { font-size: .85em; color: var(--suave); }
+.campo-fi input:not([type=checkbox]), .campo-fi select { max-width: 100%; width: min(100%, 28em); padding: 4px 6px; background: var(--superficie); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio); font: inherit; }
+.campo-fi.marca-fi { display: flex; gap: 6px; align-items: baseline; }
+.campo-fi.marca-fi > span { color: inherit; font-size: 1em; }
+.manual-fi { display: flex; flex-wrap: wrap; gap: 0 16px; }
+#fi-prueba:focus { outline: 2px solid var(--acento); }
+
 /* ---------- Edición de .md ---------- */
 .editor-md textarea { display: block; width: 100%; min-height: 62vh; resize: vertical; padding: 12px; font-size: 13px; line-height: 1.55; background: var(--codigo); color: var(--texto); border: 1px solid var(--borde); tab-size: 2; }
 .editor-md .pie, .sync-previa .pie { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 8px; }
@@ -917,6 +929,7 @@ function vistaPrevia(integ) {
     <div class="pie"><button class="boton primario" type="submit">Aplicar</button><button class="boton" type="button" data-cerrar-sync="${esc(integ.id)}">Cancelar</button></div></form>`;
 }
 function tarjetaIntegracion(integ) {
+  if (formInteg?.original === integ.id) return formularioInteg();
   const [cls, punto, txt] = ESTADO_INTEG[integ.estado] || ESTADO_INTEG.error;
   const columnas = [...integ.columnas, ...new Set(integ.items.map((x) => x.columna || 'Sin estado').filter((c) => !integ.columnas.includes(c)))];
   const porCol = columnas.map((c) => [c, integ.items.filter((x) => (x.columna || 'Sin estado') === c)]).filter(([, xs]) => xs.length);
@@ -933,7 +946,10 @@ function tarjetaIntegracion(integ) {
     ${(integ.avisos || []).map((a) => `<p class="suave" style="margin:4px 0">· ${esc(a)}</p>`).join('')}
     ${integ.estado === 'conectado' || integ.desdeCache ? `<p class="suave" style="margin:4px 0 8px">${integ.pendientes ? `⇄ ${integ.pendientes} cambio${integ.pendientes === 1 ? '' : 's'} por sincronizar` : '✓ sin cambios por sincronizar'}${Object.entries(pt).length ? ` · ${Object.entries(pt).map(([k, v]) => `${v} ${k}`).join(' · ')}` : ''}</p>` : ''}
     <p style="margin:0">${integ.url ? `<a class="boton" href="${esc(integ.url)}" target="_blank" rel="noopener">Abrir en ${esc(integ.nombre)} ↗</a>` : ''}
+      ${editable() ? `<button class="boton" type="button" data-integ-editar="${esc(integ.id)}">Editar</button><button class="boton" type="button" data-integ-quitar="${esc(integ.id)}">Quitar</button>` : '<button class="boton" type="button" disabled title="Requiere el servidor local">Editar</button><button class="boton" type="button" disabled title="Requiere el servidor local">Quitar</button>'}
       ${integ.estado === 'conectado' ? (editable() ? `<button class="boton primario" type="button" data-sincronizar="${esc(integ.id)}">Sincronizar</button>` : '<span class="suave">Sincronizar requiere el servidor local: abre el tablero con Tablero.app o <code>node generar.mjs --abrir</code>. Como archivo suelto es solo lectura.</span>') : ''}</p>
+    ${quitandoInteg === integ.id ? `<div class="integ-paso mal" role="group" aria-label="Confirmar quitar ${esc(integ.id)}">Se quita solo el bloque «${esc(integ.id)}» de <code>proyectos.json</code>. No se borra nada afuera (en ${esc(integ.nombre)} todo se queda) ni en el backlog: sus marcas <code>&lt;!-- ${esc(integ.id)}:… --&gt;</code> quedan sin uso.<br>
+      <button class="boton primario" type="button" data-integ-confirmar>Sí, quitar</button><button class="boton" type="button" data-integ-no-quitar>Cancelar</button></div>` : ''}
     ${vistaPrevia(integ)}
     ${porCol.length ? `<div class="columnas-ext">${porCol.map(([c, xs]) => `<div class="columna-ext"><div class="rotulo">${esc(c)} · ${xs.length}</div><ul>${xs.map((x) => `<li${x.hecha ? ' class="hecha"' : ''}><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a></li>`).join('')}</ul></div>`).join('')}</div>` : integ.estado === 'conectado' ? '<p class="suave">El tablero externo está vacío.</p>' : ''}
   </section>`;
@@ -965,6 +981,205 @@ async function aplicarPrevia(form) {
     if (e.estado === 409) { previas.delete(id); pintar(); }
     avisar(`No se aplicó: ${e.message}`, true);
   }
+}
+
+// ---------- Integraciones: alta, edición y baja desde la vista ----------
+let formInteg = null; // { original, cfg, op: { destinos, detalle }, cargando, error, prueba, cred, cambiarCred, idTocado, guardando }
+let quitandoInteg = null; // id que espera confirmación
+const TIPOS_INTEG = [['github-projects', 'GitHub Projects'], ['trello', 'Trello'], ['azure-devops', 'Azure DevOps']];
+const ID_BASE = { 'github-projects': 'gh', trello: 'trello', 'azure-devops': 'ado' };
+const CRED_CAMPOS = { trello: [['key', 'API key'], ['token', 'Token']], 'azure-devops': [['pat', 'Personal Access Token']] };
+const DESTINO_OK = { 'github-projects': (c) => c.propietario && c.numero, trello: (c) => c.tablero, 'azure-devops': (c) => c.organizacion && c.proyecto };
+const archivosBacklog = () => [...P.backlogs.filter((b) => !b.esPlan), ...P.backlogs.filter((b) => b.esPlan)].map((b) => b.archivo);
+const idPropuesto = (tipo) => {
+  const usados = new Set((P.integraciones || []).map((x) => x.id).filter((x) => x !== formInteg?.original));
+  const base = ID_BASE[tipo] || 'integracion';
+  let id = base; for (let n = 2; usados.has(id); n++) id = `${base}-${n}`;
+  return id;
+};
+const nuevoForm = (integ) => ({ original: integ?.id || null, cfg: integ ? structuredClone(integ.config || {}) : { tipo: '', backlog: archivosBacklog()[0] || '', auto: false }, op: {}, cargando: '', error: '', prueba: null, cred: {}, cambiarCred: false, idTocado: !!integ });
+function abrirForm(integ) {
+  quitandoInteg = null; formInteg = nuevoForm(integ);
+  pintarF();
+  if (integ && credOk(formInteg.cfg.tipo)) { const f = formInteg; cargarOpciones('destinos').then(() => formInteg === f && cargarOpciones('detalle')); }
+  document.getElementById(integ ? 'fi-id' : 'fi-tipo')?.focus();
+}
+// Repinta conservando el foco (los controles del formulario llevan id).
+const pintarF = () => { const id = document.activeElement?.id; pintar(); if (id) document.getElementById(id)?.focus({ preventScroll: true }); };
+function cerrarForm() { formInteg = null; pintarF(); document.querySelector('[data-integ-nueva]')?.focus(); }
+const credOk = (tipo) => !!tipo && !!DATOS.credenciales?.[tipo]?.guardada;
+const consultaDe = (c, detalle) => c.tipo === 'github-projects' ? (detalle ? { propietario: c.propietario, numero: c.numero } : {})
+  : c.tipo === 'trello' ? (detalle ? { tablero: c.tablero } : {}) : (detalle ? { organizacion: c.organizacion, proyecto: c.proyecto } : { organizacion: c.organizacion });
+// Rellena los desplegables: 'destinos' (Projects, tableros, proyectos) o 'detalle' (campos, listas, estados del destino elegido).
+async function cargarOpciones(que) {
+  const f = formInteg, c = f.cfg;
+  if (c.tipo === 'azure-devops' && !c.organizacion) return;
+  if (que === 'detalle' && !DESTINO_OK[c.tipo](c)) return;
+  f.cargando = que; f.error = ''; pintarF();
+  try {
+    const r = await api('/api/integraciones/descubrir', { tipo: c.tipo, clave: f.original || undefined, consulta: consultaDe(c, que === 'detalle') });
+    if (formInteg !== f) return;
+    if (que === 'destinos') f.op.destinos = r.proyectos || r.tableros || []; else f.op.detalle = r;
+  } catch (e) { if (formInteg !== f) return; f.error = e.message; f.op.fallo = que; }
+  finally { if (formInteg === f) { f.cargando = ''; pintarF(); } }
+}
+async function guardarCred(boton) {
+  const f = formInteg, campos = Object.fromEntries((CRED_CAMPOS[f.cfg.tipo] || []).map(([k]) => [k, (f.cred[k] || '').trim()]));
+  if (Object.values(campos).some((v) => !v)) { avisar('Completa todos los campos de la credencial.', true); return; }
+  boton.disabled = true; boton.textContent = 'Guardando…';
+  try {
+    const r = await api('/api/credenciales', { clave: f.cfg.tipo, campos });
+    recargarDatos(r.datos); f.cred = {}; f.cambiarCred = false; f.error = ''; avisar('Credencial guardada.');
+    pintarF(); cargarOpciones('destinos');
+  } catch (e) { boton.disabled = false; boton.textContent = 'Guardar credencial'; avisar(`No se guardó: ${e.message}`, true); }
+}
+// Lo que se manda al servidor: solo campos con valor (el servidor vuelve a validar y filtra).
+function cfgLimpia(c, idFinal) {
+  const o = { id: idFinal, tipo: c.tipo, backlog: c.backlog, auto: !!c.auto };
+  for (const k of ['propietario', 'numero', 'campoEstado', 'campoSeccion', 'tablero', 'organizacion', 'proyecto', 'tipoItem']) if (c[k] !== undefined && c[k] !== '') o[k] = c[k];
+  const col = Object.fromEntries(Object.entries(c.columnas || {}).filter(([, v]) => v && v.length));
+  if (Object.keys(col).length) o.columnas = col;
+  return o;
+}
+async function probarForm(boton) {
+  const f = formInteg; f.prueba = null; boton.disabled = true; boton.textContent = 'Probando…';
+  try { f.prueba = { ok: true, ...(await api('/api/integraciones/probar', { proyecto: P.id, integracion: cfgLimpia(f.cfg, f.cfg.id) })) }; }
+  catch (e) { f.prueba = { ok: false, error: e.message }; }
+  pintarF(); document.getElementById('fi-prueba')?.focus();
+}
+async function guardarForm(boton) {
+  const f = formInteg;
+  boton.disabled = true; boton.textContent = 'Guardando…';
+  try {
+    const r = await api('/api/integraciones/guardar', { proyecto: P.id, mtime: DATOS.configMtime, idOriginal: f.original || undefined, integracion: cfgLimpia(f.cfg, f.cfg.id) });
+    recargarDatos(r.datos); formInteg = null; pintarF();
+    avisar(r.renombrada ? `Guardada. Las marcas del id anterior («${f.original}») en el backlog quedan huérfanas; renómbralas o vuelve al id anterior.` : 'Integración guardada.', !!r.renombrada);
+  } catch (e) {
+    boton.disabled = false; boton.textContent = 'Guardar';
+    f.prueba = { ok: false, error: e.estado === 409 ? `${e.message} (se cierra el formulario y se recarga)` : e.message };
+    if (e.estado === 409) { const nuevos = await (await fetch('/api/datos', { cache: 'no-store' })).json().catch(() => null); if (nuevos) recargarDatos(nuevos); formInteg = null; avisar(e.message, true); }
+    pintarF();
+  }
+}
+async function quitarInteg(id, boton) {
+  boton.disabled = true; boton.textContent = 'Quitando…';
+  try { const r = await api('/api/integraciones/quitar', { proyecto: P.id, id, mtime: DATOS.configMtime }); recargarDatos(r.datos); quitandoInteg = null; previas.delete(id); pintarF(); avisar(`«${id}» quitada de proyectos.json.`); }
+  catch (e) { boton.disabled = false; boton.textContent = 'Sí, quitar'; avisar(`No se quitó: ${e.message}`, true); }
+}
+const opcion = (v, t, sel) => `<option value="${esc(v)}"${sel ? ' selected' : ''}>${esc(t)}</option>`;
+// Un desplegable con la opción actual siempre presente (aunque el servidor no la liste) y «automático» vacío.
+function selectFi(id, rotulo, clave, valor, opciones, vacio) {
+  const v = Array.isArray(valor) ? valor[0] : valor, lista = [...new Set([...(opciones || []), ...(v ? [v] : [])])];
+  return `<label class="campo-fi" for="${id}"><span>${rotulo}</span><select id="${id}" data-fi="${clave}">${vacio !== undefined ? opcion('', vacio, !v) : ''}${lista.map((o) => opcion(o, o, o === v)).join('')}</select></label>`;
+}
+const textoFi = (id, rotulo, clave, valor, ayuda = '') => `<label class="campo-fi" for="${id}"><span>${rotulo}</span><input id="${id}" data-fi="${clave}" value="${esc(valor ?? '')}" autocomplete="off" spellcheck="false">${ayuda ? `<small class="suave">${ayuda}</small>` : ''}</label>`;
+function pasoCredencial(c) {
+  const f = formInteg, r = DATOS.credenciales?.[c.tipo], campos = CRED_CAMPOS[c.tipo];
+  if (!campos) return `<p class="suave">${r?.guardada ? '● usa la sesión de <code>gh</code> de este equipo' : 'Falta iniciar sesión: ejecuta <code>gh auth login</code>.'}</p>`;
+  if (r?.guardada && !f.cambiarCred) return `<p><span class="ok">●</span> guardada · ${r.fuente === 'entorno' ? 'variable de entorno' : 'archivo'}${r.fin ? ` · <code>${esc(r.fin)}</code>` : ''} ${r.fuente === 'entorno' ? '' : '<button class="boton" type="button" data-fi-accion="cambiar-cred">Cambiar</button>'}</p>`;
+  const ayuda = c.tipo === 'trello' ? 'La key y el token se sacan en <code>trello.com/power-ups/admin</code>.' : 'El PAT necesita permiso de lectura y escritura de Work Items.';
+  return `<div class="cred-fi">${campos.map(([k, t]) => `<label class="campo-fi" for="fi-cred-${k}"><span>${t}</span><input id="fi-cred-${k}" data-fi-cred="${k}" type="password" autocomplete="off" spellcheck="false" value="${esc(f.cred[k] || '')}"></label>`).join('')}
+    <p class="suave" style="margin:0 0 6px">${ayuda} Se guardan en el archivo de credenciales de este equipo (permisos 600) y nunca vuelven a verse en pantalla.</p>
+    <button class="boton primario" type="button" data-fi-accion="guardar-cred">Guardar credencial</button>${r?.guardada ? '<button class="boton" type="button" data-fi-accion="cancelar-cred">Cancelar</button>' : ''}</div>`;
+}
+function pasoDestino(c) {
+  const f = formInteg, op = f.op, cargando = f.cargando === 'destinos', manual = f.op.fallo === 'destinos';
+  const estado = cargando ? '<p class="suave" role="status">Cargando opciones…</p>' : '';
+  const recargar = `<button class="boton" type="button" data-fi-accion="destinos"${cargando ? ' disabled' : ''}>${op.destinos ? 'Recargar lista' : 'Cargar opciones'}</button>`;
+  if (c.tipo === 'github-projects') {
+    const lista = (op.destinos || []).map((x) => [`${x.propietario}/${x.numero}`, `${x.propietario}/${x.numero} · ${x.titulo}`]);
+    const actual = c.propietario ? `${c.propietario}/${c.numero}` : '';
+    if (actual && !lista.some(([v]) => v === actual)) lista.unshift([actual, actual]);
+    return `${estado}${op.destinos ? `<label class="campo-fi" for="fi-destino"><span>Project</span><select id="fi-destino" data-fi="destino">${opcion('', '— elige un Project —', !actual)}${lista.map(([v, t]) => opcion(v, t, v === actual)).join('')}</select></label>` : ''}${recargar}
+      ${manual || !op.destinos ? `<div class="manual-fi">${textoFi('fi-propietario', 'Propietario', 'propietario', c.propietario, 'usuario u organización')}${textoFi('fi-numero', 'Número', 'numero', c.numero)}</div>` : ''}`;
+  }
+  if (c.tipo === 'trello') {
+    const lista = (op.destinos || []).map((x) => [x.id, x.nombre]);
+    if (c.tablero && !lista.some(([v]) => v === c.tablero)) lista.unshift([c.tablero, c.tablero]);
+    return `${estado}${op.destinos ? `<label class="campo-fi" for="fi-destino"><span>Tablero</span><select id="fi-destino" data-fi="destino">${opcion('', '— elige un tablero —', !c.tablero)}${lista.map(([v, t]) => opcion(v, t, v === c.tablero)).join('')}</select></label>` : ''}${recargar}
+      ${manual || !op.destinos ? `<div class="manual-fi">${textoFi('fi-tablero', 'Id del tablero', 'tablero', c.tablero, 'el código de la URL trello.com/b/&lt;id&gt;')}</div>` : ''}`;
+  }
+  const lista = (op.destinos || []).slice(); if (c.proyecto && !lista.includes(c.proyecto)) lista.unshift(c.proyecto);
+  return `${textoFi('fi-organizacion', 'Organización', 'organizacion', c.organizacion, 'dev.azure.com/&lt;organización&gt;')}<button class="boton" type="button" data-fi-accion="destinos"${cargando || !c.organizacion ? ' disabled' : ''}>Buscar proyectos</button>${estado}
+    ${op.destinos ? selectFi('fi-destino', 'Proyecto', 'destino', c.proyecto, lista, '— elige un proyecto —') : ''}${manual || !op.destinos ? textoFi('fi-proyecto', 'Proyecto (a mano)', 'proyecto', c.proyecto) : ''}`;
+}
+function pasoColumnas(c) {
+  const d = formInteg.op.detalle, cargando = formInteg.cargando === 'detalle', col = c.columnas || {};
+  if (cargando) return '<p class="suave" role="status">Leyendo columnas…</p>';
+  let opciones = null, extra = '';
+  if (c.tipo === 'github-projects') {
+    const campo = c.campoEstado || 'Status', def = d?.camposSeleccion?.find((x) => x.nombre === campo);
+    opciones = def?.opciones;
+    extra = d ? selectFi('fi-campoEstado', 'Campo de estado', 'campoEstado', c.campoEstado, (d.camposSeleccion || []).map((x) => x.nombre), 'Status (por defecto)') + selectFi('fi-campoSeccion', 'Campo de texto para la sección', 'campoSeccion', c.campoSeccion, d.camposTexto || [], 'Sección (por defecto)') : '';
+  } else if (c.tipo === 'trello') opciones = d?.listas;
+  else { const tipos = d?.tipos || []; opciones = tipos.find((t) => t.nombre === (c.tipoItem || 'Task'))?.estados; extra = d ? selectFi('fi-tipoItem', 'Tipo de work item', 'tipoItem', c.tipoItem, tipos.map((t) => t.nombre), 'Task (por defecto)') : ''; }
+  const nombres = (o) => (o || []).map((x) => (typeof x === 'string' ? x : x?.nombre ?? x?.name ?? ''));
+  const lista = nombres(opciones);
+  return `${extra}<div class="manual-fi">${selectFi('fi-col-pendiente', 'Pendiente = ', 'col:pendiente', col.pendiente, lista, 'automático')}${selectFi('fi-col-hecho', 'Hecho = ', 'col:hecho', col.hecho, lista, 'automático')}</div>
+    ${!d ? `<p class="suave">${formInteg.op.fallo === 'detalle' ? 'No se pudieron leer las columnas; se usarán las de por defecto.' : 'Elige el destino para ver sus columnas.'}</p>` : ''}`;
+}
+const avisoRenombra = (f) => f.original && f.cfg.id && f.cfg.id !== f.original ? `<div class="integ-paso">Cambiar el id deja huérfanas las marcas <code>&lt;!-- ${esc(f.original)}:… --&gt;</code> que ya tiene el backlog: no se renombran solas.</div>` : '';
+function formularioInteg() {
+  const f = formInteg, c = f.cfg, editar = !!f.original, pr = f.prueba;
+  const cred = credOk(c.tipo), destino = c.tipo && cred && DESTINO_OK[c.tipo](c);
+  const paso = (n, t, cuerpo) => `<fieldset class="paso-fi"><legend class="rotulo">${n}. ${t}</legend>${cuerpo}</fieldset>`;
+  return `<form class="form-integ tarjeta" id="form-integ" data-form-integ aria-label="${editar ? `Editar ${esc(f.original)}` : 'Nueva integración'}">
+    <h2><span>${editar ? `Editar «${esc(f.original)}»` : 'Nueva integración'}</span></h2>
+    ${paso(1, 'Tipo', editar ? `<p>${esc((TIPOS_INTEG.find(([v]) => v === c.tipo) || [, c.tipo])[1])} <span class="suave">(el tipo no se cambia: quita la integración y crea otra)</span></p>`
+      : `<label class="campo-fi" for="fi-tipo"><span>Conector</span><select id="fi-tipo" data-fi="tipo">${opcion('', '— elige —', !c.tipo)}${TIPOS_INTEG.map(([v, t]) => opcion(v, t, v === c.tipo)).join('')}</select></label>`)}
+    ${c.tipo ? paso(2, 'Credencial', pasoCredencial(c)) : ''}
+    ${c.tipo && cred ? paso(3, 'Destino', pasoDestino(c)) : ''}
+    ${f.error ? `<div class="integ-paso mal" role="alert">${esc(f.error)}</div>` : ''}
+    ${destino ? paso(4, 'Backlog que se sincroniza', selectFi('fi-backlog', 'Archivo', 'backlog', c.backlog, archivosBacklog())) : ''}
+    ${destino ? paso(5, 'Columnas', pasoColumnas(c)) : ''}
+    ${destino ? paso(6, 'Nombre y modo', `${textoFi('fi-id', 'Id', 'id', c.id ?? idPropuesto(c.tipo), 'minúsculas, números y guiones; es el prefijo de las marcas <code>&lt;!-- id:… --&gt;</code> del backlog')}
+      <div id="fi-aviso-id">${avisoRenombra(f)}</div>
+      <label class="campo-fi marca-fi"><input type="checkbox" data-fi="auto"${c.auto ? ' checked' : ''}> <span>Sincronizar solo lo seguro al regenerar (<code>auto</code>), sin vista previa</span></label>`) : ''}
+    ${pr ? `<div id="fi-prueba" tabindex="-1" class="integ-paso ${pr.ok ? '' : 'mal'}" role="status">${pr.ok ? `✓ Conectado${pr.titulo ? ` a «${esc(pr.titulo)}»` : ''} · ${pr.items} ítems · columnas: ${esc((pr.columnas || []).join(', ') || '—')} · ${pr.vinculadas} casillas vinculadas${(pr.avisos || []).map((a) => `<br><span class="suave">· ${esc(a)}</span>`).join('')}` : `✕ ${esc(pr.error)}`}</div>` : ''}
+    <div class="pie">${destino ? '<button class="boton" type="button" data-fi-accion="probar">Probar</button><button class="boton primario" type="submit">Guardar</button>' : ''}<button class="boton" type="button" data-fi-accion="cerrar">Cancelar</button></div>
+  </form>`;
+}
+function alCambiarFi(el) {
+  const f = formInteg, c = f.cfg, k = el.dataset.fi, v = el.type === 'checkbox' ? el.checked : el.value.trim();
+  f.prueba = null;
+  if (k === 'tipo') {
+    formInteg = { ...f, cfg: { tipo: v, backlog: c.backlog, auto: false }, op: {}, error: '', cred: {}, cambiarCred: false, idTocado: false };
+    formInteg.cfg.id = v ? idPropuesto(v) : undefined; pintarF();
+    if (v && credOk(v)) cargarOpciones('destinos');
+    return;
+  }
+  if (k === 'destino') {
+    const antes = JSON.stringify([c.propietario, c.numero, c.tablero, c.proyecto]);
+    if (c.tipo === 'github-projects') { const [p, n] = v.split('/'); c.propietario = p || undefined; c.numero = n ? Number(n) : undefined; }
+    else if (c.tipo === 'trello') c.tablero = v || undefined; else c.proyecto = v || undefined;
+    if (antes !== JSON.stringify([c.propietario, c.numero, c.tablero, c.proyecto])) { delete c.columnas; delete c.campoEstado; delete c.campoSeccion; delete c.tipoItem; f.op.detalle = null; f.op.fallo = null; }
+    pintarF(); cargarOpciones('detalle'); return;
+  }
+  if (k.startsWith('col:')) { c.columnas = { ...(c.columnas || {}), [k.slice(4)]: v || undefined }; pintarF(); return; }
+  if (k === 'campoEstado' || k === 'tipoItem') { c[k] = v || undefined; delete c.columnas; pintarF(); return; }
+  asignarFi(el);
+  if (['propietario', 'numero', 'tablero', 'organizacion', 'proyecto'].includes(k)) {
+    if (DESTINO_OK[c.tipo](c) && !f.op.detalle && !f.cargando) { pintarF(); cargarOpciones('detalle'); }
+    return;
+  }
+  if (k === 'auto' || k === 'backlog' || k === 'campoSeccion') pintarF();
+}
+// Copia el valor de un control al estado sin repintar (se llama en cada tecla).
+function asignarFi(el) {
+  const c = formInteg.cfg, k = el.dataset.fi, v = el.type === 'checkbox' ? el.checked : el.value.trim();
+  if (k === 'id') { formInteg.idTocado = true; }
+  c[k] = k === 'numero' ? (v === '' ? undefined : /^\d+$/.test(v) ? Number(v) : v) : v;
+  formInteg.prueba = null;
+  if (k === 'id') { const av = document.getElementById('fi-aviso-id'); if (av) av.innerHTML = avisoRenombra(formInteg); }
+}
+function accionFi(a, boton) {
+  const f = formInteg;
+  if (a === 'cerrar') cerrarForm();
+  else if (a === 'cambiar-cred') { f.cambiarCred = true; pintarF(); document.querySelector('[data-fi-cred]')?.focus(); }
+  else if (a === 'cancelar-cred') { f.cambiarCred = false; f.cred = {}; pintarF(); }
+  else if (a === 'guardar-cred') guardarCred(boton);
+  else if (a === 'destinos') { f.op.fallo = null; cargarOpciones('destinos'); }
+  else if (a === 'probar') probarForm(boton);
 }
 
 // ---------- Bitácora ----------
@@ -1238,8 +1453,11 @@ const VISTAS = {
   },
   integraciones() {
     const xs = P.integraciones || [];
-    if (!xs.length) return `<div class="tarjeta"><h2><span>Integraciones</span></h2><p>Este proyecto no tiene integraciones. Añade un arreglo <code>integraciones</code> al proyecto en <code>proyectos.json</code> (hay ejemplos de GitHub Projects, Trello y Azure DevOps en <code>proyectos.ejemplo.json</code>) y la sección «Conectores y credenciales» del README.</p></div>`;
-    return `<p class="suave">Cada casilla de primer nivel del backlog se vincula con una tarjeta mediante un comentario oculto <code>&lt;!-- id:… --&gt;</code>. Sincronizar muestra primero una vista previa; nunca se borra nada en ningún lado.</p>${xs.map(tarjetaIntegracion).join('')}`;
+    if (!xs.length && !editable()) return `<div class="tarjeta"><h2><span>Integraciones</span></h2><p>Este proyecto no tiene integraciones. Configurarlas desde aquí requiere el servidor local: abre el tablero con <strong>Tablero.app</strong> o <code>node generar.mjs --abrir</code>. A mano: añade un arreglo <code>integraciones</code> al proyecto en <code>proyectos.json</code> (ejemplos en <code>proyectos.ejemplo.json</code> y la sección «Conectores y credenciales» del README).</p></div>`;
+    if (!xs.length && !formInteg) formInteg = nuevoForm();
+    const nueva = formInteg && !formInteg.original ? formularioInteg().replace(/<button class="boton" type="button" data-fi-accion="cerrar">Cancelar<\/button>/, xs.length ? '$&' : '') : '';
+    const boton = editable() && xs.length && !formInteg ? '<p><button class="boton primario" type="button" data-integ-nueva>+ Añadir integración</button></p>' : '';
+    return `${xs.length ? '<p class="suave">Cada casilla de primer nivel del backlog se vincula con una tarjeta mediante un comentario oculto <code>&lt;!-- id:… --&gt;</code>. Sincronizar muestra primero una vista previa; nunca se borra nada en ningún lado.</p>' : ''}${boton}${nueva}${xs.map(tarjetaIntegracion).join('')}`;
   },
 };
 
@@ -1346,7 +1564,7 @@ function vistaTodos() {
 function abrirProyecto(id, pest) {
   const p = buscarProyecto(id);
   if (!p) return;
-  soltarEditor(); todos = false; P = p; sel = {}; ramaFoco = null; previas.clear();
+  soltarEditor(); todos = false; P = p; sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null;
   pestana = pest || 'resumen'; guardar('tablero.pestana', pestana);
   recordarProyecto(); pintar(); alInicio();
 }
@@ -1409,7 +1627,7 @@ function irRama(nombre) {
 // Actualización en vivo (solo con el servidor local): sondea la huella barata y repinta si cambió.
 if (editable()) {
   let version = null, ocupado = false;
-  const hayEdicion = () => editando || document.querySelector('#contenido textarea:focus, #contenido input:focus, #contenido select:focus');
+  const hayEdicion = () => editando || formInteg || quitandoInteg || document.querySelector('#contenido textarea:focus, #contenido input:focus, #contenido select:focus');
   const marcar = (v) => { if (enVivo !== v) { enVivo = v; pintarNavegacion(); } };
   const sondear = async () => {
     if (ocupado || document.hidden) return;
@@ -1447,6 +1665,12 @@ document.addEventListener('click', (e) => {
   if (b.dataset.fav) { alternarFav(b.dataset.fav, b); return; }
   if (b.dataset.guardarBit) { guardarBitacora(b.dataset.guardarBit, b); return; }
   if (b.dataset.rama) { e.preventDefault(); irRama(b.dataset.rama); return; }
+  if ('integNueva' in b.dataset) { abrirForm(); return; }
+  if (b.dataset.integEditar) { abrirForm((P.integraciones || []).find((x) => x.id === b.dataset.integEditar)); return; }
+  if (b.dataset.integQuitar) { quitandoInteg = b.dataset.integQuitar; pintar(); document.querySelector('[data-integ-confirmar]')?.focus(); return; }
+  if ('integConfirmar' in b.dataset) { quitarInteg(quitandoInteg, b); return; }
+  if ('integNoQuitar' in b.dataset) { const id = quitandoInteg; quitandoInteg = null; pintar(); document.querySelector(`[data-integ-quitar="${CSS.escape(id)}"]`)?.focus(); return; }
+  if (b.dataset.fiAccion) { accionFi(b.dataset.fiAccion, b); return; }
   if (b.dataset.sincronizar) { pedirPrevia(b.dataset.sincronizar, b); return; }
   if (b.dataset.cerrarSync) { const id = b.dataset.cerrarSync; previas.delete(id); pintar(); document.querySelector(`[data-sincronizar="${CSS.escape(id)}"]`)?.focus(); return; }
   if (b.dataset.editar) { editando = b.dataset.editar; pintar(); const t = $('#texto-md'); t?.focus(); t?.setSelectionRange(0, 0); t?.scrollTo(0, 0); return; }
@@ -1477,6 +1701,7 @@ document.addEventListener('submit', async (e) => {
   const f = e.target;
   if (f.classList.contains('editor-md')) return guardarEdicion(f);
   if (f.classList.contains('sync-previa')) return aplicarPrevia(f);
+  if (f.id === 'form-integ') return guardarForm(f.querySelector('[type=submit]'));
   if (f.id === 'form-nota') {
     const t = f.querySelector('textarea'), boton = f.querySelector('[type=submit]');
     if (!t.value.trim()) { t.focus(); return; }
@@ -1499,12 +1724,15 @@ window.addEventListener('beforeunload', (e) => {
 });
 // En un conflicto, elegir un lado marca su casilla.
 document.addEventListener('input', (e) => {
+  if (formInteg && e.target.dataset?.fiCred) { formInteg.cred[e.target.dataset.fiCred] = e.target.value; return; }
+  if (formInteg && e.target.dataset?.fi && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') { asignarFi(e.target); return; }
   if (e.target.dataset?.buscar) { busqueda[e.target.dataset.buscar] = e.target.value; aplicarBusqueda(); return; }
   const c = e.target, k = c.dataset?.bit, sid = c.closest?.('tr')?.dataset.sid;
   if (k && sid) bitBorrador.set(sid, { ...bitBorrador.get(sid), [k]: c.value });
 });
 document.addEventListener('change', (e) => {
   const r = e.target;
+  if (formInteg && r.dataset?.fi) { alCambiarFi(r); return; }
   if ('soloFav' in (r.dataset || {})) { soloFav = r.checked; pintar(); $('[data-solo-fav]')?.focus(); return; }
   if (r.dataset?.grafPor) { bitGraf.por = r.dataset.grafPor; pintar(); $(`[data-graf-por=${r.dataset.grafPor}]`)?.focus(); return; }
   if (r.dataset?.bitFiltro) { bitFiltro[r.dataset.bitFiltro] = r.checked; pintar(); $(`[data-bit-filtro=${r.dataset.bitFiltro}]`)?.focus(); return; }
@@ -1532,11 +1760,11 @@ function recordarProyecto() {
   $('#proyecto').value = id;
 }
 $('#proyecto').innerHTML = `<option value="todos">Todos los proyectos</option>` + DATOS.proyectos.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');
-$('#proyecto').addEventListener('change', (e) => { soltarEditor(); todos = e.target.value === 'todos'; if (!todos) P = buscarProyecto(e.target.value); sel = {}; ramaFoco = null; previas.clear(); recordarProyecto(); pintar(); });
+$('#proyecto').addEventListener('change', (e) => { soltarEditor(); todos = e.target.value === 'todos'; if (!todos) P = buscarProyecto(e.target.value); sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null; recordarProyecto(); pintar(); });
 window.addEventListener('hashchange', () => {
   if (idEnHash() === 'todos') { if (!todos) { soltarEditor(); todos = true; recordarProyecto(); pintar(); } return; }
   const p = buscarProyecto(idEnHash());
-  if (p && (p !== P || todos)) { soltarEditor(); todos = false; P = p; sel = {}; ramaFoco = null; previas.clear(); recordarProyecto(); pintar(); }
+  if (p && (p !== P || todos)) { soltarEditor(); todos = false; P = p; sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null; recordarProyecto(); pintar(); }
 });
 const idInicial = idEnHash() || leer('tablero.proyecto') || 'todos';
 todos = idInicial === 'todos' || !buscarProyecto(idInicial);

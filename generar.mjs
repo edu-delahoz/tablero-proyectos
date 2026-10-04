@@ -18,7 +18,7 @@ import { join, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extraerMarcas, tareasLocales, planificarSincronia, aplicarSincronia } from './integraciones/sincronia.mjs'
 import { leerCredenciales, credencialesPara, guardarCredencial, resumenCredenciales, REQUISITOS, RUTA_CREDENCIALES } from './integraciones/credenciales.mjs'
-import { validarIntegracion, aplicarCambio, escribirAtomico, ErrorConfig } from './integraciones/config.mjs'
+import { validarIntegracion, aplicarCambio, escribirAtomico, ErrorConfig, CAMPOS } from './integraciones/config.mjs'
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { desajustes, describir } from './coherencia.mjs'
 import { parsearBitacora, sidsPorProyecto, asociar, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
@@ -597,11 +597,13 @@ export async function sincronizar(p, idIntegracion, { elegidas = null, resolucio
 }
 
 // Datos de cada integración para el HTML: estado, ítems por columna y cuántos cambios hay por sincronizar.
+// Campos de la lista blanca de una integración (sin secretos: no los hay en proyectos.json) para precargar el formulario de edición.
+const configVisible = (cfg) => Object.fromEntries(Object.entries(cfg).filter(([k]) => ['id', 'tipo', 'backlog', 'auto', ...(CAMPOS[cfg.tipo] ? [...CAMPOS[cfg.tipo].obligatorios, ...CAMPOS[cfg.tipo].opcionales] : [])].includes(k)))
 async function leerIntegraciones(p, backlogs, { adaptadores = ADAPTADORES, aplicarAuto = true } = {}) {
   if (!p.integraciones?.length) return []
   const rutaExt = join(DATOS, `externo-${p.id}.json`), cache = leerJson(rutaExt, {})
   const salida = await Promise.all(p.integraciones.map(async (cfg) => {
-    const base = { id: cfg.id, tipo: cfg.tipo, nombre: NOMBRES[cfg.tipo] || cfg.tipo, backlog: cfg.backlog, auto: !!cfg.auto, ultimaSincronia: cache[cfg.id]?.ultimaSincronia || null }
+    const base = { id: cfg.id, tipo: cfg.tipo, nombre: NOMBRES[cfg.tipo] || cfg.tipo, backlog: cfg.backlog, auto: !!cfg.auto, config: configVisible(cfg), ultimaSincronia: cache[cfg.id]?.ultimaSincronia || null }
     let ctx
     try { ctx = contextoIntegracion(p, cfg, backlogs, adaptadores) } catch (e) {
       return { ...base, estado: e.extra?.estado || 'error', mensaje: e.message, paso: e.extra?.paso || null }

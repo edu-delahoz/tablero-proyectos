@@ -136,6 +136,15 @@ comparan en todos los proyectos. Sin servidor las estrellas se ven pero no se pu
 
 ## Conectores y credenciales
 
+**Lo normal es hacerlo desde la vista.** Con el tablero abierto con el servidor local (Tablero.app o
+`node generar.mjs --abrir`), la pestaña **Integraciones** tiene «+ Añadir integración»: eliges el conector,
+pegas la credencial (se guarda con permisos 600 y nunca vuelve a mostrarse; solo «guardada · …ab12»),
+eliges el Project/tablero/proyecto y las columnas en desplegables, pruebas la conexión y guardas. Cada
+tarjeta tiene «Editar» y «Quitar» (solo modifican el bloque de la integración en `proyectos.json`; no se
+borra nada en el backlog ni en la herramienta externa, y cambiar el id deja huérfanas las marcas antiguas).
+Como archivo suelto, sin servidor, esos botones están deshabilitados. **A mano** sigue valiendo: es lo
+que la vista escribe.
+
 Cada proyecto puede declarar `integraciones` en `proyectos.json`. Se sincronizan las casillas **de
 primer nivel** del backlog indicado: el título afuera es el texto plano de la casilla, la sección
 (`S3`, `H4`…) va como etiqueta/campo y las subtareas van como checklist en la descripción (solo hacia

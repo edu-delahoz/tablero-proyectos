@@ -271,6 +271,7 @@ test('integraciones: guardar añade solo campos de la lista blanca, edita en su 
   assert.deepEqual(p.integraciones[2], { id: 'gh2', tipo: 'github-projects', backlog: 'BACKLOG_PRUEBA.md', propietario: 'otro', numero: 7 })
   assert.deepEqual({ ...p, integraciones: undefined }, { ...antes[0], integraciones: undefined })
   assert.ok(r.json.datos.proyectos[0].integraciones.some((x) => x.id === 'gh2'), 'la vista recibe la integración nueva sin reiniciar')
+  assert.deepEqual(r.json.datos.proyectos[0].integraciones.find((x) => x.id === 'gh2').config, { id: 'gh2', tipo: 'github-projects', backlog: 'BACKLOG_PRUEBA.md', propietario: 'otro', numero: 7 }, 'la vista recibe la config (lista blanca) para editar')
   // Editar renombrando: en su sitio y avisa.
   const e = await post('/api/integraciones/guardar', { proyecto: 'prueba', idOriginal: 'gh2', integracion: { ...nueva, id: 'gh3', numero: 8 }, mtime: await mtime() })
   assert.equal(e.json.renombrada, true)
