@@ -36,6 +36,9 @@ Integrar `../BITACORA.md`: verla y completar Calidad / Seguridad / Notas de las 
 
 Para S4 (forma de los datos): `proyecto.bitacora` = `{ ruta, modificado, hash, registro: [{ sid, fecha, tarea, modo, modelo, duracion, minutos, costoTxt, costo, contextoTxt, contexto: { ini, fin, semaforo }, calidad, seguridad, notas, pendiente, proyecto }], semanal: { columnas, filas }, experimentos: [{ titulo, texto }], lecciones: [{ fecha, texto }] }` o `null` sin el campo. Guardar: `POST /api/bitacora` `{ ruta, sid, calidad, seguridad, notas, hash }` → `{ ok, datos }`; 409 si cambió, 400/404 con `error` legible. Filas sin sid (las antiguas) no son editables. El `proyectos.json` local ya tiene `bitacora` en los tres proyectos.
 
+Decisiones S3: el cuerpo lleva `ruta` (además de lo del plan) y solo se acepta si es la `bitacora` de algún proyecto; calidad debe *empezar* por ✅/🟡/🔴 (admite texto detrás, como la fila antigua «✅ CI verde (PR #12)»); seguridad obligatoria; notas vacías conservan la razón del hook. Variable `TABLERO_TRANSCRIPCIONES` para los tests.
+Trampas: los tests del servidor comprueban que `datos` no contenga «token», así que el fixture no puede usar esa palabra en minúscula. `metodologia-claude/` no es repo git: para revisar el diff de `BITACORA.md` en S4, copia el archivo antes y usa `diff`.
+
 ### S4 — Pestaña Bitácora · **Sonnet** · misma rama `bitacora`
 `plantilla.html`, README. PR de `bitacora` al terminar.
 - [ ] Pestaña «Bitácora» por proyecto: totales (sesiones, costo, duración, % sesiones 🔴), tabla de filas con filtro «este proyecto / todas» y «solo pendientes», resumen semanal y lecciones (solo lectura)
