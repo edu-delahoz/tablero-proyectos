@@ -1,0 +1,35 @@
+{
+  "proyecto": {
+    "data": { "repositoryOwner": { "projectV2": {
+      "id": "PVT_ejemplo", "url": "https://github.com/users/usuario/projects/1", "title": "Proyecto de ejemplo",
+      "fields": { "nodes": [
+        { "id": "PVTF_titulo", "name": "Title", "dataType": "TITLE" },
+        { "id": "PVTSSF_estado", "name": "Status", "dataType": "SINGLE_SELECT", "options": [
+          { "id": "op_todo", "name": "Todo" }, { "id": "op_curso", "name": "In Progress" }, { "id": "op_done", "name": "Done" } ] },
+        { "id": "PVTF_seccion", "name": "Sección", "dataType": "TEXT" },
+        {}
+      ] },
+      "items": { "pageInfo": { "hasNextPage": false, "endCursor": null }, "nodes": [
+        { "id": "PVTI_1", "isArchived": false, "updatedAt": "2026-10-01T10:00:00Z", "fullDatabaseId": "1001",
+          "fieldValues": { "nodes": [ {}, { "name": "Done", "field": { "name": "Status" } } ] },
+          "content": { "__typename": "DraftIssue", "id": "DI_1", "title": "Crear el esquema" } },
+        { "id": "PVTI_2", "isArchived": false, "updatedAt": "2026-10-02T10:00:00Z", "fullDatabaseId": "1002",
+          "fieldValues": { "nodes": [ { "name": "In Progress", "field": { "name": "Status" } } ] },
+          "content": { "__typename": "Issue", "id": "I_2", "title": "Probar el login", "url": "https://github.com/usuario/repo/issues/2" } },
+        { "id": "PVTI_3", "isArchived": false, "updatedAt": "2026-10-03T10:00:00Z", "fullDatabaseId": "1003",
+          "fieldValues": { "nodes": [] },
+          "content": { "__typename": "DraftIssue", "id": "DI_3", "title": "Sin estado" } },
+        { "id": "PVTI_4", "isArchived": true, "updatedAt": "2026-10-03T10:00:00Z", "fullDatabaseId": "1004",
+          "fieldValues": { "nodes": [] },
+          "content": { "__typename": "DraftIssue", "id": "DI_4", "title": "Archivado" } }
+      ] }
+    } } }
+  },
+  "noExiste": {
+    "data": { "repositoryOwner": { "projectV2": null } },
+    "errors": [ { "type": "NOT_FOUND", "message": "Could not resolve to a ProjectV2 with the number 99." } ]
+  },
+  "crear": { "data": { "addProjectV2DraftIssue": { "projectItem": { "id": "PVTI_nuevo", "fullDatabaseId": "2001" } } } },
+  "ok": { "data": { "updateProjectV2ItemFieldValue": { "projectV2Item": { "id": "PVTI_nuevo" } } } },
+  "contenido": { "data": { "node": { "content": { "__typename": "DraftIssue", "id": "DI_1" } } } }
+}

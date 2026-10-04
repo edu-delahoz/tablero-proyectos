@@ -233,3 +233,11 @@ test('prompts: la celda de sesión puede llevar texto extra («T2 (corta, tras e
   const a = estructura('## Cómo ejecutarlo\n| Sesión | Modelo | Qué |\n|---|---|---|\n| T2 (corta, tras elegir) | **Sonnet** | x |\n\nPrompt T2:\n> hola\n')
   assert.equal(a[0].prompts[0].modelo, 'Sonnet')
 })
+
+test('estructura: las marcas de integración salen del texto y quedan en «marcas»; los conteos no cambian', () => {
+  const md = '## S1 — A\n\n- [ ] Uno <!-- gh:PVTI_1 --> <!-- trello:abc -->\n  - [x] Hija <!-- ado:7 -->\n- [x] Dos\n'
+  const [s] = estructura(md)
+  assert.deepEqual(s.tareas.map((t) => [t.texto, t.marcas]), [['Uno', { gh: 'PVTI_1', trello: 'abc' }], ['Dos', undefined]])
+  assert.deepEqual(s.tareas[0].hijas[0].marcas, { ado: '7' })
+  assert.deepEqual([s.hechas, s.total], [2, 3])
+})
