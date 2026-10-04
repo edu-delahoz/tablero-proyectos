@@ -98,3 +98,35 @@ test('sincronía: si el .md cambió desde la vista previa → 409 y nada se apli
   assert.equal(readFileSync(BACKLOG, 'utf8'), editado)
   assert.equal(fuera.get('N1').hecha, false)
 })
+
+function get(ruta, { host = `127.0.0.1:${puerto}` } = {}) {
+  return new Promise((ok, mal) => {
+    const q = request({ host: '127.0.0.1', port: puerto, path: ruta, method: 'GET', headers: { host } }, (r) => {
+      let t = ''
+      r.on('data', (c) => { t += c })
+      r.on('end', () => ok({ estado: r.statusCode, json: JSON.parse(t) }))
+    })
+    q.on('error', mal)
+    q.end()
+  })
+}
+
+test('/api/version: huella estable, cambia al editar un backlog y rechaza Host ajeno', async () => {
+  const a = await get('/api/version')
+  assert.equal(a.estado, 200)
+  assert.match(a.json.version, /^[0-9a-f]{16}$/)
+  assert.equal((await get('/api/version')).json.version, a.json.version)
+  writeFileSync(BACKLOG, readFileSync(BACKLOG, 'utf8') + '\n- [ ] Tres (huella)\n')
+  assert.notEqual((await get('/api/version')).json.version, a.json.version)
+  assert.equal((await get('/api/version', { host: `evil.com:${puerto}` })).estado, 403)
+})
+
+test('/api/datos: devuelve los datos frescos sin tokens y rechaza Host ajeno', async () => {
+  const d = await get('/api/datos')
+  assert.equal(d.estado, 200)
+  assert.equal(d.json.servidor, true)
+  const b = d.json.proyectos[0].backlogs.find((x) => x.archivo === 'BACKLOG_PRUEBA.md')
+  assert.match(b.contenido, /Tres \(huella\)/)
+  assert.ok(!JSON.stringify(d.json).includes('token'))
+  assert.equal((await get('/api/datos', { host: `evil.com:${puerto}` })).estado, 403)
+})

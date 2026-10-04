@@ -75,6 +75,12 @@ node generar.mjs --abrir    # regenera y abre el navegador (arranca el servidor 
 Con servidor se pueden marcar casillas y añadir notas desde el navegador; abierto
 como `file://` el tablero es de solo lectura.
 
+**Actualización en vivo.** Con servidor, el tablero sondea `GET /api/version` cada ~3 s (una huella
+de mtimes de backlogs, planes de `~/.claude/plans`, notas, `.git/HEAD` y `.git/refs`; no lee contenido)
+y, si cambia, pide `GET /api/datos` y repinta conservando proyecto, pestaña, scroll y borradores. No
+repinta mientras editas un textarea ni con la pestaña oculta. La barra de estado muestra «● en vivo»
+o «◌ manual» (como `file://` sigue manual: el hook Stop regenera `index.html`).
+
 Seguridad: escucha solo en `127.0.0.1`, exige `Host` y `Origin` propios, solo
 acepta JSON y únicamente escribe los archivos `.md` que el tablero ya muestra.
 Si el archivo cambió desde que lo cargaste, responde 409 en vez de pisarlo.

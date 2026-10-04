@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tablero de proyectos</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect%7Bfill:%23b0532f%7D@media(prefers-color-scheme:dark)%7Brect%7Bfill:%23d97757%7D%7D%3C/style%3E%3Crect width='32' height='32' rx='6'/%3E%3Cpath d='M7 9h18M7 16h12M7 23h15' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <script>
 // Tema antes de pintar (sin parpadeo).
 (function () {
@@ -27,7 +28,7 @@
   --ok: light-dark(#3d7a37, #8cc265); --aviso: light-dark(#8a5d00, #e5c07b); --peligro: light-dark(#b3392f, #e06c75); --morado: light-dark(#7a4fb0, #c678dd);
   --azul: light-dark(#1f6fb2, #61afef); --cian: light-dark(#0f7a7a, #56b6c2);
   --barra: light-dark(#d9d0c0, #3a3731); --codigo: light-dark(#e9e2d4, #25231f); --sel: light-dark(#e8dccb, #2c2925);
-  --estado-fondo: light-dark(#005fb8, #007acc);
+  --estado-fondo: light-dark(#e3dbcb, #26241f);
   --alto-barra: 28px; --margen-rotulo: 14px;
   --prosa: var(--mono); --titulos: var(--mono); --tam: 14px; --radio: 0;
 }
@@ -185,11 +186,12 @@ ul.tareas ul.tareas { margin-left: 0; }
 .seg.est-hecho .bloque { color: var(--ok); } .seg.est-en-curso .bloque { color: var(--aviso); } .seg.est-pendiente .bloque { color: var(--barra); }
 
 /* ---------- Barra de estado (abajo, fija) ---------- */
-#barra-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 0 18px; position: sticky; bottom: 0; z-index: 5; background: var(--estado-fondo); color: #fff; font-size: 12.5px; padding: 3px 14px; }
+#barra-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 0 18px; position: sticky; bottom: 0; z-index: 5; background: var(--estado-fondo); color: var(--texto); border-top: 1px solid var(--borde); font-size: 12.5px; padding: 3px 14px; }
 #barra-estado button { background: none; border: 0; color: inherit; padding: 1px 0; cursor: pointer; }
 #barra-estado button:hover { text-decoration: underline; text-underline-offset: 2px; }
-#barra-estado :focus-visible { outline-color: #fff; }
-#barra-estado .rama-barra { font-weight: 700; background: rgb(255 255 255 / .16); padding: 1px 8px; }
+#barra-estado :focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
+#barra-estado .rama-barra { font-weight: 700; background: var(--acento); color: var(--sobre-acento); padding: 1px 8px; }
+#barra-estado .vivo { color: var(--ok); } #barra-estado .manual { color: var(--suave); }
 #barra-estado .derecha { margin-left: auto; }
 
 /* ---------- Rama: siempre visible ---------- */
@@ -402,6 +404,7 @@ let P = null, pestana = leer('tablero.pestana') || 'resumen', sel = {}, ramaFoco
 let modo = { backlogs: 'mapa', planes: 'mapa' };
 try { Object.assign(modo, JSON.parse(leer('tablero.modo') || '{}')); } catch {}
 const abiertos = new Map(); // «archivo#sección» → abierta/cerrada por el usuario
+let enVivo = false; // true mientras el sondeo de /api/version responde
 const borradores = new Map(); // ruta → texto sin guardar
 let editando = null; // ruta del .md en edición
 
@@ -660,6 +663,7 @@ function pintarNavegacion() {
     <button data-p="notas">✉ ${n} notas</button>
     ${porSincronizar() ? `<button data-p="integraciones">⇄ ${porSincronizar()} cambio${porSincronizar() === 1 ? '' : 's'} por sincronizar</button>` : ''}
     <span class="opcional">${editable() ? '✎ edición activa' : '◌ solo lectura'}</span>
+    <span class="${enVivo ? 'vivo' : 'manual'}" title="${enVivo ? 'Se actualiza solo cuando cambian los archivos' : 'Sin servidor: actualiza con el hook o recargando'}">${enVivo ? '● en vivo' : '◌ manual'}</span>
     <span class="derecha opcional">Actualizado ${esc(fecha(DATOS.generado))}</span>`;
 }
 
@@ -1051,6 +1055,31 @@ function irRama(nombre) {
   const barra = $('#barra-estado');
   const medir = () => document.documentElement.style.setProperty('--alto-barra', barra.offsetHeight + 'px');
   if (barra) { medir(); if (window.ResizeObserver) new ResizeObserver(medir).observe(barra); }
+}
+
+// Actualización en vivo (solo con el servidor local): sondea la huella barata y repinta si cambió.
+if (editable()) {
+  let version = null, ocupado = false;
+  const hayEdicion = () => editando || document.querySelector('#contenido textarea:focus, #contenido input:focus, #contenido select:focus');
+  const marcar = (v) => { if (enVivo !== v) { enVivo = v; pintarNavegacion(); } };
+  const sondear = async () => {
+    if (ocupado || document.hidden) return;
+    ocupado = true;
+    try {
+      const v = (await (await fetch('/api/version', { cache: 'no-store' })).json()).version;
+      marcar(true);
+      if (version === null) version = v;
+      else if (v !== version && !hayEdicion()) {
+        const nuevos = await (await fetch('/api/datos', { cache: 'no-store' })).json();
+        const y = window.scrollY;
+        recargarDatos(nuevos); pintar(); window.scrollTo({ top: y });
+        version = v;
+      }
+    } catch { marcar(false); } finally { ocupado = false; }
+  };
+  setInterval(sondear, 3000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) sondear(); });
+  sondear();
 }
 
 document.addEventListener('click', (e) => {

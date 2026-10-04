@@ -1,7 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
-- 2026-10-04 · rama `mejoras-ui` (sale de `backlog-mejoras`) · S1 hecha (alturas con `--alto-barra`, grafo con carriles fijos main/develop, cabecera de carriles, badges). Siguiente: S2 en la misma rama.
+- 2026-10-04 · rama `mejoras-ui` (sale de `backlog-mejoras`) · S1 y S2 hechas (barra en tonos del tema, favicon, `/api/version` + `/api/datos`, sondeo en vivo). Pendiente: comprobar en el navegador (sin navegador en la sesión) y fusionar `mejoras-ui`. Siguiente: S3 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
 
 ## H1 — Ajustes visuales
@@ -15,13 +15,13 @@ Solo `plantilla.html`. Causa probable del corte: `.panel-falta` (`max-height: ca
 
 ### S2 — Barra de estado, favicon y actualización en vivo · **Sonnet** · misma rama `mejoras-ui`
 `plantilla.html`, `generar.mjs`, `servidor.test.mjs`, README. PR de `mejoras-ui` al terminar.
-- [ ] `--estado-fondo` con colores del tema (p. ej. `--panel`/`--barra` con texto `--texto` y la rama en chip `--acento`), contraste AA en claro y oscuro; ajustar `#barra-estado :focus-visible`
-- [ ] Favicon SVG en línea (`<link rel="icon" href="data:image/svg+xml,…">`) con el acento del tema, en el `<head>` de `plantilla.html`
-- [ ] `GET /api/version`: huella barata (mtimes, sin `construir`) de backlogs, carpetas `docs`, `~/.claude/plans`, archivos de notas, `.git/HEAD` y `.git/refs` de cada repo, y la bitácora
-- [ ] `GET /api/datos`: devuelve `(await fresco(true)).datos`
-- [ ] Cliente: si `editable()`, sondear `/api/version` cada ~3 s (pausar con la pestaña oculta, sondear al volver); si cambia, pedir `/api/datos` y repintar conservando proyecto, pestaña, scroll y borradores sin guardar (no repintar con un textarea en edición). En `file://` sigue manual (el hook Stop ya regenera `index.html`)
-- [ ] Indicador «● en vivo» / «◌ manual» en la barra de estado
-- [ ] Tests de las dos rutas nuevas en `servidor.test.mjs` (Host/Origin igual que las demás)
+- [x] `--estado-fondo` con colores del tema (p. ej. `--panel`/`--barra` con texto `--texto` y la rama en chip `--acento`), contraste AA en claro y oscuro; ajustar `#barra-estado :focus-visible`
+- [x] Favicon SVG en línea (`<link rel="icon" href="data:image/svg+xml,…">`) con el acento del tema, en el `<head>` de `plantilla.html`
+- [x] `GET /api/version`: huella barata (mtimes, sin `construir`) de backlogs, carpetas `docs`, `~/.claude/plans`, archivos de notas, `.git/HEAD` y `.git/refs` de cada repo, y la bitácora
+- [x] `GET /api/datos`: devuelve `(await fresco(true)).datos`
+- [x] Cliente: si `editable()`, sondear `/api/version` cada ~3 s (pausar con la pestaña oculta, sondear al volver); si cambia, pedir `/api/datos` y repintar conservando proyecto, pestaña, scroll y borradores sin guardar (no repintar con un textarea en edición). En `file://` sigue manual (el hook Stop ya regenera `index.html`)
+- [x] Indicador «● en vivo» / «◌ manual» en la barra de estado
+- [x] Tests de las dos rutas nuevas en `servidor.test.mjs` (Host/Origin igual que las demás)
 
 ## H2 — Bitácora en el tablero
 Integrar `../BITACORA.md`: verla y completar Calidad / Seguridad / Notas de las filas `_pendiente_`.

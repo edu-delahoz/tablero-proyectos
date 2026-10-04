@@ -538,6 +538,33 @@ async function generar() {
   return datos
 }
 
+// ---------- Huella barata de lo que alimenta el tablero (solo mtimes y tamaños, sin leer contenido ni construir) ----------
+function huella() {
+  const marcas = []
+  const ver = (r) => { try { const s = statSync(r); marcas.push(`${r}:${s.mtimeMs}:${s.size}`); return s } catch { return null } }
+  const carpeta = (dir, filtro = () => true, profundo = false) => {
+    if (!ver(dir)?.isDirectory()) return
+    for (const f of readdirSync(dir).sort()) {
+      const r = join(dir, f)
+      if (profundo && statSync(r, { throwIfNoEntry: false })?.isDirectory()) carpeta(r, filtro, true)
+      else if (filtro(f)) ver(r)
+    }
+  }
+  carpeta(PLANES)
+  for (const p of proyectos) {
+    const patron = new RegExp(p.patronBacklogs || '^BACKLOG.*\\.md$', 'i')
+    for (const d of p.docs) carpeta(d, (f) => patron.test(f))
+    if (p.notas) ver(p.notas)
+    if (p.bitacora) ver(expandir(p.bitacora))
+    if (p.repo) {
+      const git = join(p.repo, '.git')
+      ver(join(git, 'HEAD')); ver(join(git, 'packed-refs'))
+      carpeta(join(git, 'refs'), () => true, true)
+    }
+  }
+  return createHash('sha1').update(marcas.join('\n')).digest('hex').slice(0, 16)
+}
+
 // ---------- Servidor local: el mismo tablero, pero puede guardar los .md ----------
 // Solo escucha en 127.0.0.1, exige Host/Origin propios y solo escribe archivos que el tablero ya muestra.
 export const PUERTO = Number(process.env.TABLERO_PUERTO) || 47321
@@ -566,6 +593,8 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
     try {
       if (req.method === 'GET' && (ruta === '/' || ruta === '/index.html')) return enviar(res, 200, (await fresco(true)).html, 'text/html; charset=utf-8')
       if (req.method === 'GET' && ruta === '/api/ping') return enviar(res, 200, { tablero: true })
+      if (req.method === 'GET' && ruta === '/api/version') return enviar(res, 200, { version: huella() })
+      if (req.method === 'GET' && ruta === '/api/datos') return enviar(res, 200, (await fresco(true)).datos)
       if (req.method !== 'POST') return enviar(res, 404, { error: 'no existe' })
       if (req.headers.origin !== `http://${host}` || !String(req.headers['content-type']).startsWith('application/json')) return enviar(res, 403, { error: 'origen no permitido' })
       const b = await leerCuerpo(req)
