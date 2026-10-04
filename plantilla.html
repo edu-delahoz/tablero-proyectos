@@ -1178,6 +1178,7 @@ function asignarFi(el) {
   if (k === 'id') { formInteg.idTocado = true; }
   c[k] = k === 'numero' ? (v === '' ? undefined : /^\d+$/.test(v) ? Number(v) : v) : v;
   formInteg.prueba = null;
+  if (k === 'organizacion') { const bt = document.querySelector('[data-fi-accion="destinos"]'); if (bt) bt.disabled = !c.organizacion || formInteg.cargando === 'destinos'; }
   if (k === 'id') { const av = document.getElementById('fi-aviso-id'); if (av) av.innerHTML = avisoRenombra(formInteg); }
 }
 function accionFi(a, boton) {
