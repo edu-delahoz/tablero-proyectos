@@ -279,14 +279,16 @@ function actualizarHistorial(p, backlogs) {
 }
 
 // ---------- Planes de Claude (~/.claude/plans), asignados por transcripción ----------
+// «planes» en proyectos.json asigna planes a mano: mandan sobre la transcripción y salen de los demás proyectos.
+const planesAsignados = new Map(proyectos.flatMap((p) => (p.planes || []).map((n) => [n, p.id])))
 function leerPlanes(p) {
-  if (!p.transcripciones || !existsSync(TRANSCRIPCIONES)) return []
-  const usados = new Map() // nombre -> Set(carpeta)
-  for (const d of readdirSync(TRANSCRIPCIONES)) {
+  const usados = new Map((p.planes || []).map((n) => [n, new Set(['(asignado)'])])) // nombre -> Set(carpeta)
+  for (const d of p.transcripciones && existsSync(TRANSCRIPCIONES) ? readdirSync(TRANSCRIPCIONES) : []) {
     if (!d.startsWith(p.transcripciones)) continue
     const salida = sh('grep', ['-ohE', 'plans/[A-Za-z0-9_-]+\\.md', '-r', '--include=*.jsonl', join(TRANSCRIPCIONES, d)], undefined, 20000) || ''
     for (const m of new Set(salida.split('\n').filter(Boolean))) {
       const nombre = basename(m)
+      if ((planesAsignados.get(nombre) ?? p.id) !== p.id) continue
       if (!usados.has(nombre)) usados.set(nombre, new Set())
       usados.get(nombre).add(d.slice(p.transcripciones.length).replace(/^-/, '') || '(raíz)')
     }

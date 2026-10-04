@@ -43,6 +43,7 @@ Lista de proyectos (ignorado por git; ver `proyectos.ejemplo.json`):
 | `patronBacklogs` | Expresión regular de los archivos a leer |
 | `notas` | Archivo de notas para Claude (se crea si no existe) |
 | `transcripciones` | Carpeta de `~/.claude/projects` para relacionar sesiones |
+| `planes` | Opcional: nombres de planes de `~/.claude/plans` asignados a mano; mandan sobre la transcripción y desaparecen de los demás proyectos |
 | `integraciones` | Conectores externos (GitHub Projects, Trello, Azure DevOps); ejemplos en el archivo de muestra |
 
 Las rutas aceptan `~`. Los backlogs usan `## H1 — Título`, `### S2 — Título · **Modelo** · rama \`x\``
