@@ -14,6 +14,11 @@ Cada proyecto tiene estas pestañas:
 - **Historial**: qué casillas cambiaron entre una generación y la siguiente.
 - **GitHub**: ramas, grafo de ramas y pull requests (requiere `gh`).
 - **Notas**: notas abiertas para Claude, que ve al iniciar cada sesión.
+- **Bitácora** (solo con el campo `bitacora`): totales (sesiones, costo, duración, % con contexto 🔴),
+  la tabla de sesiones del proyecto (casilla para ver todas y para «solo pendientes»), resumen semanal y
+  lecciones. Con el servidor local, las filas `_pendiente_` se completan ahí mismo (Calidad, Seguridad,
+  Notas → Guardar; Enter también guarda) y la barra de estado avisa «✎ N filas de bitácora pendientes».
+  Si la bitácora cambió afuera, recarga y conserva lo que habías escrito.
 - **Integraciones**: estado de cada conector (GitHub Projects, Trello y Azure DevOps), sus
   tarjetas por columna y el botón **Sincronizar** con vista previa. En el Mapa, cada casilla vinculada
   lleva un chip (`GH ↗`) y la barra de estado avisa «⇄ N cambios por sincronizar».
@@ -43,6 +48,7 @@ Lista de proyectos (ignorado por git; ver `proyectos.ejemplo.json`):
 | `patronBacklogs` | Expresión regular de los archivos a leer |
 | `notas` | Archivo de notas para Claude (se crea si no existe) |
 | `transcripciones` | Carpeta de `~/.claude/projects` para relacionar sesiones |
+| `bitacora` | Opcional: `BITACORA.md` de sesiones (la que llena `registrar_sesion.sh`); sin el campo no hay pestaña «Bitácora». Varios proyectos pueden apuntar al mismo archivo: cada fila se asocia a su proyecto por el id corto de sesión, buscando `<sid>*.jsonl` en las carpetas `transcripciones` (el prefijo más largo gana); las demás quedan «sin proyecto» |
 | `planes` | Opcional: nombres de planes de `~/.claude/plans` asignados a mano; mandan sobre la transcripción y desaparecen de los demás proyectos |
 | `integraciones` | Conectores externos (GitHub Projects, Trello, Azure DevOps); ejemplos en el archivo de muestra |
 
@@ -84,6 +90,12 @@ o «◌ manual» (como `file://` sigue manual: el hook Stop regenera `index.html
 Seguridad: escucha solo en `127.0.0.1`, exige `Host` y `Origin` propios, solo
 acepta JSON y únicamente escribe los archivos `.md` que el tablero ya muestra.
 Si el archivo cambió desde que lo cargaste, responde 409 en vez de pisarlo.
+
+**Bitácora.** `POST /api/bitacora` `{ ruta, sid, calidad, seguridad, notas, hash }` reescribe solo
+Calidad, Seguridad y Notas de la fila de esa sesión (calidad empieza por ✅, 🟡 o 🔴; sin saltos de
+línea; notas vacías conservan las que puso el hook; `|` se escapa como `\|`). `hash` es el de la bitácora
+cargada (`datos.proyectos[i].bitacora.hash`): si el archivo cambió —p. ej. cerró otra sesión y el hook
+añadió su fila— responde 409. Solo acepta la ruta declarada en `bitacora`.
 
 ## Conectores y credenciales
 

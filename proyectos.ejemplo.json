@@ -8,6 +8,7 @@
     "patronBacklogs": "^(BACKLOG|PLAN).*\\.md$",
     "notas": "~/Desarrollo/proyecto-ejemplo/docs/NOTAS_PARA_CLAUDE.md",
     "transcripciones": "-Users-ana-Desarrollo-proyecto-ejemplo",
+    "bitacora": "~/Desarrollo/metodologia-claude/BITACORA.md",
     "integraciones": [
       { "id": "gh", "tipo": "github-projects", "propietario": "usuario", "numero": 1, "backlog": "BACKLOG_MVP.md", "auto": false },
       { "id": "trello", "tipo": "trello", "tablero": "<idDelTablero>", "backlog": "BACKLOG_MVP.md",

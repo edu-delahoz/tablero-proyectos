@@ -1,17 +1,25 @@
 // Endpoints de sincronía del servidor local, en proceso, con un adaptador en memoria. node --test
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createServer, request } from 'node:http'
 
 const dir = mkdtempSync(join(tmpdir(), 'tablero-srv-'))
 const BACKLOG = join(dir, 'BACKLOG_PRUEBA.md')
 const INICIAL = '# Prueba\n\n## S1 — Base\n\n- [ ] Uno\n- [x] Dos\n'
 writeFileSync(BACKLOG, INICIAL)
+// Bitácora: copia del fixture en el temporal (nunca la real) y una transcripción falsa que la asocia.
+const BITACORA = join(dir, 'BITACORA.md')
+copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'BITACORA.md'), BITACORA)
+const TR = join(dir, 'transcripciones')
+mkdirSync(join(TR, '-prueba'), { recursive: true })
+writeFileSync(join(TR, '-prueba', 'bbbb2222-0000.jsonl'), '')
+process.env.TABLERO_TRANSCRIPCIONES = TR
 writeFileSync(join(dir, 'proyectos.json'), JSON.stringify([{
-  id: 'prueba', nombre: 'Prueba', docs: [dir], patronBacklogs: '^BACKLOG.*\\.md$',
+  id: 'prueba', nombre: 'Prueba', docs: [dir], patronBacklogs: '^BACKLOG.*\\.md$', bitacora: BITACORA, transcripciones: '-prueba',
   integraciones: [
     { id: 'gh', tipo: 'github-projects', propietario: 'usuario', numero: 1, backlog: 'BACKLOG_PRUEBA.md' },
     { id: 'tr', tipo: 'tipo-inexistente', backlog: 'BACKLOG_PRUEBA.md' },
@@ -129,4 +137,40 @@ test('/api/datos: devuelve los datos frescos sin tokens y rechaza Host ajeno', a
   assert.match(b.contenido, /Tres \(huella\)/)
   assert.ok(!JSON.stringify(d.json).includes('token'))
   assert.equal((await get('/api/datos', { host: `evil.com:${puerto}` })).estado, 403)
+})
+
+test('bitácora: /api/datos la trae parseada y asociada por sid', async () => {
+  const b = (await get('/api/datos')).json.proyectos[0].bitacora
+  assert.equal(b.ruta, BITACORA)
+  assert.equal(b.registro.find((f) => f.sid === 'bbbb2222').proyecto, 'prueba')
+  assert.equal(b.registro.find((f) => f.sid === 'aaaa1111').proyecto, null)
+  assert.deepEqual(b.lecciones.length, 2)
+})
+
+test('bitácora: POST reescribe solo la fila pedida; 409 si cambió; 400 si no valida; 403 si la ruta no es la bitácora', async () => {
+  const antes = readFileSync(BITACORA, 'utf8')
+  const { hash } = (await get('/api/datos')).json.proyectos[0].bitacora
+  const ok = { ruta: BITACORA, sid: 'bbbb2222', calidad: '✅', seguridad: 'sin prod', notas: 'bien', hash }
+  for (const opts of [{ host: `evil.com:${puerto}` }, { origin: 'http://evil.com' }, { tipo: 'text/plain' }]) assert.equal((await post('/api/bitacora', ok, opts)).estado, 403)
+  assert.equal((await post('/api/bitacora', { ...ok, ruta: BACKLOG })).estado, 403)
+  assert.equal((await post('/api/bitacora', { ...ok, ruta: '/etc/hosts' })).estado, 403)
+  assert.equal((await post('/api/bitacora', { ...ok, calidad: 'regular' })).estado, 400)
+  assert.equal((await post('/api/bitacora', { ...ok, notas: 'a\nb' })).estado, 400)
+  assert.equal((await post('/api/bitacora', { ...ok, hash: undefined })).estado, 400)
+  assert.equal((await post('/api/bitacora', { ...ok, sid: 'eeee5555' })).estado, 404)
+  assert.equal(readFileSync(BITACORA, 'utf8'), antes)
+
+  const r = await post('/api/bitacora', ok)
+  assert.equal(r.estado, 200)
+  const despues = readFileSync(BITACORA, 'utf8')
+  const distintas = antes.split('\n').filter((l, i) => l !== despues.split('\n')[i])
+  assert.deepEqual(distintas, ['| 2026-10-04 02:44 | Tablero barra de estado (bbbb2222) | auto | Opus 5.5 | ~31 min | $2.05 | ctx 61k→136k 🟡 | _pendiente_ | _pendiente_ | clear |'])
+  assert.match(despues, /\(bbbb2222\) .*\| ✅ \| sin prod \| bien \|$/m)
+  const fila = r.json.datos.proyectos[0].bitacora.registro.find((f) => f.sid === 'bbbb2222')
+  assert.equal(fila.pendiente, false)
+
+  // El hash viejo ya no vale: 409 y el archivo queda como está.
+  const c = await post('/api/bitacora', { ...ok, sid: 'dddd4444' })
+  assert.equal(c.estado, 409)
+  assert.equal(readFileSync(BITACORA, 'utf8'), despues)
 })

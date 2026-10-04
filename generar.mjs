@@ -6,7 +6,8 @@
 //   node generar.mjs --servir      → servidor local: sirve el tablero fresco y guarda las ediciones de los .md
 //   node generar.mjs --hook-inicio → (SessionStart) imprime contexto para Claude y regenera en segundo plano
 //   node generar.mjs --probar-conexiones → lectura mínima de cada integración (GitHub Projects, Trello, Azure DevOps)
-// Variables opcionales: TABLERO_PROYECTOS (otro proyectos.json), TABLERO_DATOS (otra carpeta datos/), TABLERO_PUERTO.
+// Variables opcionales: TABLERO_PROYECTOS (otro proyectos.json), TABLERO_DATOS (otra carpeta datos/), TABLERO_PUERTO,
+// TABLERO_TRANSCRIPCIONES (otra carpeta en lugar de ~/.claude/projects).
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, realpathSync } from 'node:fs'
 import { execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
@@ -17,12 +18,13 @@ import { fileURLToPath } from 'node:url'
 import { extraerMarcas, tareasLocales, planificarSincronia, aplicarSincronia } from './integraciones/sincronia.mjs'
 import { leerCredenciales, credencialesPara } from './integraciones/credenciales.mjs'
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
+import { parsearBitacora, sidsPorProyecto, asociar, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
 const DATOS = process.env.TABLERO_DATOS || join(AQUI, 'datos')
 const PLANES = join(homedir(), '.claude', 'plans')
-const TRANSCRIPCIONES = join(homedir(), '.claude', 'projects')
+const TRANSCRIPCIONES = process.env.TABLERO_TRANSCRIPCIONES || join(homedir(), '.claude', 'projects')
 const args = process.argv.slice(2)
 // Las apps de macOS y los hooks arrancan con un PATH mínimo: sin esto no encuentran gh ni git.
 process.env.PATH = ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':')
@@ -37,6 +39,7 @@ const proyectos = leerJson(CONFIG, []).map((p) => ({
   repo: p.repo && expandir(p.repo),
   docs: (p.docs || []).map(expandir),
   notas: p.notas && expandir(p.notas),
+  bitacora: p.bitacora && expandir(p.bitacora),
 }))
 
 const PLANTILLA_NOTAS = `# Notas para Claude
@@ -506,8 +509,18 @@ function leerNotas(p) {
   return { ruta: p.notas, contenido, abiertas, modificado: statSync(p.notas).mtime.toISOString() }
 }
 
+// ---------- Bitácora de sesiones (campo opcional «bitacora»; varios proyectos pueden compartir archivo) ----------
+// Cada fila lleva «proyecto» (por el sid de su transcripción) o null: la pestaña filtra «este proyecto / todas».
+function leerBitacoras() {
+  const rutas = [...new Set(proyectos.map((p) => p.bitacora).filter((r) => r && existsSync(r)))]
+  if (!rutas.length) return new Map()
+  const mapa = sidsPorProyecto(proyectos, TRANSCRIPCIONES)
+  return new Map(rutas.map((ruta) => [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa) }]))
+}
+
 async function recolectar(opciones = {}) {
   mkdirSync(DATOS, { recursive: true })
+  const bitacoras = leerBitacoras()
   return Promise.all(proyectos.map(async (p) => {
     let backlogs = leerBacklogs(p)
     let integraciones = await leerIntegraciones(p, backlogs, opciones)
@@ -522,7 +535,7 @@ async function recolectar(opciones = {}) {
       for (const x of integraciones) if (fallos.has(x.id)) Object.assign(x, { estado: 'error', mensaje: fallos.get(x.id) })
     }
     for (const x of integraciones) delete x._auto
-    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial: actualizarHistorial(p, backlogs), planes: leerPlanes(p), git: leerGit(p), notas: leerNotas(p), integraciones }
+    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial: actualizarHistorial(p, backlogs), planes: leerPlanes(p), git: leerGit(p), notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones }
   }))
 }
 
@@ -574,7 +587,7 @@ const INACTIVIDAD_MS = 6 * 3600e3
 export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alUsar = () => {} } = {}) {
   let cache = null
   const fresco = async (forzar) => { if (forzar || !cache || Date.now() - cache.t > 15000) cache = { t: Date.now(), ...(await construir(true, { adaptadores })) }; return cache }
-  const permitidas = async () => new Set((await fresco()).datos.proyectos.flatMap((p) => [...p.backlogs.map((b) => b.ruta), ...p.planes.map((x) => x.ruta), p.notas?.ruta]).filter(Boolean))
+  const permitidas = async () => new Set((await fresco()).datos.proyectos.flatMap((p) => [...p.backlogs.map((b) => b.ruta), ...p.planes.map((x) => x.ruta), p.notas?.ruta, p.bitacora?.ruta]).filter(Boolean))
   const enviar = (res, codigo, cuerpo, tipo = 'application/json; charset=utf-8') => {
     res.writeHead(codigo, { 'content-type': tipo, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
     res.end(typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo))
@@ -613,6 +626,15 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         writeFileSync(p.notas, anadirNota(readFileSync(p.notas, 'utf8'), texto.slice(0, 4000)))
         return enviar(res, 200, { ok: true, datos: (await fresco(true)).datos })
       }
+      // Bitácora: solo Calidad/Seguridad/Notas de la fila de esa sesión; 409 si el archivo cambió desde que se cargó.
+      if (ruta === '/api/bitacora') {
+        if (typeof b.ruta !== 'string' || !(await permitidas()).has(b.ruta) || !proyectos.some((p) => p.bitacora === b.ruta)) return enviar(res, 403, { error: 'Ese archivo no lo administra el tablero.' })
+        if (typeof b.hash !== 'string') return enviar(res, 400, { error: 'Falta el hash de la bitácora cargada.' })
+        const actual = readFileSync(b.ruta, 'utf8')
+        if (hashBitacora(actual) !== b.hash) return enviar(res, 409, { error: 'La bitácora cambió desde que la cargaste (quizá cerró otra sesión): recarga y vuelve a intentarlo.' })
+        writeFileSync(b.ruta, editarFila(actual, b))
+        return enviar(res, 200, { ok: true, datos: (await fresco(true)).datos })
+      }
       // Sincronía: el cliente solo manda claves y lados elegidos; el plan se recalcula aquí con datos frescos.
       if (ruta === '/api/sincronia/previa' || ruta === '/api/sincronia/aplicar') {
         const p = proyectos.find((x) => x.id === b.proyecto)
@@ -627,6 +649,7 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
       return enviar(res, 404, { error: 'no existe' })
     } catch (e) {
       if (e instanceof ErrorSincronia) return enviar(res, e.estado, { error: e.message, paso: e.extra?.paso })
+      if (e instanceof ErrorBitacora) return enviar(res, e.estado, { error: e.message })
       return enviar(res, 500, { error: String(e?.message || e) })
     }
   }
