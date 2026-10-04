@@ -515,8 +515,9 @@ function leerNotas(p) {
 function leerBitacoras() {
   const rutas = [...new Set(proyectos.map((p) => p.bitacora).filter((r) => r && existsSync(r)))]
   if (!rutas.length) return new Map()
-  const mapa = sidsPorProyecto(proyectos, TRANSCRIPCIONES)
-  return new Map(rutas.map((ruta) => [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa) }]))
+  const jsonl = new Map()
+  const mapa = sidsPorProyecto(proyectos, TRANSCRIPCIONES, jsonl)
+  return new Map(rutas.map((ruta) => [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa, jsonl) }]))
 }
 
 async function recolectar(opciones = {}) {

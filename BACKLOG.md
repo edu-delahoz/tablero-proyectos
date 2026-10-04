@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `notas-tablero` · S8 hecha, tests en verde (79 pasan, 2 omitidos): `bitacora.mjs` con `ramaDeTranscripcion` (cache por mtime), `sidsPorProyecto(…, rutas)` llena sid→.jsonl, `asociar(bit, mapa, rutas)` añade `rama` a cada fila, `agregar(registro, { por })` → `{ grupos, excluidas }`, `semanaISO`, `normalizarModelo`. Pendiente: probar S7 en el navegador. Siguiente: S9 (cargar skill `dataviz`).
 - 2026-10-04 · rama `notas-tablero` (sale de `busqueda-favoritos`) · S7 hecha, tests en verde (76 pasan, 2 omitidos): `estasAqui` salta a la siguiente no hecha (IEP → S6), `segmentos` pinta los `###`, proyecto persistente por id (`#p=` + `tablero.proyecto`). Notas 1 y 2 respondidas. Pendiente: probar en el navegador (`node generar.mjs --abrir`; IEP → Resumen y refrescar). Siguiente: S8.
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
@@ -20,9 +21,9 @@ Plan: `~/.claude/plans/quiero-que-planes-las-compressed-duckling.md`. Rama `nota
 
 ### S8 — Datos de la bitácora para los gráficos · **Sonnet** · rama `notas-tablero`
 `bitacora.mjs`, `bitacora.test.mjs`, `generar.mjs`, fixtures.
-- [ ] Rama por sesión: `sidsPorProyecto` guarda la ruta del `.jsonl`; primer `gitBranch` no vacío en las ~50 primeras líneas; cache por sid y mtime; cada fila con `rama` (o `null`)
-- [ ] `agregar(registro, { por: 'dia'|'semana'|'mes'|'rama'|'modelo' })` → `[{ clave, costo, minutos, sesiones }]`; semana ISO, modelo normalizado, fechas incompletas y costos «?» excluidos y contados aparte
-- [ ] Tests con fixture de transcripciones (`TABLERO_TRANSCRIPCIONES`) con `gitBranch`
+- [x] Rama por sesión: `sidsPorProyecto` guarda la ruta del `.jsonl`; primer `gitBranch` no vacío en las ~50 primeras líneas; cache por sid y mtime; cada fila con `rama` (o `null`)
+- [x] `agregar(registro, { por: 'dia'|'semana'|'mes'|'rama'|'modelo' })` → `[{ clave, costo, minutos, sesiones }]`; semana ISO, modelo normalizado, fechas incompletas y costos «?» excluidos y contados aparte
+- [x] Tests con fixture de transcripciones (`TABLERO_TRANSCRIPCIONES`) con `gitBranch`
 
 ### S9 — Gráficos en la pestaña Bitácora · **Sonnet** · rama `notas-tablero`
 `plantilla.html`, README. Cargar antes la skill `dataviz`.
