@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `plan-en-curso` (sale de `notas-tablero`) · S11 hecha, tests en verde (80 pasan, 2 omitidos): `plan` y `modelo` en `estructura()`, `enCurso`/`tarjetaEnCurso` en `plantilla.html` (arriba del Resumen y franja en «Todos los proyectos»); probada por CDP con copia de `datos/` y con S10 desmarcada en una copia del backlog. Nota respondida. Pendiente: que el usuario la pruebe (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `notas-tablero` · S10 hecha, tests en verde (79 pasan, 2 omitidos): vista «Todos los proyectos» (`vistaTodos`, `resumenProyecto`, `abrirProyecto` en `plantilla.html`; `todos` es un flag aparte de `P`, `#p=todos`); probada por CDP con copia de `datos/` (clic en tarjeta/enlaces, hash, recarga, sin guardado). H5 completa. PR #7 (base `busqueda-favoritos`). Pendiente: que el usuario la pruebe (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `notas-tablero` · S9 hecha, tests en verde (79 pasan, 2 omitidos): bloque «Gastos» en Bitácora (`grafTiempo`, `grafRamas`, `grafModelos` en `plantilla.html`, SVG en línea, paleta dataviz slots 1-3 validada, tooltip, tabla accesible); nota 3 respondida. Revisado con captura headless. Siguiente: S10.
 - 2026-10-04 · rama `notas-tablero` · S8 hecha, tests en verde (79 pasan, 2 omitidos): `bitacora.mjs` con `ramaDeTranscripcion` (cache por mtime), `sidsPorProyecto(…, rutas)` llena sid→.jsonl, `asociar(bit, mapa, rutas)` añade `rama` a cada fila, `agregar(registro, { por })` → `{ grupos, excluidas }`, `semanaISO`, `normalizarModelo`. Pendiente: probar S7 en el navegador. Siguiente: S9 (cargar skill `dataviz`).
@@ -8,6 +9,18 @@
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H6 — Plan en curso a la vista
+
+Plan: `~/.claude/plans/planea-para-resolver-mi-lazy-patterson.md`. Rama `plan-en-curso` (sale de `notas-tablero`). Sesión en **Sonnet**.
+
+### S11 — Tarjeta «En curso» · **Sonnet** · rama `plan-en-curso`
+`generar.mjs`, `generar.test.mjs`, `plantilla.html`, README.
+- [x] `estructura()` guarda `plan` (de «Plan: …/plans/x.md») y saca `modelo` de la etiqueta del prompt («S7 — Sonnet»); tests
+- [x] `enCurso(p)` y `tarjetaEnCurso(p, compacta)`: avance por sesión, gasto de la rama, qué falta y prompt destacado con Copiar
+- [x] Tarjeta arriba del Resumen y franja «En curso» en «Todos los proyectos»
+- [x] Prueba por CDP con copia de `datos/` (incluida una con S10 desmarcada) y README
+- [x] Responder la nota en `NOTAS_TABLERO.md` y moverla a «Respondidas»
 
 ## H5 — Notas del usuario y vista general
 

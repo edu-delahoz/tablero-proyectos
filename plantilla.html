@@ -298,6 +298,8 @@ a.chip-ext:hover { border-color: var(--azul); }
 .boton.primario::before { color: inherit; }
 .boton[disabled] { opacity: .55; cursor: progress; }
 .bit-totales { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0 0 10px; }
+.en-curso { border-left: 3px solid var(--acento); min-width: 0; overflow-wrap: anywhere; }
+.en-curso .prompt-copiable pre { max-height: 14em; overflow: auto; }
 .bit-totales b { font-family: var(--mono); font-size: 1.15em; }
 .buscador { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0 0 10px; font-size: .9em; }
 .buscador input[type=search] { flex: 1 1 220px; max-width: 360px; font: inherit; padding: 4px 8px; color: var(--texto); background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio); }
@@ -689,9 +691,8 @@ function mapaPlan(doc) {
 }
 
 // ---------- Resumen: mapa en miniatura ----------
-function segmentos(b) {
-  const secs = aplanar(b.estructura).filter((s) => s.estado !== 'doc');
-  return `<div class="segmentos" aria-label="Avance por sección">${secs.map((s) => `<button class="seg est-${s.estado}${s.id === b.aqui ? ' actual' : ''}" style="--p:${pct(s.hechas, s.total)}%" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${s.id}"
+function segmentos(b, secs = aplanar(b.estructura).filter((s) => s.estado !== 'doc'), aqui = b.aqui) {
+  return `<div class="segmentos" aria-label="Avance por sección">${secs.map((s) => `<button class="seg est-${s.estado}${s.id === aqui ? ' actual' : ''}" style="--p:${pct(s.hechas, s.total)}%" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${s.id}"
       title="${esc(plano(s.titulo))} · ${s.hechas}/${s.total}" aria-label="${esc(s.clave || plano(s.titulo))}: ${ETIQUETA[s.estado]}, ${s.hechas} de ${s.total}"><span class="bloque" aria-hidden="true">${GLIFO_SEG[s.estado]}</span><span class="clave" aria-hidden="true">${esc(s.clave || '·')}</span></button>`).join('')}</div>`;
 }
 
@@ -1131,7 +1132,8 @@ const VISTAS = {
     const ult = P.planes[0];
     const favs = P.backlogs.flatMap((b) => aplanar(b.estructura || []).filter(esFavorita).map((s) => ({ b, s })));
     const sesActual = g?.rama ? sesionesDeRama(g.rama) : [];
-    return `<div class="rejilla">
+    const ec = enCurso(P);
+    return `${tarjetaEnCurso(P)}<div class="rejilla"${ec ? ' style="margin-top:14px"' : ''}>
       ${bl.map((b) => `<section class="tarjeta">
         <h2><span>${esc(b.archivo)}</span><small>${hace(b.modificado)}</small></h2>
         <div>${barra(b.hechas, b.total, 20)}</div><div class="suave">${b.hechas} de ${b.total} tareas (${pct(b.hechas, b.total)} %)</div>
@@ -1155,7 +1157,7 @@ const VISTAS = {
         <p>${P.notas ? `<button class="boton" data-p="notas">${editable() ? 'Añadir nota' : 'Ver notas'}</button>` : ''}</p>
       </section>
       ${favs.length ? `<section class="tarjeta"><h2><span>★ Sesiones favoritas</span><small>${favs.length}</small></h2><div class="sesiones">${favs.map(botonSesion).join('')}</div></section>` : ''}
-      ${ult ? `<section class="tarjeta"><h2><span>Último plan</span><small>${hace(ult.modificado)}</small></h2>
+      ${ult && ec?.plan?.nombre !== ult.nombre ? `<section class="tarjeta"><h2><span>Último plan</span><small>${hace(ult.modificado)}</small></h2>
         <div>${esc(ult.titulo)}</div><p><button class="boton" data-ir="planes" data-sel="${esc(ult.nombre)}">Abrir plan</button></p></section>` : ''}
     </div>`;
   },
@@ -1246,6 +1248,45 @@ function filaPR(pr, sinFila) {
   return sinFila ? `<span style="display:inline-flex;gap:8px;justify-content:space-between;width:calc(100% - 20px)">${dentro}</span>` : `<div class="fila">${dentro}</div>`;
 }
 
+// ---------- Plan en curso ----------
+// Puro: recibe un proyecto y devuelve el hito/plan en que se trabaja (o null si no hay backlog con «estás aquí»).
+function enCurso(p) {
+  const b = resumenProyecto(p).principal;
+  const aqui = b && aplanar(b.estructura || []).find((x) => x.id === b.aqui);
+  if (!aqui) return null;
+  const hito = (b.estructura || []).find((x) => aplanar([x]).some((y) => y.id === aqui.id)) || aqui;
+  const sesiones = (hito.hijas.length ? hito.hijas : [hito]).filter((x) => x.estado !== 'doc');
+  const nombre = hito.plan || aqui.plan;
+  const plan = nombre ? p.planes.find((x) => x.nombre === nombre) : null;
+  const prompts = [...(plan ? aplanar(plan.estructura) : []), ...aplanar(b.estructura)].flatMap((x) => x.prompts);
+  const destacado = !hito.estado.startsWith('hecho') && aqui.clave ? prompts.find((x) => x.clave === aqui.clave) : null;
+  const rama = aqui.meta?.rama || hito.meta?.rama || null;
+  const filas = rama ? (p.bitacora?.registro || []).filter((f) => f.rama === rama) : [];
+  const gasto = filas.length ? { ...(agregarBit(filas, 'rama').grupos[0] || { costo: 0, minutos: 0, sesiones: 0 }), sesionesTotal: filas.length } : null;
+  return { backlog: b, hito, sesiones, aqui, plan, prompts, destacado, rama, gasto, completo: hito.estado === 'hecho' };
+}
+function tarjetaEnCurso(p, compacta = false) {
+  const c = enCurso(p);
+  if (!c) return '';
+  const { backlog: b, hito, sesiones, aqui, plan, destacado, gasto } = c;
+  const resto = c.prompts.filter((x) => x !== destacado);
+  const hechas = sesiones.filter((x) => x.estado === 'hecho').length;
+  const falta = c.completo ? [] : aplanar([aqui]).flatMap((x) => x.tareas.filter((t) => !t.hecha)).slice(0, 3);
+  const botones = compacta
+    ? `<button class="boton" data-proy="${esc(p.id)}" data-pest="resumen">Abrir proyecto</button>`
+    : `${plan ? `<button class="boton" data-ir="planes" data-sel="${esc(plan.nombre)}">Abrir plan</button> ` : ''}<button class="boton" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${aqui.id}">Ver en backlog</button>`;
+  return `<section class="tarjeta en-curso" aria-label="Plan en curso">
+    <h2><span>${c.completo ? `✓ ${esc(corto(plano(hito.titulo), 70))} completo` : `▶ En curso · ${esc(corto(plano(hito.titulo), 70))}`}</span><small>${plan ? hace(plan.modificado) : hace(b.modificado)}</small></h2>
+    <div class="chips-proy">${compacta ? `<span class="etq">${esc(p.nombre)}</span>` : ''}${c.rama ? `<span class="etq" title="Rama">⎇ ${esc(c.rama)}</span>` : ''}${chips({ modelo: aqui.meta?.modelo || destacado?.modelo })}</div>
+    ${segmentos(b, sesiones, c.completo ? null : aqui.id)}
+    <div>${barra(hito.hechas, hito.total, 20)}</div>
+    <div class="suave">${hechas}/${sesiones.length} sesiones · ${hito.hechas}/${hito.total} tareas${gasto ? ` · ${usd(gasto.costo)} en la rama (${gasto.sesionesTotal} ses.)` : ''}</div>
+    ${!compacta && falta.length ? `<div class="rotulo">Falta</div><ul class="tareas">${falta.map((t) => `<li>${CASILLA()[0]} ${esc(corto(plano(t.texto), 110))}</li>`).join('')}</ul>` : ''}
+    ${destacado ? `<div class="rotulo">Siguiente prompt · ${esc(destacado.clave)}</div>${promptsHtml([destacado])}` : ''}
+    ${resto.length ? `<details class="grupo"><summary class="rotulo">Otros prompts (${resto.length})</summary>${promptsHtml(resto)}</details>` : ''}
+    <p>${botones}</p></section>`;
+}
+
 // ---------- Vista «Todos los proyectos» ----------
 const hoyMenos = (d) => new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
 function resumenProyecto(p) {
@@ -1280,7 +1321,9 @@ function vistaTodos() {
         ${r.p.bitacora ? ir(r, 'bitacora', `✎ ${r.bit} pendiente${r.bit === 1 ? '' : 's'}`) : ''}
         <span class="suave" title="Costo de los últimos 7 días (bitácora)">${usd(r.costo7)} · 7 d</span>
       </div></section>`;
+  const reciente = rs.filter((r) => enCurso(r.p)).sort((a, b) => new Date(b.ultima || 0) - new Date(a.ultima || 0))[0];
   return `<div class="bit-totales" aria-label="Totales globales"><span><b>${rs.length}</b> proyectos</span><span><b>${suma('hechas')}/${suma('total')}</b> tareas</span><span><b>${suma('prs')}</b> PR abiertos</span><span><b>${suma('notas')}</b> notas abiertas</span><span><b>${suma('bit')}</b> bitácora pendiente</span><span><b>${usd(suma('costo7'))}</b> costo 7 d</span></div>
+    ${reciente ? tarjetaEnCurso(reciente.p, true) : ''}
     <div class="rejilla" style="margin-top:14px">${rs.map(tarjeta).join('')}</div>`;
 }
 function abrirProyecto(id, pest) {
