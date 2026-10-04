@@ -14,7 +14,7 @@ Cada proyecto tiene estas pestañas:
 - **Historial**: qué casillas cambiaron entre una generación y la siguiente.
 - **GitHub**: ramas, grafo de ramas y pull requests (requiere `gh`).
 - **Notas**: notas abiertas para Claude, que ve al iniciar cada sesión.
-- **Integraciones**: estado de cada conector (GitHub Projects; Trello y Azure DevOps en camino), sus
+- **Integraciones**: estado de cada conector (GitHub Projects, Trello y Azure DevOps), sus
   tarjetas por columna y el botón **Sincronizar** con vista previa. En el Mapa, cada casilla vinculada
   lleva un chip (`GH ↗`) y la barra de estado avisa «⇄ N cambios por sincronizar».
 
@@ -96,12 +96,16 @@ afuera).
 | Campo | Para qué |
 |---|---|
 | `id` | Nombre corto; es el prefijo de la marca en el `.md` (`<!-- gh:… -->`) y de `## Entrante (gh)` |
-| `tipo` | `github-projects` (disponible); `trello` y `azure-devops` (próximamente) |
+| `tipo` | `github-projects`, `trello` o `azure-devops` |
 | `backlog` | Archivo (dentro de `docs`) cuyas casillas se sincronizan |
 | `auto` | `true`: al regenerar se aplica todo lo que no sea conflicto, sin vista previa |
 | `propietario`, `numero` | GitHub Projects: usuario u organización y número del Project (`github.com/users/<propietario>/projects/<numero>`) |
 | `campoEstado`, `columnas` | GitHub Projects, opcionales: campo de selección (por defecto `Status`) y opciones `{ "pendiente": "Todo", "hecho": "Done" }` |
 | `campoSeccion` | GitHub Projects, opcional: campo de **texto** donde va la sección (por defecto `Sección`; si no existe, no se envía) |
+| `tablero` | Trello: id del tablero (el código de la URL `trello.com/b/<id>/…`, o el `id` que devuelve añadir `.json` a esa URL) |
+| `organizacion`, `proyecto`, `tipoItem` | Azure DevOps: `dev.azure.com/<organizacion>/<proyecto>`; `tipoItem` es el tipo de work item (por defecto `Task`) |
+| `columnas` (Trello) | Nombres de lista: `hecho` (por defecto «Hecho» o «Done») y `pendiente` (por defecto «Por hacer», «To Do» o la primera lista distinta de hecho). La sección se envía como etiqueta de la tarjeta |
+| `columnas` (Azure DevOps) | Estados: `hecho` (por defecto `Done`, `Closed`, `Completed`) y `pendiente` (por defecto `To Do`, `New`); admiten texto o lista. La sección se envía como tag |
 
 **Cómo funciona la sincronía.** El vínculo casilla ↔ tarjeta es un comentario al final de la línea,
 invisible en el Markdown renderizado: `- [ ] Probar el login <!-- gh:PVTI_… -->` (puede haber varias
@@ -151,6 +155,14 @@ chmod 600 ~/.config/tablero/credenciales.json   # el tablero avisa si los permis
 | GitHub Projects | Ninguna en el archivo: usa la sesión de `gh` con el scope `project` (`gh auth refresh -s project`) | — |
 | Trello | `trello.key` y `trello.token` | `TRELLO_KEY`, `TRELLO_TOKEN` |
 | Azure DevOps | `azure-devops.pat` (permiso *Work Items: Read & write*) | `AZURE_DEVOPS_PAT` |
+
+**Trello.** Entra en <https://trello.com/power-ups/admin>, crea un Power-Up (o abre uno propio) y copia la
+*API key*; desde ese mismo panel genera un *Token* con permiso de lectura y escritura. Para el `tablero`,
+usa el código de la URL del tablero (`trello.com/b/<id>/nombre`).
+
+**Azure DevOps.** En *User settings → Personal access tokens → New token*, con el alcance
+*Work Items: Read & write* y la organización elegida; copia el PAT al crearlo (no se vuelve a mostrar).
+Si el PAT es inválido, Azure responde con una página de login y el tablero lo traduce a «credencial inválida».
 
 Para usar otra credencial en una integración concreta, añade una entrada con su `id`
 (`"trello-cliente": { "token": "…" }`); se combina con la del tipo. `credenciales*.json` está en
