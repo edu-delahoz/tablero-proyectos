@@ -424,3 +424,118 @@ test('estadoConfiguracion: proyecto vacío → todo pendiente; el tablero → re
   assert.equal(est.github.hecho, false)
   assert.equal(est.integraciones.hecho, false)
 })
+
+// ---------- H11: retomar en lenguaje natural y «Qué se busca» ----------
+const { retomarDe, hechosRetomar, contextoDePlan, plantillaBacklog: plantillaB } = await import('./generar.mjs')
+const { utimesSync } = await import('node:fs')
+
+test('estructura: descripcion = primer párrafo plano bajo el título; historia gana con «Historia:|Objetivo:|Para qué:»', () => {
+  const arbol = estructura([
+    '## H1 — Login', '',
+    'Primer párrafo con **negrita** y `código`',
+    'que sigue en otra línea.', '',
+    'Segundo párrafo que no entra.',
+    'Historia: Como usuario, quiero entrar con Google, para no recordar otra clave.',
+    '- [ ] tarea', '',
+    '### S1 — Sin texto · **Opus**',
+    '- [ ] algo',
+    'Texto después de las casillas: no es descripción.',
+    '## H2 — Tabla primero',
+    '| a | b |', '|---|---|',
+    'Párrafo tras la tabla: no cuenta.',
+    '## H3 — Objetivo en viñeta',
+    '- **Objetivo:** que el `Resumen` diga qué se busca.',
+    '## H4 — Para qué',
+    'Para qué: cerrar el mes sin Excel.',
+  ].join('\n'))
+  const h1 = porClave(arbol, 'H1')
+  assert.equal(h1.descripcion, 'Primer párrafo con negrita y código que sigue en otra línea.')
+  assert.equal(h1.historia, 'Como usuario, quiero entrar con Google, para no recordar otra clave.')
+  assert.equal(h1.estado, 'pendiente', 'cerrarSeccion conserva los campos')
+  const s1 = porClave(arbol, 'S1')
+  assert.equal(s1.descripcion, undefined)
+  assert.equal(s1.historia, undefined)
+  assert.equal(porClave(arbol, 'H2').descripcion, undefined, 'tablas, listas y casillas no son descripción')
+  assert.equal(porClave(arbol, 'H3').historia, 'que el Resumen diga qué se busca.')
+  assert.equal(porClave(arbol, 'H4').historia, 'cerrar el mes sin Excel.')
+  assert.equal(porClave(arbol, 'H4').descripcion, undefined, 'la línea de historia no se repite como descripción')
+  const largo = estructura(`## H9 — Largo\n${'palabra '.repeat(200)}\n`)
+  assert.ok(largo[0].descripcion.length <= 600)
+})
+
+test('contextoDePlan: primer párrafo bajo «## Context» o «## Contexto»', () => {
+  assert.equal(contextoDePlan(estructura('# Plan\n\n## Context\n\nEl usuario quiere **retomar** sin leer commits.\nSegunda línea.\n\nOtro párrafo.\n\n## Pasos\n1. a\n')),
+    'El usuario quiere retomar sin leer commits. Segunda línea.')
+  assert.equal(contextoDePlan(estructura('# Plan\n\n## Contexto\nBreve.\n')), 'Breve.')
+  assert.equal(contextoDePlan(estructura('# Plan\n\n## Pasos\n1. a\n')), null)
+})
+
+test('retomarDe: la viñeta «Para retomar (fecha):» más reciente, o null', () => {
+  const estado = [
+    '- 2026-10-02 · rama `x` · S3 hecha. Siguiente: **S4**.',
+    '- Para retomar (2026-10-02): Estabas dejando listo el login.',
+    '  Falta probarlo en el móvil.',
+    '- **Para retomar (2026-10-04):** Ya funciona el login; sigue el registro.',
+    '- 2026-10-01 · S2 hecha.',
+  ].join('\n')
+  assert.deepEqual(retomarDe(estado), { fecha: '2026-10-04', texto: 'Ya funciona el login; sigue el registro.' })
+  assert.deepEqual(retomarDe(estado.split('\n').slice(0, 3).join('\n')), { fecha: '2026-10-02', texto: 'Estabas dejando listo el login. Falta probarlo en el móvil.' })
+  assert.equal(retomarDe('- 2026-10-01 · S2 hecha.'), null)
+  assert.equal(retomarDe(''), null)
+  assert.equal(retomarDe(undefined), null)
+})
+
+test('estasAqui: la viñeta «Para retomar» no tapa la línea de estado', () => {
+  const arbol = estructura('## Estado\n\n## S1 — Uno\n- [x] a\n## S2 — Dos\n- [ ] b\n## S3 — Tres\n- [ ] c\n')
+  const estado = '- Para retomar (2026-10-04): Seguías con S2, falta S3.\n- 2026-10-04 · Siguiente: **S3**.'
+  assert.equal(estasAqui(arbol, estado), porClave(arbol, 'S3').id)
+})
+
+test('hechosRetomar: rama, siguiente, commits, PR y última sesión de Claude (fixture)', () => {
+  const TR = join(AQUI, 'fixtures', 'transcripciones')
+  const f = (d, s) => join(TR, d, `${s}-0000-0000-0000-000000000000.jsonl`)
+  utimesSync(f('-Users-x-demo', 'aaaa1111'), new Date('2026-09-20T10:00:00Z'), new Date('2026-09-20T10:00:00Z'))
+  utimesSync(f('-Users-x-demo-api', 'bbbb2222'), new Date('2026-09-28T18:00:00Z'), new Date('2026-09-28T18:00:00Z'))
+  utimesSync(f('-Users-x-demoOtro', 'cccc3333'), new Date('2026-10-03T09:00:00Z'), new Date('2026-10-03T09:00:00Z'))
+  const contenido = '# B\n\n## Estado\n- 2026-09-28 · Siguiente: **S2**.\n\n## S1 — Base\n- [x] a\n\n## S2 — Registro\n- [x] b\n- [ ] c\n  - [ ] c1\n- [ ] d\n'
+  const est = estructura(contenido)
+  const b = { archivo: 'BACKLOG.md', contenido, modificado: '2026-09-25T12:00:00.000Z', estructura: est, aqui: estasAqui(est, '- 2026-09-28 · Siguiente: **S2**.') }
+  const git = {
+    rama: 'registro',
+    commits: [
+      { oid: 'b', fecha: '2026-09-27T09:00:00+00:00', titulo: 'Formulario de registro' },
+      { oid: 'a', fecha: '2026-09-28T08:00:00+00:00', titulo: 'Validar el correo' },
+    ],
+    prs: [{ number: 3, state: 'OPEN' }, { number: 2, state: 'MERGED' }, { number: 4, state: 'OPEN' }],
+    sinPush: ['a'],
+  }
+  const h = hechosRetomar({ transcripciones: '-Users-x-demo', git }, b, { transcripciones: TR, ahora: new Date('2026-10-04T18:00:00Z') })
+  assert.deepEqual(h.ultimaSesionClaude, { titulo: 'Probar la API de pagos', fecha: '2026-09-28T18:00:00.000Z' }, 'la más reciente del proyecto (subcarpetas sí, «-demoOtro» no); título solo de las primeras líneas')
+  assert.equal(h.ultimaActividad, '2026-09-28T18:00:00.000Z')
+  assert.equal(h.diasSinActividad, 6)
+  assert.equal(h.rama, 'registro')
+  assert.deepEqual(h.siguiente, { clave: 'S2', titulo: 'S2 — Registro' })
+  assert.equal(h.pendientesSiguiente, 3)
+  assert.deepEqual(h.ultimoCommit, { titulo: 'Validar el correo', fecha: '2026-09-28T08:00:00+00:00' })
+  assert.equal(h.prsAbiertos, 2)
+  assert.equal(h.commitsSinSubir, 1)
+
+  // Con frente activo, lo siguiente es la sub-sesión que sigue y sus casillas abiertas.
+  const conFrente = { ...b, activo: { subsesiones: [{ clave: 'S2a', titulo: 'Correo', estado: 'hecho', abiertas: [] }, { clave: 'S2b', titulo: 'Contraseña', estado: 'siguiente', abiertas: ['x', 'y'] }] } }
+  const hf = hechosRetomar({ transcripciones: '-Users-x-demo', git }, conFrente, { transcripciones: TR, ahora: new Date('2026-10-04T18:00:00Z') })
+  assert.deepEqual(hf.siguiente, { clave: 'S2b', titulo: 'S2b — Contraseña' })
+  assert.equal(hf.pendientesSiguiente, 2)
+
+  // Sin git, sin transcripciones y sin backlog: todo null salvo lo que se sabe.
+  const vacio = hechosRetomar({}, null, { transcripciones: TR, ahora: new Date('2026-10-04T18:00:00Z') })
+  assert.deepEqual(vacio, { ultimaActividad: null, diasSinActividad: null, rama: null, siguiente: null, pendientesSiguiente: 0, ultimoCommit: null, prsAbiertos: 0, commitsSinSubir: 0, ultimaSesionClaude: null })
+})
+
+test('plantillaBacklog: trae «Para retomar» en Estado e «Historia:» en S1, sin romper «estás aquí»', () => {
+  const t = plantillaB('Demo', '2026-10-04')
+  assert.match(t, /^- Para retomar \(2026-10-04\): .+/m)
+  assert.ok(retomarDe(t.match(/## Estado\n([\s\S]*?)\n## /)[1]))
+  const arbol = estructura(t)
+  assert.ok(porClave(arbol, 'S1').historia)
+  assert.equal(estasAqui(arbol, t.match(/## Estado\n([\s\S]*?)\n## /)[1]), porClave(arbol, 'S1').id)
+})

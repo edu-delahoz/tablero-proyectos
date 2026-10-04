@@ -28,6 +28,18 @@ Cada proyecto tiene estas pestañas:
   tarjetas por columna y el botón **Sincronizar** con vista previa. En el Mapa, cada casilla vinculada
   lleva un chip (`GH ↗`) y la barra de estado avisa «⇄ N cambios por sincronizar».
 
+### Para retomar y «Qué se busca» (convenciones del backlog)
+
+- **`- Para retomar (AAAA-MM-DD): …`** en `## Estado`: 2–4 frases en lenguaje natural (sin claves, commits
+  ni conteos) sobre qué se estaba haciendo, qué quedó listo y por dónde seguir. La escribe quien cierra la
+  sesión (skill `/relevo`), debajo de la línea de estado; manda la de fecha más reciente (`b.retomar`) y no
+  cuenta para «estás aquí». Junto a ella el tablero pone hechos automáticos (`p.retomar`: última actividad y
+  días sin tocarlo, rama, lo siguiente y sus pasos pendientes, último commit, PRs abiertos, commits sin subir
+  y la última sesión de Claude con su título).
+- **`Historia:`** (o `Objetivo:` / `Para qué:`) bajo el título de un hito: «Como <quién>, quiero <qué>, para
+  <para qué>.» Es el «Qué se busca» de la tarjeta En curso (`historia`); si falta, el primer párrafo bajo el
+  título (`descripcion`) o el primer párrafo de `## Context` del plan (`contexto`).
+
 ## Instalación
 
 Requisitos: Node.js ≥ 20. Opcional: [`gh`](https://cli.github.com) autenticado para la pestaña GitHub.

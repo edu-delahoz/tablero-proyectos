@@ -9,7 +9,7 @@
 //   node generar.mjs --probar-conexiones → lectura mínima de cada integración (GitHub Projects, Trello, Azure DevOps)
 // Variables opcionales: TABLERO_PROYECTOS (otro proyectos.json), TABLERO_DATOS (otra carpeta datos/), TABLERO_PUERTO,
 // TABLERO_TRANSCRIPCIONES (otra carpeta en lugar de ~/.claude/projects).
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, realpathSync, openSync, closeSync, appendFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, realpathSync, openSync, readSync, closeSync, appendFileSync } from 'node:fs'
 import { execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
@@ -140,8 +140,10 @@ export const plantillaBacklog = (nombre, fecha) => `# Backlog — ${nombre}
 
 ## Estado
 - ${fecha} · backlog creado desde el tablero.
+- Para retomar (${fecha}): Backlog recién creado; aún no se empezó nada. Lo primero es describir la primera tarea de S1.
 
 ## S1 — Primera sesión
+Historia: Como <quién>, quiero <qué>, para <para qué>.
 - [ ] Describe aquí la primera tarea
 `
 
@@ -205,6 +207,10 @@ const RE_CERCA = /^\s*(```|~~~)/
 const RE_COMO = /c[oó]mo ejecutarlo/i
 const RE_ITEM = /^ ?(\d+[.)]|[-*])\s+(?!\[[ xX]\])(.+)$/
 const RE_DURACION = /\s*\(([^()]*\b(?:d[ií]as?|d|semanas?|sem|horas?|h)\b[^()]*)\)\s*$/i
+// «Qué se busca»: línea «Historia:|Objetivo:|Para qué:» (también en viñeta o en negrita); la descripción es el primer
+// párrafo de texto corrido bajo el título (sin casillas, listas, tablas, citas ni código).
+const RE_HISTORIA = /^\s*(?:[-*]\s+)?\**\s*(?:Historia|Objetivo|Para qu[eé])\s*:\s*\**\s*(.+)$/i
+const esParrafo = (l) => !/^\s*(?:[-*+]|\d+[.)])\s|^\s*\||^\s*<!--|^\s*(?:-{3,}|\*{3,}|_{3,})\s*$|^\s{4,}/.test(l)
 export const plano = (t) => String(t).replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*|__|`/g, '').trim()
 
 // «S1 — Migración … · **Opus** · rama `x`» → { titulo, clave: 'S1', meta: { modelo, rama, duracion, cerrado, nota } }
@@ -250,7 +256,7 @@ const textoDeCita = (lineas) => lineas.map((l) => l.replace(/^\s*>\s?/, '').trim
 // Árbol de secciones: [{ id, linea, titulo, tituloCrudo, clave, nivel, meta, hechas, total, estado, tareas:[{texto,hecha,linea,hijas,marcas?}], items, prompts:[{etiqueta,texto,clave,modelo}], hijas:[sección] }]
 export function estructura(texto) {
   const raiz = []
-  let padre = null, actual = null, pila = [], cerca = null, cita = null, rotulo = null, n = 0
+  let padre = null, actual = null, pila = [], cerca = null, cita = null, rotulo = null, n = 0, intro = false
   const cuenta = () => RE_COMO.test(plano(actual.titulo)) || (actual.nivel === 3 && padre && RE_COMO.test(plano(padre.titulo)))
   const emitir = (lineas, rot, esCita) => {
     const texto = esCita ? textoDeCita(lineas) : lineas.join('\n')
@@ -261,6 +267,7 @@ export function estructura(texto) {
   }
   for (const [i, linea] of String(texto).replace(/\t/g, '    ').split('\n').entries()) {
     if (RE_CERCA.test(linea)) {
+      intro = false
       if (cita) { emitir(cita.lineas, cita.rotulo, true); cita = null }
       if (cerca) { emitir(cerca.lineas, cerca.rotulo, false); cerca = null } else cerca = { rotulo, lineas: [] }
       rotulo = null
@@ -268,6 +275,7 @@ export function estructura(texto) {
     }
     if (cerca) { cerca.lineas.push(linea); continue }
     if (/^\s*>/.test(linea)) {
+      intro = false
       if (!cita) cita = { rotulo, lineas: [] }
       cita.lineas.push(linea)
       continue
@@ -280,8 +288,15 @@ export function estructura(texto) {
       const s = { id: `s${n++}`, nivel, linea: i, tituloCrudo: t[2], ...analizarTitulo(t[2]), tareas: [], items: [], prompts: [], hijas: [] }
       if (nivel === 3 && padre) padre.hijas.push(s)
       else { raiz.push(s); if (nivel === 2) padre = s }
-      actual = s; pila = []; rotulo = null
+      actual = s; pila = []; rotulo = null; intro = true
       continue
+    }
+    const hist = actual && linea.match(RE_HISTORIA)
+    if (hist) { actual.historia ??= plano(hist[1]).slice(0, 600); if (actual.descripcion) intro = false }
+    else if (actual && intro) {
+      if (!linea.trim()) { if (actual.descripcion) intro = false }
+      else if (esParrafo(linea)) actual.descripcion = actual.descripcion ? `${actual.descripcion} ${plano(linea)}` : plano(linea)
+      else intro = false
     }
     const m = actual && linea.match(RE_TAREA)
     if (actual && !actual.plan) { const pl = linea.match(/plans\/([A-Za-z0-9_-]+\.md)/); if (pl) actual.plan = pl[1] }
@@ -309,17 +324,43 @@ export function estructura(texto) {
   for (const s of aplanar(raiz)) {
     for (const p of s.prompts) { const f = p.clave && s.filas?.find((x) => x.clave === p.clave); if (f) p.modelo = f.modelo }
     delete s.filas
+    if (s.descripcion) s.descripcion = s.descripcion.slice(0, 600)
   }
   raiz.forEach(cerrarSeccion)
   return raiz
 }
 export const aplanar = (arbol) => arbol.flatMap((s) => [s, ...aplanar(s.hijas)])
+// «Qué se busca» de un plan de Claude: el primer párrafo bajo «## Context» o «## Contexto».
+export const contextoDePlan = (arbol) => aplanar(arbol).find((s) => /^contexto?\b/i.test(plano(s.titulo)))?.descripcion ?? null
+
+// «- Para retomar (fecha): …» en «## Estado»: lo escribe quien cierra la sesión (/relevo), en lenguaje natural.
+// Las líneas sangradas que siguen son parte de la misma viñeta. Devuelve la de fecha más reciente (empate: la primera).
+const RE_RETOMAR = /^[-*]\s+\**\s*Para retomar\s*\(([^)]*)\)\s*:?\s*\**\s*:?\s*(.*)$/i
+export function retomarDe(estadoTxt) {
+  const lineas = String(estadoTxt ?? '').split('\n')
+  let mejor = null
+  lineas.forEach((l, i) => {
+    const m = l.match(RE_RETOMAR)
+    if (!m) return
+    const partes = [m[2]]
+    for (let j = i + 1; j < lineas.length && /^\s+\S/.test(lineas[j]) && !/^\s*[-*]\s/.test(lineas[j]); j++) partes.push(lineas[j].trim())
+    const texto = plano(partes.join(' ')).replace(/\s+/g, ' ')
+    if (texto && (!mejor || m[1].trim() > mejor.fecha)) mejor = { fecha: m[1].trim(), texto }
+  })
+  return mejor
+}
 
 // «Estás aquí»: lo que nombra la primera línea de «## Estado» (prefiere «Siguiente: X»;
 // si lo nombrado está cerrado o ya hecho, la sección siguiente no hecha); si no, la primera sección no terminada.
 export function estasAqui(arbol, estadoTxt = '') {
   const pasos = aplanar(arbol).filter((s) => s.estado !== 'doc')
-  const linea = String(estadoTxt).split('\n').find((l) => l.trim()) || ''
+  let enRetomar = false
+  const linea = String(estadoTxt).split('\n').find((l) => {
+    if (RE_RETOMAR.test(l)) return !(enRetomar = true)
+    if (enRetomar && /^\s+\S/.test(l)) return false
+    enRetomar = false
+    return l.trim()
+  }) || ''
   const sig = linea.match(/Siguiente:?\**\s*\**\s*([HS]\d+[a-z]?)\b/)
   const ref = sig || linea.match(/\b([HS]\d+[a-z]?)\b/)
   if (ref) {
@@ -569,7 +610,7 @@ function leerPlanes(p, menciones, duenos) {
     const contenido = readFileSync(ruta, 'utf8')
     const titulo = (contenido.match(/^#\s+(.+)$/m) || [, nombre])[1].trim()
     const arbol = estructura(contenido)
-    return [{ nombre, ruta, titulo, carpetas: [...carpetas], modificado: statSync(ruta).mtime.toISOString(), contenido, estructura: arbol, aqui: estasAqui(arbol, seccionEstado(contenido)) }]
+    return [{ nombre, ruta, titulo, contexto: contextoDePlan(arbol), carpetas: [...carpetas], modificado: statSync(ruta).mtime.toISOString(), contenido, estructura: arbol, aqui: estasAqui(arbol, seccionEstado(contenido)) }]
   }).sort((a, b) => b.modificado.localeCompare(a.modificado))
 }
 
@@ -828,6 +869,69 @@ export function estadoConfiguracion(p, { git = null, backlogs = [], transcripcio
   ]
 }
 
+// ---------- Para retomar: hechos automáticos que la vista pone en frases ----------
+// La sesión de Claude más reciente del proyecto (su carpeta o subcarpetas «<prefijo>-…»): fecha del .jsonl y su título
+// (customTitle, si no aiTitle), leyendo solo las primeras ~20 líneas.
+function ultimaSesionDe(prefijo, dir) {
+  if (!prefijo || !existsSync(dir)) return null
+  let ult = null
+  for (const d of readdirSync(dir)) {
+    if (d !== prefijo && !d.startsWith(`${prefijo}-`)) continue
+    let archivos = []
+    try { archivos = readdirSync(join(dir, d)) } catch { continue }
+    for (const f of archivos) {
+      if (!f.endsWith('.jsonl')) continue
+      const ruta = join(dir, d, f)
+      const mtime = statSync(ruta, { throwIfNoEntry: false })?.mtimeMs
+      if (mtime != null && (!ult || mtime > ult.mtime)) ult = { ruta, mtime }
+    }
+  }
+  if (!ult) return null
+  let titulo = null
+  try {
+    const fd = openSync(ult.ruta, 'r')
+    try {
+      const buf = Buffer.alloc(64 * 1024)
+      const lineas = buf.toString('utf8', 0, readSync(fd, buf, 0, buf.length, 0)).split('\n').slice(0, 20)
+      const objs = lineas.flatMap((l) => { try { return [JSON.parse(l)] } catch { return [] } })
+      titulo = objs.find((o) => o?.customTitle)?.customTitle || objs.find((o) => o?.aiTitle)?.aiTitle || null
+    } finally { closeSync(fd) }
+  } catch {}
+  return { titulo, fecha: new Date(ult.mtime).toISOString() }
+}
+// p: { transcripciones, git }; b: el backlog principal (con estructura, aqui y, si hay, activo).
+export function hechosRetomar(p, b, { transcripciones = TRANSCRIPCIONES, ahora = new Date() } = {}) {
+  const git = p?.git || null
+  const commit = (git?.commits || []).reduce((m, c) => (!m || Date.parse(c.fecha) > Date.parse(m.fecha) ? c : m), null)
+  const sesion = ultimaSesionDe(p?.transcripciones, transcripciones)
+  const fechas = [b?.modificado, commit?.fecha, sesion?.fecha].map((f) => Date.parse(f)).filter(Number.isFinite)
+  const ult = fechas.length ? Math.max(...fechas) : null
+  // Lo siguiente: la sub-sesión siguiente del frente activo; si no, su tarea; si no, la sección «estás aquí».
+  let siguiente = null, pendientesSiguiente = 0
+  const sub = b?.activo?.subsesiones?.find((s) => s.estado === 'siguiente')
+  const secs = aplanar(b?.estructura || [])
+  if (sub) {
+    siguiente = { clave: sub.clave, titulo: sub.titulo ? `${sub.clave} — ${sub.titulo}` : sub.clave }
+    pendientesSiguiente = sub.abiertas.length
+  } else if (b?.activo?.tarea) {
+    siguiente = { clave: secs.find((s) => s.id === b.activo.seccion)?.clave || null, titulo: b.activo.tarea.titulo }
+    pendientesSiguiente = b.activo.tarea.abiertas.length
+  } else {
+    const sec = secs.find((s) => s.id === b?.aqui)
+    if (sec) { siguiente = { clave: sec.clave, titulo: plano(sec.titulo) }; pendientesSiguiente = sec.total - sec.hechas }
+  }
+  return {
+    ultimaActividad: ult == null ? null : new Date(ult).toISOString(),
+    diasSinActividad: ult == null ? null : Math.max(0, Math.floor((ahora - ult) / 86400e3)),
+    rama: git?.rama || null,
+    siguiente, pendientesSiguiente,
+    ultimoCommit: commit ? { titulo: commit.titulo, fecha: commit.fecha } : null,
+    prsAbiertos: (git?.prs || []).filter((pr) => pr.state === 'OPEN').length,
+    commitsSinSubir: git?.sinPush?.length || 0,
+    ultimaSesionClaude: sesion,
+  }
+}
+
 async function recolectar(opciones = {}) {
   cargarProyectos()
   mkdirSync(DATOS, { recursive: true })
@@ -850,10 +954,11 @@ async function recolectar(opciones = {}) {
     for (const x of integraciones) delete x._auto
     const historial = actualizarHistorial(p, backlogs)
     const planes = leerPlanes(p, menciones, duenos)
-    for (const b of backlogs) if (!b.esPlan) b.activo = frenteActivo(b, historial[b.archivo], planes)
+    for (const b of backlogs) if (!b.esPlan) { b.activo = frenteActivo(b, historial[b.archivo], planes); b.retomar = retomarDe(b.estado) }
     const git = leerGit(p)
     const configuracion = estadoConfiguracion(p, { git, backlogs })
-    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones, configuracion, editable: p.editable }
+    const retomar = hechosRetomar({ transcripciones: p.transcripciones, git }, backlogs.find((b) => !b.esPlan) || null)
+    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones, configuracion, editable: p.editable, retomar }
   }))
 }
 

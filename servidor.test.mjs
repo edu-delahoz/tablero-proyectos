@@ -539,7 +539,7 @@ test('crear backlog: sin docs, nombre con ruta o fuera del patrón → 400; exis
   assert.equal(pv.estado, 200, pv.json.error)
   assert.equal(pv.json.archivo, 'BACKLOG.md')
   assert.match(pv.json.contenido, /^# Backlog — Nuevo\n\n## Estado\n- \d{4}-\d{2}-\d{2} · /)
-  assert.match(pv.json.contenido, /\n## S1 — .*\n- \[ \] /)
+  assert.match(pv.json.contenido, /\n## S1 — .*\nHistoria: .*\n- \[ \] /)
   assert.ok(!existsSync(join(docsNuevo, 'BACKLOG.md')))
   const r = await post('/api/backlog/crear', { proyecto: 'nuevo' })
   assert.equal(r.estado, 200, r.json.error)

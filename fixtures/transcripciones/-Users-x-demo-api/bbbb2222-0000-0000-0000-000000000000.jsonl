@@ -1,0 +1,29 @@
+{"type":"mode","mode":"normal"}
+{"type":"user","message":{"role":"user","content":"x"}}
+{"type":"ai-title","aiTitle":"Probar la API de pagos","sessionId":"bbbb2222"}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"assistant","message":{"content":"…"}}
+{"type":"custom-title","customTitle":"Título tardío que no se lee","sessionId":"bbbb2222"}
