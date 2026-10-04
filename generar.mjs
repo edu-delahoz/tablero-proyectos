@@ -18,7 +18,7 @@ import { join, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extraerMarcas, tareasLocales, planificarSincronia, aplicarSincronia } from './integraciones/sincronia.mjs'
 import { leerCredenciales, credencialesPara, guardarCredencial, resumenCredenciales, REQUISITOS, RUTA_CREDENCIALES } from './integraciones/credenciales.mjs'
-import { validarIntegracion, aplicarCambio, escribirAtomico, ErrorConfig, CAMPOS } from './integraciones/config.mjs'
+import { validarIntegracion, aplicarCambio, escribirAtomico, ErrorConfig, CAMPOS, COMUNES } from './integraciones/config.mjs'
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
@@ -547,22 +547,28 @@ const rutaInstantanea = (p, cfg) => join(DATOS, `sync-${p.id}-${cfg.id}.json`)
 const hashDe = (t) => createHash('sha1').update(t).digest('hex')
 const conTiempo = (promesa, ms) => Promise.race([promesa, new Promise((_, mal) => setTimeout(() => mal(new Error(`Sin conexión: no respondió en ${ms / 1000} s.`)), ms).unref())])
 export class ErrorSincronia extends Error { constructor(msg, estado, extra) { super(msg); Object.assign(this, { estado, extra }) } }
+// «modo: 'lectura'»: solo se lee afuera; ni backlog, ni crear/actualizar, ni instantánea, ni sincronía.
+const esLectura = (cfg) => cfg?.modo === 'lectura'
+const SOLO_LECTURA = 'Esta integración es de solo lectura: no se sincroniza nada (ni afuera ni en el backlog).'
+const AVISO_PRIMERA = 'Primera sincronía: usa la vista previa («Sincronizar») para elegir qué se crea; «auto» no aplica nada hasta entonces.'
 
 // Todo lo necesario para sincronizar una integración: config, backlog, adaptador enlazado y credenciales.
+// En solo lectura: backlog null y el adaptador enlazado solo trae «leer» (aunque alguien llegara a aplicar, no hay con qué escribir).
 function contextoIntegracion(p, cfg, backlogs, adaptadores) {
-  const backlog = backlogs.find((b) => b.archivo === cfg.backlog)
-  if (!backlog) throw new ErrorSincronia(`No encuentro «${cfg.backlog}» en las carpetas «docs» del proyecto.`, 400)
+  const lectura = esLectura(cfg)
+  const backlog = lectura ? null : backlogs.find((b) => b.archivo === cfg.backlog)
+  if (!lectura && !backlog) throw new ErrorSincronia(`No encuentro «${cfg.backlog}» en las carpetas «docs» del proyecto.`, 400)
   const mod = adaptadores[cfg.tipo]
   if (!mod) throw new ErrorSincronia(`El conector «${NOMBRES[cfg.tipo] || cfg.tipo}» aún no está disponible en esta versión.`, 400, { estado: 'sin-conector' })
   const { datos, aviso } = leerCredenciales()
   const { cred, faltan, paso } = credencialesPara(cfg, datos)
   if (faltan.length) throw new ErrorSincronia(`Falta credencial: ${faltan.join(', ')}.`, 400, { estado: 'falta-credencial', paso })
   const deps = { memo: new Map() }
-  const adaptador = {
-    leer: () => mod.leer(cfg, cred, deps),
+  const adaptador = { leer: () => mod.leer(cfg, cred, deps) }
+  if (!lectura) Object.assign(adaptador, {
     crear: (c, cr, t) => mod.crear(c, cr, t, deps),
     actualizar: (c, cr, id, x) => mod.actualizar(c, cr, id, x, deps),
-  }
+  })
   return { backlog, adaptador, cred, aviso }
 }
 
@@ -570,15 +576,22 @@ function contextoIntegracion(p, cfg, backlogs, adaptadores) {
 export async function sincronizar(p, idIntegracion, { elegidas = null, resoluciones = {}, hashPrevio, adaptadores = ADAPTADORES, rutasPermitidas } = {}) {
   const cfg = (p.integraciones || []).find((x) => x.id === idIntegracion)
   if (!cfg) throw new ErrorSincronia('Esa integración no está en proyectos.json.', 404)
+  if (esLectura(cfg)) throw new ErrorSincronia(SOLO_LECTURA, 400, { estado: 'solo-lectura' })
   const ctx = contextoIntegracion(p, cfg, leerBacklogs(p), adaptadores)
   const ruta = ctx.backlog.ruta
   if (rutasPermitidas && !rutasPermitidas.has(ruta)) throw new ErrorSincronia('Ese archivo no lo administra el tablero.', 403)
   const contenido = readFileSync(ruta, 'utf8'), hash = hashDe(contenido)
   if (hashPrevio !== undefined && hashPrevio !== hash) throw new ErrorSincronia(`${cfg.backlog} cambió desde la vista previa: vuelve a pulsar Sincronizar.`, 409)
   const fuera = await conTiempo(ctx.adaptador.leer(), 15000)
+  // Sin instantánea es la primera sincronía: la vista lo avisa y «auto» no aplica nada (crearía un ítem por casilla).
+  const primera = !existsSync(rutaInstantanea(p, cfg))
   const instantanea = leerJson(rutaInstantanea(p, cfg), {})
   const acciones = planificarSincronia(tareasLocales(contenido, cfg.id), fuera.items, instantanea)
-  if (elegidas == null) return { acciones, hash, url: fuera.url, backlog: cfg.backlog }
+  if (elegidas == null) {
+    const conteo = { 'crear-fuera': acciones.filter((a) => a.tipo === 'crear-fuera').length, traer: acciones.filter((a) => a.tipo === 'traer').length }
+    return { acciones, hash, url: fuera.url, backlog: cfg.backlog, primera, conteo }
+  }
+  if (elegidas === 'auto' && primera) return { acciones, resultados: [], aviso: AVISO_PRIMERA }
   // «auto»: todo menos conflictos (y las huérfanas, que solo se informan).
   if (elegidas === 'auto') elegidas = new Set(acciones.filter((a) => a.tipo !== 'conflicto' && a.tipo !== 'huerfana').map((a) => a.clave))
   const r = await aplicarSincronia({
@@ -599,12 +612,13 @@ export async function sincronizar(p, idIntegracion, { elegidas = null, resolucio
 
 // Datos de cada integración para el HTML: estado, ítems por columna y cuántos cambios hay por sincronizar.
 // Campos de la lista blanca de una integración (sin secretos: no los hay en proyectos.json) para precargar el formulario de edición.
-const configVisible = (cfg) => Object.fromEntries(Object.entries(cfg).filter(([k]) => ['id', 'tipo', 'backlog', 'auto', ...(CAMPOS[cfg.tipo] ? [...CAMPOS[cfg.tipo].obligatorios, ...CAMPOS[cfg.tipo].opcionales] : [])].includes(k)))
+const configVisible = (cfg) => Object.fromEntries(Object.entries(cfg).filter(([k]) => [...COMUNES, ...(CAMPOS[cfg.tipo] ? [...CAMPOS[cfg.tipo].obligatorios, ...CAMPOS[cfg.tipo].opcionales] : [])].includes(k)))
 async function leerIntegraciones(p, backlogs, { adaptadores = ADAPTADORES, aplicarAuto = true } = {}) {
   if (!p.integraciones?.length) return []
   const rutaExt = join(DATOS, `externo-${p.id}.json`), cache = leerJson(rutaExt, {})
   const salida = await Promise.all(p.integraciones.map(async (cfg) => {
-    const base = { id: cfg.id, tipo: cfg.tipo, nombre: NOMBRES[cfg.tipo] || cfg.tipo, backlog: cfg.backlog, auto: !!cfg.auto, config: configVisible(cfg), ultimaSincronia: cache[cfg.id]?.ultimaSincronia || null }
+    const lectura = esLectura(cfg)
+    const base = { id: cfg.id, tipo: cfg.tipo, nombre: NOMBRES[cfg.tipo] || cfg.tipo, modo: lectura ? 'lectura' : 'sincronizar', backlog: lectura ? null : cfg.backlog, auto: !lectura && !!cfg.auto, config: configVisible(cfg), ultimaSincronia: cache[cfg.id]?.ultimaSincronia || null }
     let ctx
     try { ctx = contextoIntegracion(p, cfg, backlogs, adaptadores) } catch (e) {
       return { ...base, estado: e.extra?.estado || 'error', mensaje: e.message, paso: e.extra?.paso || null }
@@ -614,13 +628,14 @@ async function leerIntegraciones(p, backlogs, { adaptadores = ADAPTADORES, aplic
       fuera = await conTiempo(ctx.adaptador.leer(), LECTURA_MS)
       cache[cfg.id] = { ...cache[cfg.id], url: fuera.url, titulo: fuera.titulo, columnas: fuera.columnas, items: fuera.items, avisos: fuera.avisos, fecha: new Date().toISOString() }
     } catch (e) { error = String(e?.message || e); fuera = cache[cfg.id]?.items ? cache[cfg.id] : null }
-    const acciones = fuera ? planificarSincronia(tareasLocales(ctx.backlog.contenido, cfg.id), fuera.items, leerJson(rutaInstantanea(p, cfg), {})) : []
+    const acciones = fuera && !lectura ? planificarSincronia(tareasLocales(ctx.backlog.contenido, cfg.id), fuera.items, leerJson(rutaInstantanea(p, cfg), {})) : []
     const porTipo = acciones.reduce((m, a) => ({ ...m, [a.tipo]: (m[a.tipo] || 0) + 1 }), {})
-    const auto = cfg.auto && !error && aplicarAuto && acciones.some((a) => a.tipo !== 'conflicto' && a.tipo !== 'huerfana')
+    const primera = !lectura && !existsSync(rutaInstantanea(p, cfg))
+    const auto = base.auto && !primera && !error && aplicarAuto && acciones.some((a) => a.tipo !== 'conflicto' && a.tipo !== 'huerfana')
     return {
-      ...base, estado: error ? 'error' : 'conectado', mensaje: error, aviso: ctx.aviso, avisos: fuera?.avisos || [],
+      ...base, estado: error ? 'error' : 'conectado', mensaje: error, aviso: ctx.aviso, avisos: [...(fuera?.avisos || []), ...(base.auto && primera ? [AVISO_PRIMERA] : [])],
       url: fuera?.url || null, titulo: fuera?.titulo || null, columnas: fuera?.columnas || [],
-      items: (fuera?.items || []).map(({ id, titulo, hecha, columna, url }) => ({ id, titulo, hecha, columna, url })),
+      items: (fuera?.items || []).map(({ id, titulo, hecha, columna, url, tipo, asignado, mio }) => ({ id, titulo, hecha, columna, url, tipo, asignado, mio })),
       leidoEn: error ? cache[cfg.id]?.fecha || null : new Date().toISOString(), desdeCache: !!error && !!fuera,
       pendientes: acciones.filter((a) => a.tipo !== 'huerfana').length, porTipo, _auto: auto,
     }
@@ -639,8 +654,8 @@ async function probarConexiones() {
       const ctx = contextoIntegracion(p, cfg, leerBacklogs(p), ADAPTADORES)
       if (ctx.aviso) console.log(`  ⚠ ${ctx.aviso}`)
       const r = await conTiempo(ctx.adaptador.leer(), 15000)
-      const vinculadas = tareasLocales(ctx.backlog.contenido, cfg.id).filter((t) => t.marca).length
-      console.log(`✓ ${titulo}: OK · «${r.titulo || ''}» ${r.url || ''} · ${r.items.length} ítems · columnas: ${r.columnas.join(', ')} · ${vinculadas} casillas vinculadas en ${cfg.backlog}`)
+      const vinculadas = ctx.backlog ? `${tareasLocales(ctx.backlog.contenido, cfg.id).filter((t) => t.marca).length} casillas vinculadas en ${cfg.backlog}` : 'solo lectura (sin backlog)'
+      console.log(`✓ ${titulo}: OK · «${r.titulo || ''}» ${r.url || ''} · ${r.items.length} ítems · columnas: ${r.columnas.join(', ')} · ${vinculadas}`)
       for (const a of r.avisos || []) console.log(`  · ${a}`)
     } catch (e) {
       process.exitCode = 1
@@ -896,8 +911,8 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         const ctx = contextoIntegracion(p, limpia, backlogs, adaptadores)
         let r
         try { r = await conTiempo(ctx.adaptador.leer(), 15000) } catch (e) { return enviar(res, 502, { error: String(e?.message || e) }) }
-        const vinculadas = tareasLocales(ctx.backlog.contenido, limpia.id).filter((t) => t.marca).length
-        return enviar(res, 200, { ok: true, titulo: r.titulo || null, url: r.url || null, columnas: r.columnas || [], items: r.items.length, avisos: [...(ctx.aviso ? [ctx.aviso] : []), ...(r.avisos || [])], vinculadas, ...(limpia.organizacion ? { organizacion: limpia.organizacion } : {}) })
+        const vinculadas = ctx.backlog ? tareasLocales(ctx.backlog.contenido, limpia.id).filter((t) => t.marca).length : 0
+        return enviar(res, 200, { ok: true, modo: esLectura(limpia) ? 'lectura' : 'sincronizar', titulo: r.titulo || null, url: r.url || null, columnas: r.columnas || [], items: r.items.length, avisos: [...(ctx.aviso ? [ctx.aviso] : []), ...(r.avisos || [])], vinculadas, ...(limpia.organizacion ? { organizacion: limpia.organizacion } : {}) })
       }
       // Descubrir para los desplegables (solo lectura): `consulta` parcial según el tipo; `clave` = id de una integración con credencial propia.
       if (ruta === '/api/integraciones/descubrir') {

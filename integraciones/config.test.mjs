@@ -116,3 +116,22 @@ test('azure-devops: tipoItem acepta texto, lista (≤10) o «*» solo en modo le
   assert.match(v({ tipoItem: '*' }).errores[0], /solo sirve en modo solo lectura/)
   assert.deepEqual(v({ tipoItem: '*', modo: 'lectura' }).errores, [])
 })
+
+test('modo: lectura guarda sin backlog y rechaza auto; sincronizar (por defecto) sigue exigiendo backlog', () => {
+  const ado = { id: 'ado', tipo: 'azure-devops', organizacion: 'Org', proyecto: 'P' }
+  const l = validarIntegracion({ ...ado, modo: 'lectura', tipoItem: '*' }, { backlogs: [] })
+  assert.deepEqual(l.errores, [])
+  assert.deepEqual(l.limpia, { id: 'ado', tipo: 'azure-devops', modo: 'lectura', organizacion: 'Org', proyecto: 'P', tipoItem: '*' })
+  assert.match(validarIntegracion({ ...ado, modo: 'lectura', auto: true }, { backlogs: [] }).errores[0], /«auto» no sirve en modo solo lectura/)
+  assert.equal(validarIntegracion({ ...ado, modo: 'lectura', auto: false }, { backlogs: [] }).limpia.auto, undefined)
+  assert.match(validarIntegracion({ ...ado, modo: 'lectura', backlog: 'NADA.md' }, { backlogs: [] }).errores[0], /NADA.md/)
+  assert.match(validarIntegracion(ado, { backlogs: [] }).errores[0], /Elige el backlog/)
+  assert.match(validarIntegracion({ ...ado, modo: 'sincronizar' }, { backlogs: [] }).errores[0], /Elige el backlog/)
+  assert.equal(validarIntegracion({ ...ado, modo: 'sincronizar', backlog: 'B.md' }, { backlogs: ['B.md'] }).limpia.modo, 'sincronizar')
+  assert.match(validarIntegracion({ ...ado, modo: 'escribir', backlog: 'B.md' }, { backlogs: ['B.md'] }).errores[0], /Modo desconocido/)
+  // Editar: «modo» está en la lista blanca, así que el reemplazo lo conserva (y quitarlo vuelve a sincronizar).
+  const crudo = JSON.stringify([{ id: 'p', integraciones: [{ id: 'ado', tipo: 'azure-devops', modo: 'lectura', organizacion: 'Org', proyecto: 'P' }] }])
+  const editado = JSON.parse(aplicarCambio(crudo, 'p', { op: 'guardar', idOriginal: 'ado', integracion: { ...l.limpia, proyecto: 'Q' } }))
+  assert.equal(editado[0].integraciones[0].modo, 'lectura')
+  assert.equal(editado[0].integraciones[0].proyecto, 'Q')
+})

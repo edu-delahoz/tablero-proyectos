@@ -13,7 +13,14 @@
       { "id": "gh", "tipo": "github-projects", "propietario": "usuario", "numero": 1, "backlog": "BACKLOG_MVP.md", "auto": false },
       { "id": "trello", "tipo": "trello", "tablero": "<idDelTablero>", "backlog": "BACKLOG_MVP.md",
         "columnas": { "pendiente": "Por hacer", "en-curso": "En curso", "hecho": "Hecho" } },
-      { "id": "ado", "tipo": "azure-devops", "organizacion": "mi-organizacion", "proyecto": "mi-proyecto", "tipoItem": "Task", "backlog": "BACKLOG_MVP.md" }
+      { "id": "ado", "tipo": "azure-devops", "organizacion": "https://dev.azure.com/mi-organizacion", "proyecto": "mi-proyecto", "tipoItem": ["Task", "Bug"], "backlog": "BACKLOG_MVP.md" }
+    ]
+  },
+  {
+    "id": "eap10",
+    "nombre": "Backlog de un equipo, solo lectura (sin docs ni repo)",
+    "integraciones": [
+      { "id": "ado", "tipo": "azure-devops", "modo": "lectura", "organizacion": "CodeFactory2026-2", "proyecto": "EAP10", "tipoItem": "*" }
     ]
   }
 ]

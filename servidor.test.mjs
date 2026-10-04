@@ -24,6 +24,10 @@ writeFileSync(join(dir, 'proyectos.json'), JSON.stringify([{
     { id: 'gh', tipo: 'github-projects', propietario: 'usuario', numero: 1, backlog: 'BACKLOG_PRUEBA.md' },
     { id: 'tr', tipo: 'tipo-inexistente', backlog: 'BACKLOG_PRUEBA.md' },
   ],
+}, {
+  // Como EAP10: sin docs ni repo, solo una integración de solo lectura.
+  id: 'eap10', nombre: 'EAP10',
+  integraciones: [{ id: 'ado', tipo: 'azure-devops', modo: 'lectura', organizacion: 'Org', proyecto: 'EAP10', tipoItem: '*' }],
 }]))
 process.env.TABLERO_PROYECTOS = join(dir, 'proyectos.json')
 process.env.TABLERO_DATOS = join(dir, 'datos')
@@ -39,8 +43,15 @@ const falso = {
   async actualizar(cfg, cred, id, c) { Object.assign(fuera.get(id), c) },
   async listar(cfg, cred) { if (cfg.numero === 98) return new Promise(() => {}); if (cfg.numero === 99) throw new Error('GitHub Projects: Sin conexión con GitHub.'); return { recibido: cfg, cred, proyectos: [{ propietario: 'u', numero: 5, titulo: 'Falso' }] } },
 }
+const escrituras = [] // crear/actualizar de Azure: en solo lectura nunca debe llamarse ninguno
+const ITEMS_ADO = [
+  { id: '1', titulo: 'Mía', hecha: false, columna: 'Active', url: 'https://x/1', tipo: 'Task', asignado: { nombre: 'Yo', correo: 'yo@x' }, mio: true },
+  { id: '2', titulo: 'Sin asignar', hecha: true, columna: 'Closed', url: 'https://x/2', tipo: 'Bug', asignado: null, mio: false },
+]
 const adoFalso = {
-  async leer(cfg) { return { url: 'https://x', titulo: `${cfg.organizacion}/${cfg.proyecto}`, columnas: [], items: [] } },
+  async leer(cfg) { return { url: 'https://x', titulo: `${cfg.organizacion}/${cfg.proyecto}`, columnas: cfg.modo === 'lectura' ? ['Active', 'Closed'] : [], items: cfg.modo === 'lectura' ? ITEMS_ADO : [] } },
+  async crear(...a) { escrituras.push(['crear', ...a]); return { id: 'Z', url: 'https://x/Z' } },
+  async actualizar(...a) { escrituras.push(['actualizar', ...a]) },
   async listar(cfg) { return { recibido: cfg, proyectos: ['EAP10'] } },
 }
 const trelloFalso = { async listar(cfg, cred) { return { recibido: cfg, cred, tableros: [] } } }
@@ -380,4 +391,68 @@ test('credenciales: se guardan en 0600, la respuesta y /api/datos solo traen el 
   assert.equal((await post('/api/credenciales', { clave: 'trello', campos: { token: 'con espacio' } })).estado, 400)
   assert.equal((await post('/api/credenciales', { clave: 'trello', campos: { token: 'x' } }, { origin: 'http://evil.com' })).estado, 403)
   assert.equal(JSON.parse(readFileSync(CRED, 'utf8')).trello.token, SECRETO)
+})
+
+test('solo lectura: proyecto sin docs ni repo genera; ítems con tipo/asignado/mío; sin sincronía ni escrituras', async () => {
+  const entorno = process.env.AZURE_DEVOPS_PAT
+  process.env.AZURE_DEVOPS_PAT = 'pat-lectura-12345'
+  try {
+    const antesMd = readFileSync(BACKLOG, 'utf8'), antesConf = readFileSync(CONF, 'utf8')
+    const d = await get('/api/datos')
+    assert.equal(d.estado, 200)
+    const p = d.json.proyectos.find((x) => x.id === 'eap10')
+    assert.deepEqual([p.backlogs, p.git], [[], null])
+    const i = p.integraciones[0]
+    assert.deepEqual([i.estado, i.modo, i.backlog, i.auto, i.pendientes], ['conectado', 'lectura', null, false, 0])
+    assert.equal(i.config.modo, 'lectura', 'la vista recibe el modo para que editar no lo devuelva a sincronizar')
+    assert.deepEqual(i.items, ITEMS_ADO)
+    assert.ok(!JSON.stringify(d.json).includes('pat-lectura'))
+    const html = await fetch(`http://127.0.0.1:${puerto}/`)
+    assert.equal(html.status, 200)
+    assert.match(await html.text(), /EAP10/)
+    // Sincronía (previa y aplicar) → 400 «solo lectura»; nada se llama ni se escribe.
+    for (const ruta of ['/api/sincronia/previa', '/api/sincronia/aplicar']) {
+      const r = await post(ruta, { proyecto: 'eap10', integracion: 'ado', acciones: ['traer:1'], hashPrevio: 'x' })
+      assert.equal(r.estado, 400)
+      assert.match(r.json.error, /solo lectura/)
+    }
+    const { sincronizar } = await import('./generar.mjs')
+    const cfgP = JSON.parse(readFileSync(CONF, 'utf8')).find((x) => x.id === 'eap10')
+    await assert.rejects(sincronizar({ ...cfgP, docs: [dir] }, 'ado', { elegidas: 'auto', adaptadores: { 'azure-devops': adoFalso } }), /solo lectura/)
+    // Probar: sin backlog, vinculadas 0.
+    const pr = await post('/api/integraciones/probar', { proyecto: 'eap10', integracion: { id: 'ado', tipo: 'azure-devops', modo: 'lectura', organizacion: 'Org', proyecto: 'EAP10' } })
+    assert.equal(pr.estado, 200, pr.json.error)
+    assert.deepEqual([pr.json.vinculadas, pr.json.modo, pr.json.items], [0, 'lectura', 2])
+    // Guardar → editar: sigue en lectura.
+    const g = await post('/api/integraciones/guardar', { proyecto: 'eap10', idOriginal: 'ado', integracion: { ...i.config, proyecto: 'EAP10' }, mtime: await mtime() })
+    assert.equal(g.estado, 200, g.json.error)
+    assert.equal(JSON.parse(readFileSync(CONF, 'utf8')).find((x) => x.id === 'eap10').integraciones[0].modo, 'lectura')
+    assert.equal(readFileSync(CONF, 'utf8'), antesConf)
+    assert.deepEqual(escrituras, [])
+    assert.equal(readFileSync(BACKLOG, 'utf8'), antesMd)
+    assert.ok(!existsSync(join(dir, 'datos', 'sync-eap10-ado.json')))
+  } finally { if (entorno !== undefined) process.env.AZURE_DEVOPS_PAT = entorno; else delete process.env.AZURE_DEVOPS_PAT }
+})
+
+test('primera sincronía (sin instantánea): la previa lo dice con el conteo y «auto» no aplica nada', async () => {
+  const otro = join(dir, 'primera')
+  mkdirSync(otro, { recursive: true })
+  const md = '# P\n\n- [ ] Local\n'
+  writeFileSync(join(otro, 'BACKLOG_P.md'), md)
+  const creados = []
+  const gh = { ...falso, async crear(...a) { creados.push(a); return { id: 'Q', url: 'https://x/Q' } }, async actualizar(...a) { creados.push(a) } }
+  const p = { id: 'primera', docs: [otro], integraciones: [{ id: 'g', tipo: 'github-projects', propietario: 'u', numero: 1, backlog: 'BACKLOG_P.md', auto: true }] }
+  const { sincronizar } = await import('./generar.mjs')
+  const previa = await sincronizar(p, 'g', { adaptadores: { 'github-projects': gh } })
+  assert.equal(previa.primera, true)
+  assert.deepEqual(previa.conteo, { 'crear-fuera': 1, traer: fuera.size })
+  const r = await sincronizar(p, 'g', { elegidas: 'auto', adaptadores: { 'github-projects': gh } })
+  assert.deepEqual(r.resultados, [])
+  assert.match(r.aviso, /Primera sincronía/)
+  assert.deepEqual(creados, [])
+  assert.equal(readFileSync(join(otro, 'BACKLOG_P.md'), 'utf8'), md)
+  assert.ok(!existsSync(join(dir, 'datos', 'sync-primera-g.json')))
+  // Con instantánea ya no es la primera.
+  writeFileSync(join(dir, 'datos', 'sync-primera-g.json'), '{}')
+  assert.equal((await sincronizar(p, 'g', { adaptadores: { 'github-projects': gh } })).primera, false)
 })

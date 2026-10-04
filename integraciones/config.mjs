@@ -6,7 +6,8 @@ import { ADAPTADORES, NOMBRES } from './index.mjs'
 import { normalizarOrganizacion } from './azure-devops.mjs'
 
 // Lista blanca por tipo: solo estos campos llegan a proyectos.json. obligatorios ⊂ campos.
-const COMUNES = ['id', 'tipo', 'backlog', 'auto']
+export const COMUNES = ['id', 'tipo', 'modo', 'backlog', 'auto']
+export const MODOS = ['sincronizar', 'lectura'] // «lectura»: solo se muestra lo de afuera; nunca se escribe ni afuera ni en un .md
 export const CAMPOS = {
   'github-projects': { obligatorios: ['propietario', 'numero'], opcionales: ['campoEstado', 'campoSeccion', 'columnas'] },
   trello: { obligatorios: ['tablero'], opcionales: ['columnas'] },
@@ -25,11 +26,18 @@ export function validarIntegracion(cfg, { backlogs = [], otras = [], adaptadores
   if (!def || !adaptadores[cfg.tipo]) errores.push(`Tipo desconocido «${cfg.tipo}»: usa ${Object.keys(CAMPOS).join(', ')}.`)
   if (!RE_ID.test(cfg.id ?? '')) errores.push('El id solo admite minúsculas, números y guiones (1 a 30).')
   else if (otras.includes(cfg.id)) errores.push(`Ya hay otra integración con id «${cfg.id}» en este proyecto.`)
-  if (!texto(cfg.backlog)) errores.push('Elige el backlog que se sincroniza.')
-  else if (!backlogs.includes(cfg.backlog)) errores.push(`No encuentro «${cfg.backlog}» en las carpetas «docs» del proyecto.`)
+  const modo = cfg.modo === undefined || cfg.modo === null || cfg.modo === '' ? 'sincronizar' : cfg.modo
+  if (!MODOS.includes(modo)) errores.push(`Modo desconocido «${cfg.modo}»: usa ${MODOS.join(' o ')}.`)
+  const lectura = modo === 'lectura'
+  // En solo lectura el backlog es opcional (si se da, debe existir: sirve para pasar luego a sincronizar).
+  if (!texto(cfg.backlog)) { if (!lectura) errores.push('Elige el backlog que se sincroniza.') }
+  else if (!backlogs.includes(cfg.backlog.trim())) errores.push(`No encuentro «${cfg.backlog}» en las carpetas «docs» del proyecto.`)
   if (cfg.auto !== undefined && typeof cfg.auto !== 'boolean') errores.push('«auto» debe ser sí o no.')
+  else if (lectura && cfg.auto === true) errores.push('«auto» no sirve en modo solo lectura: no se sincroniza nada.')
   if (!def) return { errores, limpia: null }
-  const limpia = { id: cfg.id, tipo: cfg.tipo, backlog: typeof cfg.backlog === 'string' ? cfg.backlog.trim() : cfg.backlog }
+  const limpia = { id: cfg.id, tipo: cfg.tipo }
+  if (cfg.modo !== undefined && cfg.modo !== null && cfg.modo !== '') limpia.modo = modo
+  if (texto(cfg.backlog)) limpia.backlog = cfg.backlog.trim()
   const nombre = NOMBRES[cfg.tipo] || cfg.tipo
   for (const campo of [...def.obligatorios, ...def.opcionales]) {
     let v = cfg[campo]
@@ -52,7 +60,7 @@ export function validarIntegracion(cfg, { backlogs = [], otras = [], adaptadores
       }
       if (Object.keys(col).length) limpia.columnas = col
     } else if (campo === 'tipoItem') {
-      if (v === '*') { if (cfg.modo !== 'lectura') errores.push(`${nombre}: «tipoItem» «*» (todos los tipos) solo sirve en modo solo lectura: al sincronizar no se sabría qué tipo crear.`); else limpia.tipoItem = '*' }
+      if (v === '*') { if (!lectura) errores.push(`${nombre}: «tipoItem» «*» (todos los tipos) solo sirve en modo solo lectura: al sincronizar no se sabría qué tipo crear.`); else limpia.tipoItem = '*' }
       else if (Array.isArray(v) && v.length && v.length <= 10 && v.every(texto)) limpia.tipoItem = v.map((s) => s.trim())
       else if (texto(v)) limpia.tipoItem = v.trim()
       else errores.push(`${nombre}: «tipoItem» debe ser un tipo, una lista de tipos (hasta 10) o «*».`)
@@ -65,7 +73,7 @@ export function validarIntegracion(cfg, { backlogs = [], otras = [], adaptadores
     } else if (texto(v)) limpia[campo] = v.trim()
     else errores.push(`${nombre}: «${campo}» debe ser texto (hasta 200 caracteres).`)
   }
-  if (cfg.auto !== undefined) limpia.auto = cfg.auto === true
+  if (cfg.auto !== undefined && !lectura) limpia.auto = cfg.auto === true
   return { errores, limpia }
 }
 

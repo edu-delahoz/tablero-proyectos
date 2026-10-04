@@ -161,15 +161,25 @@ afuera).
 |---|---|
 | `id` | Nombre corto; es el prefijo de la marca en el `.md` (`<!-- gh:… -->`) y de `## Entrante (gh)` |
 | `tipo` | `github-projects`, `trello` o `azure-devops` |
-| `backlog` | Archivo (dentro de `docs`) cuyas casillas se sincronizan |
-| `auto` | `true`: al regenerar se aplica todo lo que no sea conflicto, sin vista previa |
+| `modo` | `sincronizar` (por defecto) o `lectura`: solo muestra lo de afuera; nunca escribe ni afuera ni en un `.md`, `backlog` es opcional y `auto` no se admite |
+| `backlog` | Archivo (dentro de `docs`) cuyas casillas se sincronizan (obligatorio salvo en `modo: "lectura"`) |
+| `auto` | `true`: al regenerar se aplica todo lo que no sea conflicto, sin vista previa. La **primera** sincronía (sin `datos/sync-…`) nunca es automática: hay que hacerla desde la vista previa |
 | `propietario`, `numero` | GitHub Projects: usuario u organización y número del Project (`github.com/users/<propietario>/projects/<numero>`) |
 | `campoEstado`, `columnas` | GitHub Projects, opcionales: campo de selección (por defecto `Status`) y opciones `{ "pendiente": "Todo", "hecho": "Done" }` |
 | `campoSeccion` | GitHub Projects, opcional: campo de **texto** donde va la sección (por defecto `Sección`; si no existe, no se envía) |
 | `tablero` | Trello: id del tablero (el código de la URL `trello.com/b/<id>/…`, o el `id` que devuelve añadir `.json` a esa URL) |
-| `organizacion`, `proyecto`, `tipoItem` | Azure DevOps: `dev.azure.com/<organizacion>/<proyecto>`; `tipoItem` es el tipo de work item (por defecto `Task`) |
+| `organizacion`, `proyecto`, `tipoItem` | Azure DevOps: `dev.azure.com/<organizacion>/<proyecto>`; en `organizacion` vale el nombre o la URL pegada (`https://dev.azure.com/Org/Proyecto/…`, `Org.visualstudio.com`), y se guarda solo el nombre. `tipoItem` es el tipo de work item: texto (por defecto `Task`), lista (`["Task", "Bug"]`, hasta 10; al crear se usa el primero) o `"*"` (todos, solo en `modo: "lectura"`). Cada ítem trae `tipo`, `asignado` y `mio` (asignado a quien es dueño del PAT) |
 | `columnas` (Trello) | Nombres de lista: `hecho` (por defecto «Hecho» o «Done») y `pendiente` (por defecto «Por hacer», «To Do» o la primera lista distinta de hecho). La sección se envía como etiqueta de la tarjeta |
 | `columnas` (Azure DevOps) | Estados: `hecho` (por defecto `Done`, `Closed`, `Completed`) y `pendiente` (por defecto `To Do`, `New`); admiten texto o lista. La sección se envía como tag |
+
+**Solo lectura (proyecto sin backlog).** Para ver el backlog de un equipo ajeno sin tocarlo, sin
+carpeta `docs` ni `repo` (si «sincronizara», crearía un work item por cada casilla de un backlog ajeno):
+
+```json
+{ "id": "eap10", "nombre": "EAP10",
+  "integraciones": [{ "id": "ado", "tipo": "azure-devops", "modo": "lectura",
+    "organizacion": "CodeFactory2026-2", "proyecto": "EAP10", "tipoItem": "*" }] }
+```
 
 **Cómo funciona la sincronía.** El vínculo casilla ↔ tarjeta es un comentario al final de la línea,
 invisible en el Markdown renderizado: `- [ ] Probar el login <!-- gh:PVTI_… -->` (puede haber varias
