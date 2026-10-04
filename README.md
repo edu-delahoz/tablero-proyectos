@@ -28,6 +28,37 @@ Cada proyecto tiene estas pestañas:
   tarjetas por columna y el botón **Sincronizar** con vista previa. En el Mapa, cada casilla vinculada
   lleva un chip (`GH ↗`) y la barra de estado avisa «⇄ N cambios por sincronizar».
 
+### Para retomar y «Qué se busca» (convenciones del backlog)
+
+- **`- Para retomar (AAAA-MM-DD): …`** en `## Estado`: 2–4 frases en lenguaje natural (sin claves, commits
+  ni conteos) sobre qué se estaba haciendo, qué quedó listo y por dónde seguir. La escribe quien cierra la
+  sesión (skill `/relevo`), debajo de la línea de estado; manda la de fecha más reciente (`b.retomar`) y no
+  cuenta para «estás aquí». Junto a ella el tablero pone hechos automáticos (`p.retomar`: última actividad y
+  días sin tocarlo, rama, lo siguiente y sus pasos pendientes, último commit, PRs abiertos, commits sin subir
+  y la última sesión de Claude con su título).
+- **`Historia:`** (o `Objetivo:` / `Para qué:`) bajo el título de un hito: «Como <quién>, quiero <qué>, para
+  <para qué>.» Es el «Qué se busca» de la tarjeta En curso (`historia`); si falta, el primer párrafo bajo el
+  título (`descripcion`) o el primer párrafo de `## Context` del plan (`contexto`).
+
+### Tablero (kanban)
+
+Cada casilla de primer nivel del backlog es una tarjeta (`p.kanban`, con `archivo`, `linea`, `seccion`, `clave`,
+`hito` y `sub` con el avance de sus hijas). Columnas y de dónde sale cada una:
+
+- **Por hacer**: `- [ ]`.
+- **En curso**: `- [~]` (puesta a mano), o una sesión de Claude activa (`.jsonl` tocado hace < 5 min) que trabaja
+  ese backlog (lo nombra en un prompt o editó su archivo) y esa sección: por la clave (`S3c`, `H2`) que nombran
+  sus prompts o, si no nombran ninguna, por el frente activo del backlog.
+- **En prueba**: `- [x]` cuya rama (la del título de la sección, la del hito o «Rama \`x\`» bajo el título del
+  hito) tiene un PR abierto o no está fusionada en la principal (`origin/HEAD`, si no `main`).
+- **Hecho**: `- [x]` sin nada de lo anterior. `- [-]` = movida (fuera de los conteos y de las columnas normales).
+
+`GET /api/sesiones` → `{ sesiones: { [proyecto]: [{ sid, titulo, rama, inicio, ultimo, activa, archivos,
+ultimoPrompt, foco }] }, columnas: { [proyecto]: [{ archivo, linea, texto, estado }] } }`. Es barato a propósito
+(la vista lo sondea cada 5 s): solo los `.jsonl` de las últimas 24 h, de cada uno 64 KB de cabeza y 64 KB de cola,
+con caché por mtime y tamaño, y las columnas se recalculan sobre los datos ya construidos. La actividad de Claude
+**no entra** en la huella de `/api/version`. Sin servidor (`file://`) las mismas sesiones viajan en `datos.sesiones`.
+
 ## Instalación
 
 Requisitos: Node.js ≥ 20. Opcional: [`gh`](https://cli.github.com) autenticado para la pestaña GitHub.
@@ -138,12 +169,40 @@ comparan en todos los proyectos. Sin servidor las estrellas se ven pero no se pu
 final de `proyectos.json` (el resto queda igual). `id` en `[a-z0-9-]` y único; `repo` y `docs` (texto o
 lista) deben ser carpetas que existan, absolutas o con `~`. `mtime` es `datos.configMtime`: si el archivo
 cambió responde 409. Con `previa: true` devuelve la entrada sin escribir. Solo desde esta máquina.
+Con `repo`, rellena `transcripciones` (la carpeta de `~/.claude/projects`: la ruta con todo lo no
+alfanumérico cambiado por `-`). Sin `docs` y con `repo`, `docs` = `[repo]`; sin `id` y con `repo`, se
+propone uno desde el nombre de la carpeta (único: `-2`, `-3`…).
+
+**Elegir carpeta (sin pegar rutas).** `POST /api/carpetas` `{ ruta? }` (solo desde esta máquina, con Origin)
+lista las subcarpetas de `ruta` (`~` vale): `{ home, ruta, padre, carpetas: [{ nombre, ruta, esGit,
+tieneBacklog }], aviso? }`. Nunca sale de home (comprobado con `realpath`, un enlace no saca de ahí), nunca
+lista archivos, ni ocultas, ni `node_modules`, ni enlaces; hasta 200 carpetas con `aviso`. Ruta fuera de
+home, inexistente o que no es carpeta → 400. Sin `ruta` lista home y añade `sugerencias`: las carpetas
+donde abriste Claude (el `cwd` de las primeras líneas de cada `.jsonl` de `~/.claude/projects`, con caché
+por mtime) que aún no son proyectos, dentro de home y que existan, más reciente primero, hasta 12
+(`[{ ruta, nombre, ultimaActividad, sesiones, esGit }]`; una subcarpeta suma en su repo git). Con `ruta`
+añade `propuesta` `{ id, nombre, docs, notas }`: `docs` = `docs`/`documentacion`/`.tablero` que existan (si
+no, la propia carpeta) y `notas` = `NOTAS_<ID>.md` en la primera, rutas con `~`. `TABLERO_HOME` cambia la
+raíz (para tests).
+
+**Editar proyecto.** `POST /api/proyectos/editar` `{ id, cambios, mtime, previa? }` cambia en su sitio solo
+`nombre`, `repo`, `docs`, `notas`, `transcripciones` y `bitacora`; las integraciones, `planes`,
+`patronBacklogs` y cualquier otro campo quedan intactos, igual que el orden y las rutas con `~`. Un valor
+vacío quita el campo (salvo `nombre`). `repo`/`docs` deben ser carpetas que existan; `notas`/`bitacora`, un
+archivo que exista o uno nuevo en una carpeta que exista. Si queda `repo` sin `transcripciones`, se rellena.
+Id inexistente → 404, no valida → 400, `mtime` viejo → 409; `previa: true` devuelve el bloque resultante.
+
+**Guía de configuración.** Cada proyecto de `/api/datos` trae `configuracion: [{ paso, hecho, detalle }]`
+(repo, git, github, docs, backlog, sesiones de Claude, notas, integraciones; sin llamadas de red nuevas) y
+`editable` (los campos editables tal como están en `proyectos.json`, para precargar el formulario).
 
 **Crear backlog.** `POST /api/backlog/crear` `{ proyecto, archivo?, carpeta? }` crea `archivo`
 (por defecto `BACKLOG.md`) con una plantilla mínima (título, `## Estado`, `## S1` con una casilla) en la
 primera carpeta `docs` del proyecto, o en `carpeta` si es una de ellas. Nunca sobrescribe (existe → 409);
 el nombre es simple (sin `/` ni `..`), termina en `.md` y debe cumplir `patronBacklogs`. Sin `docs` → 400.
 Con `previa: true` devuelve el contenido sin escribir.
+
+**Importar a un `.md`.** `POST /api/integraciones/importar` `{ proyecto, integracion, soloMias?, archivo?, carpeta?, previa? }` crea `BACKLOG_<ID>.md` (por defecto) en la primera carpeta `docs` con una casilla por ítem de una integración de **solo lectura** (`## estado` › `### tipo`, vínculo `<!-- ado:ID -->`; `soloMias` deja solo los `mio`). Nunca sobrescribe (409) y no escribe nada afuera. La respuesta trae `total` y `tipos`; la vista abre después el formulario de la integración en modo `sincronizar` con ese backlog (hay que pulsar Guardar).
 
 ## Conectores y credenciales
 
@@ -172,14 +231,14 @@ afuera).
 |---|---|
 | `id` | Nombre corto; es el prefijo de la marca en el `.md` (`<!-- gh:… -->`) y de `## Entrante (gh)` |
 | `tipo` | `github-projects`, `trello` o `azure-devops` |
-| `modo` | `sincronizar` (por defecto) o `lectura`: solo muestra lo de afuera; nunca escribe ni afuera ni en un `.md`, `backlog` es opcional y `auto` no se admite |
-| `backlog` | Archivo (dentro de `docs`) cuyas casillas se sincronizan (obligatorio salvo en `modo: "lectura"`) |
+| `modo` | `sincronizar` (por defecto), `lectura`: solo muestra lo de afuera; nunca escribe ni afuera ni en un `.md`, `backlog` es opcional y `auto` no se admite; o `participar` (solo Azure DevOps): como `lectura`, pero puedes asignarte ítems y cambiar su estado afuera |
+| `backlog` | Archivo (dentro de `docs`) cuyas casillas se sincronizan (obligatorio salvo en `modo: "lectura"` o `"participar"`) |
 | `auto` | `true`: al regenerar se aplica todo lo que no sea conflicto, sin vista previa. La **primera** sincronía (sin `datos/sync-…`) nunca es automática: hay que hacerla desde la vista previa |
 | `propietario`, `numero` | GitHub Projects: usuario u organización y número del Project (`github.com/users/<propietario>/projects/<numero>`) |
 | `campoEstado`, `columnas` | GitHub Projects, opcionales: campo de selección (por defecto `Status`) y opciones `{ "pendiente": "Todo", "hecho": "Done" }` |
 | `campoSeccion` | GitHub Projects, opcional: campo de **texto** donde va la sección (por defecto `Sección`; si no existe, no se envía) |
 | `tablero` | Trello: id del tablero (el código de la URL `trello.com/b/<id>/…`, o el `id` que devuelve añadir `.json` a esa URL) |
-| `organizacion`, `proyecto`, `tipoItem` | Azure DevOps: `dev.azure.com/<organizacion>/<proyecto>`; en `organizacion` vale el nombre o la URL pegada (`https://dev.azure.com/Org/Proyecto/…`, `Org.visualstudio.com`), y se guarda solo el nombre. `tipoItem` es el tipo de work item: texto (por defecto `Task`), lista (`["Task", "Bug"]`, hasta 10; al crear se usa el primero) o `"*"` (todos, solo en `modo: "lectura"`). Cada ítem trae `tipo`, `asignado` y `mio` (asignado a quien es dueño del PAT) |
+| `organizacion`, `proyecto`, `tipoItem` | Azure DevOps: `dev.azure.com/<organizacion>/<proyecto>`; en `organizacion` vale el nombre o la URL pegada (`https://dev.azure.com/Org/Proyecto/…`, `Org.visualstudio.com`), y se guarda solo el nombre. `tipoItem` es el tipo de work item: texto (por defecto `Task`), lista (`["Task", "Bug"]`, hasta 10; al crear se usa el primero) o `"*"` (todos, solo en `modo: "lectura"` o `"participar"`). Cada ítem trae `tipo`, `asignado`, `mio` (asignado a quien es dueño del PAT), `descripcion` (texto, hasta 600 caracteres), `prioridad`, `iteracion` y `padre` |
 | `columnas` (Trello) | Nombres de lista: `hecho` (por defecto «Hecho» o «Done») y `pendiente` (por defecto «Por hacer», «To Do» o la primera lista distinta de hecho). La sección se envía como etiqueta de la tarjeta |
 | `columnas` (Azure DevOps) | Estados: `hecho` (por defecto `Done`, `Closed`, `Completed`) y `pendiente` (por defecto `To Do`, `New`); admiten texto o lista. La sección se envía como tag |
 
@@ -191,6 +250,21 @@ carpeta `docs` ni `repo` (si «sincronizara», crearía un work item por cada ca
   "integraciones": [{ "id": "ado", "tipo": "azure-devops", "modo": "lectura",
     "organizacion": "CodeFactory2026-2", "proyecto": "EAP10", "tipoItem": "*" }] }
 ```
+
+**Participar (equipo ajeno donde trabajas tú).** Con `"modo": "participar"` la integración se ve
+igual que en solo lectura, y además puedes **asignarte** (o soltar) un work item y **cambiar su
+estado** en Azure DevOps. Nunca crea ítems, nunca borra y nunca escribe un `.md`. El PAT necesita
+el scope *Work Items: Read & write*. GitHub Projects y Trello aún no participan (la validación lo
+rechaza). Endpoints (solo desde esta máquina):
+
+- `POST /api/integraciones/asignar` `{ proyecto, integracion, id, aMi }`: `aMi: true` te asigna
+  (tu correo sale de `connectionData` de la organización y se guarda 1 h en `datos/externo-<proyecto>.json`),
+  `false` deja el ítem sin asignar.
+- `POST /api/integraciones/estado` `{ proyecto, integracion, id, estado }`: `estado` debe ser uno de
+  los estados ya leídos (sin distinguir mayúsculas).
+
+Ambos responden `{ ok, item, datos }` con el ítem ya parcheado (sin releer todo lo de afuera); si
+Azure rechaza el cambio, 502 con su mensaje (queda en `datos/servidor.log`).
 
 **Cómo funciona la sincronía.** El vínculo casilla ↔ tarjeta es un comentario al final de la línea,
 invisible en el Markdown renderizado: `- [ ] Probar el login <!-- gh:PVTI_… -->` (puede haber varias
@@ -215,6 +289,23 @@ de solo lectura.
 ```sh
 node generar.mjs --probar-conexiones   # lectura mínima de cada integración: OK o el error en español
 ```
+
+### Pedírselo a Claude
+
+Desde la terminal (o pidiéndoselo a Claude) se puede ver el backlog de una integración y, en modo `participar`
+(solo Azure DevOps), asignarse ítems y cambiar su estado. Lee de la caché (`datos/externo-<proyecto>.json`, sin red);
+asignar/estado usan la misma ruta que los botones del tablero y confirman con el título.
+
+```sh
+node generar.mjs --tareas eap10 [--sin-asignar | --mias] [--integracion ado]   # Markdown por estado, con conteos
+node generar.mjs --asignarme eap10 123 [--quitar]                              # solo en «participar»
+node generar.mjs --estado eap10 123 "Doing"                                    # solo estados conocidos de la integración
+```
+
+El hook de inicio añade, por integración, «N sin asignar, M mías abiertas» y el comando para pedirlas. Prompt de ejemplo:
+
+> Revisa las tareas pendientes de EAP10 con `node generar.mjs --tareas eap10 --sin-asignar`, recomiéndame cuál asignarme
+> según prioridad e iteración y, cuando te confirme, asígnamela con `--asignarme eap10 <id>`.
 
 ### Credenciales
 

@@ -7,7 +7,10 @@ import { normalizarOrganizacion } from './azure-devops.mjs'
 
 // Lista blanca por tipo: solo estos campos llegan a proyectos.json. obligatorios ⊂ campos.
 export const COMUNES = ['id', 'tipo', 'modo', 'backlog', 'auto']
-export const MODOS = ['sincronizar', 'lectura'] // «lectura»: solo se muestra lo de afuera; nunca se escribe ni afuera ni en un .md
+export const MODOS = ['sincronizar', 'lectura', 'participar'] // «lectura»: solo se muestra lo de afuera; nunca se escribe ni afuera ni en un .md
+// «participar»: como lectura, pero puedes asignarte ítems y moverlos de estado afuera (nunca crea ni toca un .md).
+export const noEscribeMd = (cfg) => cfg?.modo === 'lectura' || cfg?.modo === 'participar'
+const PARTICIPAN = ['azure-devops']
 export const CAMPOS = {
   'github-projects': { obligatorios: ['propietario', 'numero'], opcionales: ['campoEstado', 'campoSeccion', 'columnas'] },
   trello: { obligatorios: ['tablero'], opcionales: ['columnas'] },
@@ -28,12 +31,13 @@ export function validarIntegracion(cfg, { backlogs = [], otras = [], adaptadores
   else if (otras.includes(cfg.id)) errores.push(`Ya hay otra integración con id «${cfg.id}» en este proyecto.`)
   const modo = cfg.modo === undefined || cfg.modo === null || cfg.modo === '' ? 'sincronizar' : cfg.modo
   if (!MODOS.includes(modo)) errores.push(`Modo desconocido «${cfg.modo}»: usa ${MODOS.join(' o ')}.`)
-  const lectura = modo === 'lectura'
+  const lectura = noEscribeMd({ modo })
+  if (modo === 'participar' && cfg.tipo && !PARTICIPAN.includes(cfg.tipo)) errores.push(`${NOMBRES[cfg.tipo] || cfg.tipo}: este conector aún no participa (usa solo lectura o sincronizar).`)
   // En solo lectura el backlog es opcional (si se da, debe existir: sirve para pasar luego a sincronizar).
   if (!texto(cfg.backlog)) { if (!lectura) errores.push('Elige el backlog que se sincroniza.') }
   else if (!backlogs.includes(cfg.backlog.trim())) errores.push(`No encuentro «${cfg.backlog}» en las carpetas «docs» del proyecto.`)
   if (cfg.auto !== undefined && typeof cfg.auto !== 'boolean') errores.push('«auto» debe ser sí o no.')
-  else if (lectura && cfg.auto === true) errores.push('«auto» no sirve en modo solo lectura: no se sincroniza nada.')
+  else if (lectura && cfg.auto === true) errores.push(`«auto» no sirve en modo ${modo === 'lectura' ? 'solo lectura' : 'participar'}: no se sincroniza nada.`)
   if (!def) return { errores, limpia: null }
   const limpia = { id: cfg.id, tipo: cfg.tipo }
   if (cfg.modo !== undefined && cfg.modo !== null && cfg.modo !== '') limpia.modo = modo
@@ -60,7 +64,7 @@ export function validarIntegracion(cfg, { backlogs = [], otras = [], adaptadores
       }
       if (Object.keys(col).length) limpia.columnas = col
     } else if (campo === 'tipoItem') {
-      if (v === '*') { if (!lectura) errores.push(`${nombre}: «tipoItem» «*» (todos los tipos) solo sirve en modo solo lectura: al sincronizar no se sabría qué tipo crear.`); else limpia.tipoItem = '*' }
+      if (v === '*') { if (!lectura) errores.push(`${nombre}: «tipoItem» «*» (todos los tipos) solo sirve en modo solo lectura o participar: al sincronizar no se sabría qué tipo crear.`); else limpia.tipoItem = '*' }
       else if (Array.isArray(v) && v.length && v.length <= 10 && v.every(texto)) limpia.tipoItem = v.map((s) => s.trim())
       else if (texto(v)) limpia.tipoItem = v.trim()
       else errores.push(`${nombre}: «tipoItem» debe ser un tipo, una lista de tipos (hasta 10) o «*».`)
@@ -120,6 +124,28 @@ export function anadirProyecto(jsonCrudo, proyecto) {
   if (!Array.isArray(lista)) throw new ErrorConfig('proyectos.json debe ser una lista de proyectos.', 409)
   if (lista.some((x) => x?.id === proyecto.id)) throw new ErrorConfig(`Ya hay un proyecto con id «${proyecto.id}».`)
   lista.push(proyecto)
+  return serializar(jsonCrudo, lista)
+}
+
+// Campos de un proyecto que la vista puede editar; id, integraciones, planes, patronBacklogs y cualquier otro no se tocan.
+export const CAMPOS_PROYECTO = ['nombre', 'repo', 'docs', 'notas', 'transcripciones', 'bitacora']
+
+// Nuevo texto de proyectos.json con los campos del proyecto `id` cambiados en su sitio (orden, «~» y campos ajenos intactos).
+// Valor vacío ('' / null / []) = quitar el campo, salvo «nombre». Los valores llegan ya validados (generar.mjs).
+export function editarProyecto(jsonCrudo, id, cambios) {
+  let lista
+  try { lista = JSON.parse(jsonCrudo) } catch { throw new ErrorConfig('proyectos.json no es JSON válido: corrígelo a mano antes de editar desde la vista.', 409) }
+  if (!Array.isArray(lista)) throw new ErrorConfig('proyectos.json debe ser una lista de proyectos.', 409)
+  const p = lista.find((x) => x && x.id === id)
+  if (!p) throw new ErrorConfig(`No hay un proyecto «${id}» en proyectos.json.`, 404)
+  if (!cambios || typeof cambios !== 'object' || Array.isArray(cambios)) throw new ErrorConfig('Faltan los cambios del proyecto.')
+  for (const [k, v] of Object.entries(cambios)) {
+    if (!CAMPOS_PROYECTO.includes(k)) throw new ErrorConfig(`«${k}» no se edita desde la vista (solo ${CAMPOS_PROYECTO.join(', ')}).`)
+    const vacio = v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length)
+    if (!vacio) p[k] = v
+    else if (k === 'nombre') throw new ErrorConfig('El proyecto necesita un nombre.')
+    else delete p[k]
+  }
   return serializar(jsonCrudo, lista)
 }
 

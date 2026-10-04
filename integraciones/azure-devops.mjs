@@ -2,6 +2,8 @@
 //   leer(cfg, cred, deps)                 → { url, titulo, columnas, items: [{ id, titulo, hecha, columna, url, actualizado, tipo, asignado, mio? }], avisos }
 //   crear(cfg, cred, tarea, deps)         → { id, url }      tarea = { titulo, hecha, seccion, descripcion }
 //   actualizar(cfg, cred, id, cambios, deps)                 cambios = { titulo?, hecha? }
+// Modo participar (S37): quienSoy(cfg, cred, deps) → { id, nombre, correo }; asignar(cfg, cred, id, correo|null, deps) y
+//   cambiarEstado(cfg, cred, id, estado, deps, { columnas }?) → { id, columna, hecha, asignado } (el ítem que devuelve ADO).
 // Nunca borra nada. Los mensajes de error no incluyen el PAT.
 export const NOMBRE = 'Azure DevOps'
 const TIMEOUT_MS = 10000
@@ -13,6 +15,11 @@ const PARALELO = 4
 export function traducirError(e, cfg = {}) {
   if (e?.status === 401 || e?.status === 203 || e?.status === 403) return 'Credencial inválida o vencida (revisa azure-devops.pat y su permiso Work Items: Read & write).'
   if (e?.status === 404) return cfg.proyecto ? `No existe la organización/proyecto ${cfg.organizacion}/${cfg.proyecto} o tu PAT no tiene acceso.` : `No existe la organización ${cfg.organizacion} o el PAT no tiene acceso.`
+  if (e?.status === 400) {
+    let msg = ''
+    try { msg = JSON.parse(e.cuerpo).message || '' } catch { msg = String(e.cuerpo || '') }
+    return `Azure DevOps rechazó el cambio: ${String(msg).replace(/\s+/g, ' ').trim().slice(0, 300)}`
+  }
   if (e?.status === 429) return 'Azure DevOps limitó las peticiones (429): espera unos segundos y reintenta.'
   if (e?.status) return `Azure DevOps respondió ${e.status}${e.cuerpo ? `: ${String(e.cuerpo).replace(/\s+/g, ' ').slice(0, 200)}` : ''}.`
   if (e?.name === 'AbortError' || e?.name === 'TimeoutError') return `Sin conexión: Azure DevOps no respondió en ${TIMEOUT_MS / 1000} s.`
@@ -59,11 +66,11 @@ const org = (cfg) => normalizarOrganizacion(cfg.organizacion).organizacion
 const urlItem = (cfg, id) => `https://dev.azure.com/${encodeURIComponent(org(cfg))}/${encodeURIComponent(cfg.proyecto)}/_workitems/edit/${id}`
 
 // Una llamada REST; `ruta` cuelga de …/{organizacion}/{proyecto}/_apis/. Lanza Error con mensaje ya traducido.
-async function api(deps, cfg, cred, metodo, ruta, { cuerpo, tipo = 'application/json' } = {}) {
+async function api(deps, cfg, cred, metodo, ruta, { cuerpo, tipo = 'application/json', version = API } = {}) {
   const f = deps.fetch || globalThis.fetch
   const organizacion = normalizarOrganizacion(cfg.organizacion).organizacion
   const alcance = cfg.proyecto ? `/${encodeURIComponent(cfg.proyecto)}` : '' // sin proyecto: llamadas de la organización
-  const url = `https://dev.azure.com/${encodeURIComponent(organizacion)}${alcance}/_apis/${ruta}${ruta.includes('?') ? '&' : '?'}${API}`
+  const url = `https://dev.azure.com/${encodeURIComponent(organizacion)}${alcance}/_apis/${ruta}${ruta.includes('?') ? '&' : '?'}${version}`
   const ctl = new AbortController()
   const t = setTimeout(() => ctl.abort(), TIMEOUT_MS)
   try {
@@ -89,6 +96,21 @@ const estados = (cfg) => ({
   pendiente: lista(cfg.columnas?.pendiente, ['To Do', 'New']),
 })
 
+const CAMPOS = 'System.Title,System.State,System.ChangedDate,System.AssignedTo,System.WorkItemType,System.Description,Microsoft.VSTS.Common.Priority,System.IterationPath,System.Parent'
+const DESCRIPCION_MAX = 600
+// HTML de ADO → texto plano (saltos por bloque, sin etiquetas, entidades básicas), recortado a DESCRIPCION_MAX con «…».
+export function textoDeHtml(html) {
+  if (!html) return null
+  const ent = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"' }
+  const t = String(html)
+    .replace(/<br\s*\/?>|<\/(?:p|div|li)>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(nbsp|amp|lt|gt|quot);|&#(\d+);/g, (_, n, d) => (n ? ent[n] : String.fromCodePoint(Number(d))))
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  if (!t) return null
+  return t.length > DESCRIPCION_MAX ? `${t.slice(0, DESCRIPCION_MAX - 1).trimEnd()}…` : t
+}
+
 export async function leer(cfg, cred, deps = {}) {
   const tipos = tiposDe(cfg), n = estados(cfg), avisos = []
   const filtroTipo = tipos === '*' ? '' : tipos.length === 1 ? ` AND [System.WorkItemType] = ${lit(tipos[0])}` : ` AND [System.WorkItemType] IN (${tipos.map(lit).join(', ')})`
@@ -101,13 +123,16 @@ export async function leer(cfg, cred, deps = {}) {
   for (let i = 0; i < ids.length; i += LOTE) lotes.push(ids.slice(i, i + LOTE))
   const traidos = []
   for (let i = 0; i < lotes.length; i += PARALELO) {
-    traidos.push(...await Promise.all(lotes.slice(i, i + PARALELO).map((l) => api(deps, cfg, cred, 'GET', `wit/workitems?ids=${l.join(',')}&fields=System.Title,System.State,System.ChangedDate,System.AssignedTo,System.WorkItemType`))))
+    traidos.push(...await Promise.all(lotes.slice(i, i + PARALELO).map((l) => api(deps, cfg, cred, 'GET', `wit/workitems?ids=${l.join(',')}&fields=${CAMPOS}`))))
   }
   const items = []
   for (const r of traidos) {
     for (const w of r.value || []) {
-      const estado = w.fields['System.State'] || null
-      items.push({ id: String(w.id), titulo: w.fields['System.Title'], hecha: !!estado && esta(n.hecho, estado), columna: estado, url: urlItem(cfg, w.id), actualizado: w.fields['System.ChangedDate'], tipo: w.fields['System.WorkItemType'] || null, asignado: identidad(w.fields['System.AssignedTo']) })
+      const f = w.fields, estado = f['System.State'] || null
+      items.push({
+        id: String(w.id), titulo: f['System.Title'], hecha: !!estado && esta(n.hecho, estado), columna: estado, url: urlItem(cfg, w.id), actualizado: f['System.ChangedDate'], tipo: f['System.WorkItemType'] || null, asignado: identidad(f['System.AssignedTo']),
+        descripcion: textoDeHtml(f['System.Description']), prioridad: f['Microsoft.VSTS.Common.Priority'] ?? null, iteracion: f['System.IterationPath'] || null, padre: f['System.Parent'] != null ? String(f['System.Parent']) : null,
+      })
     }
   }
   try {
@@ -162,6 +187,41 @@ export async function actualizar(cfg, cred, id, cambios, deps = {}) {
   if (cambios.titulo !== undefined) ops.push(op('replace', 'System.Title', cambios.titulo))
   if (cambios.hecha !== undefined) ops.push(op('replace', 'System.State', (cambios.hecha ? n.hecho : n.pendiente)[0]))
   if (ops.length) await api(deps, cfg, cred, 'PATCH', `wit/workitems/${encodeURIComponent(id)}`, { cuerpo: ops, tipo: TIPO_PARCHE })
+}
+
+// ---------- Modo participar: asignarse y mover estado de ítems existentes (nunca crea ni borra) ----------
+// connectionData es de la organización: sin proyecto. api-version preview (por verificar con la org real).
+export async function quienSoy(cfg, cred, deps = {}) {
+  const r = await api(deps, { ...cfg, proyecto: undefined }, cred, 'GET', 'connectionData', { version: 'api-version=7.1-preview' })
+  const u = r.authenticatedUser || {}
+  const correo = u.properties?.Account?.$value
+  if (!correo) throw new Error('Azure DevOps no devolvió el correo de tu cuenta; no se puede asignar a ti.')
+  return { id: u.id, nombre: u.customDisplayName || u.providerDisplayName || correo, correo }
+}
+
+const validarId = (id) => { if (!/^\d+$/.test(String(id ?? ''))) throw new Error(`El id «${id}» no es de un work item de Azure DevOps.`) }
+const itemDe = (cfg, w) => {
+  const estado = w.fields?.['System.State'] || null
+  return { id: String(w.id), columna: estado, hecha: !!estado && esta(estados(cfg).hecho, estado), asignado: identidad(w.fields?.['System.AssignedTo']) }
+}
+
+export async function asignar(cfg, cred, id, correo, deps = {}) {
+  validarId(id)
+  const ops = [correo ? op('add', 'System.AssignedTo', correo) : { op: 'remove', path: '/fields/System.AssignedTo' }]
+  return itemDe(cfg, await api(deps, cfg, cred, 'PATCH', `wit/workitems/${id}`, { cuerpo: ops, tipo: TIPO_PARCHE }))
+}
+
+export async function cambiarEstado(cfg, cred, id, estado, deps = {}, { columnas } = {}) {
+  validarId(id)
+  let validos = columnas
+  if (!validos?.length) {
+    const tipos = tiposDe(cfg)
+    const r = await api(deps, cfg, cred, 'GET', 'wit/workitemtypes')
+    validos = [...new Set((r.value || []).filter((t) => !t.isDisabled && (tipos === '*' || esta(tipos, t.name))).flatMap((t) => (t.states || []).map((s) => s.name)))]
+  }
+  const canonico = validos.find((x) => igual(x, estado))
+  if (!canonico) throw new Error(`«${estado}» no es un estado de estos work items (${validos.join(', ')}).`)
+  return itemDe(cfg, await api(deps, cfg, cred, 'PATCH', `wit/workitems/${id}`, { cuerpo: [op('replace', 'System.State', canonico)], tipo: TIPO_PARCHE }))
 }
 
 // Descubrimiento para el formulario (solo lectura). Con `organizacion`: sus proyectos; con `proyecto` además: tipos de work item y sus estados.

@@ -9,16 +9,16 @@
 //   node generar.mjs --probar-conexiones → lectura mínima de cada integración (GitHub Projects, Trello, Azure DevOps)
 // Variables opcionales: TABLERO_PROYECTOS (otro proyectos.json), TABLERO_DATOS (otra carpeta datos/), TABLERO_PUERTO,
 // TABLERO_TRANSCRIPCIONES (otra carpeta en lugar de ~/.claude/projects).
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, realpathSync, openSync, closeSync, appendFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, realpathSync, openSync, readSync, closeSync, appendFileSync } from 'node:fs'
 import { execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
-import { join, dirname, basename, isAbsolute } from 'node:path'
+import { join, dirname, basename, isAbsolute, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extraerMarcas, tareasLocales, planificarSincronia, aplicarSincronia } from './integraciones/sincronia.mjs'
 import { leerCredenciales, credencialesPara, guardarCredencial, resumenCredenciales, REQUISITOS, RUTA_CREDENCIALES } from './integraciones/credenciales.mjs'
-import { validarIntegracion, aplicarCambio, anadirProyecto, escribirAtomico, ErrorConfig, CAMPOS, COMUNES } from './integraciones/config.mjs'
+import { validarIntegracion, aplicarCambio, anadirProyecto, editarProyecto, escribirAtomico, ErrorConfig, CAMPOS, COMUNES, CAMPOS_PROYECTO, noEscribeMd } from './integraciones/config.mjs'
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
@@ -48,6 +48,7 @@ function cargarProyectos(forzar = false) {
   firmaConfig = firma
   proyectos = leerJson(CONFIG, []).map((p) => ({
     ...p,
+    editable: Object.fromEntries(CAMPOS_PROYECTO.filter((k) => p[k] !== undefined).map((k) => [k, p[k]])), // tal cual (con «~») para «Editar proyecto»
     repo: p.repo && expandir(p.repo),
     docs: (p.docs || []).map(expandir),
     notas: p.notas && expandir(p.notas),
@@ -73,37 +74,199 @@ const PLANTILLA_NOTAS = `# Notas para Claude
 
 `
 
-// ---------- Crear proyecto y backlog desde la vista ----------
-// Entrada de proyectos.json para un proyecto nuevo: id [a-z0-9-] único; repo y docs, carpetas que ya existen
-// (se guardan como se escribieron, «~» incluido). Lanza ErrorConfig (400) con todos los errores juntos.
+// ---------- Crear y editar proyecto, crear backlog desde la vista ----------
+// Rutas: absolutas o con «~», y se guardan como se escribieron. Cada validador añade a `errores` y devuelve el valor recortado o null.
+export function validarCarpeta(v, campo, errores) {
+  if (typeof v !== 'string' || !v.trim()) return errores.push(`«${campo}» debe ser una ruta.`), null
+  const r = v.trim()
+  if (!isAbsolute(expandir(r))) return errores.push(`«${campo}» debe ser una ruta absoluta (o empezar por ~): ${r}`), null
+  if (!statSync(expandir(r), { throwIfNoEntry: false })?.isDirectory()) return errores.push(`«${campo}» no es una carpeta que exista: ${r}`), null
+  return r
+}
+// notas/bitácora: un archivo que ya existe, o uno nuevo dentro de una carpeta que existe (las notas se crean con su plantilla).
+function validarArchivo(v, campo, errores) {
+  if (typeof v !== 'string' || !v.trim()) return errores.push(`«${campo}» debe ser una ruta.`), null
+  const r = v.trim(), abs = expandir(r)
+  if (!isAbsolute(abs)) return errores.push(`«${campo}» debe ser una ruta absoluta (o empezar por ~): ${r}`), null
+  const st = statSync(abs, { throwIfNoEntry: false })
+  if (st ? !st.isFile() : !statSync(dirname(abs), { throwIfNoEntry: false })?.isDirectory()) return errores.push(`«${campo}» debe ser un archivo, o estar en una carpeta que exista: ${r}`), null
+  return r
+}
+const comoLista = (v) => (v == null || v === '' ? [] : Array.isArray(v) ? v : [v])
+
+// Carpeta de ~/.claude/projects de las sesiones abiertas en `repo`: Claude Code cambia todo lo no alfanumérico por «-».
+export const transcripcionesDe = (repo) => expandir(repo).replace(/[^A-Za-z0-9]/g, '-')
+
+// ---------- Elegir carpeta sin pegar rutas (/api/carpetas) ----------
+// Nunca fuera de home (comprobado con realpath: un enlace no saca de ahí) y nunca lista archivos.
+// TABLERO_HOME cambia esa raíz (los tests la apuntan a un temporal).
+const HOME = process.env.TABLERO_HOME || homedir()
+const MAX_CARPETAS = 200
+const CANDIDATAS_DOCS = ['docs', 'documentacion', '.tablero']
+const dentroDe = (r, raiz) => r === raiz || r.startsWith(raiz.endsWith(sep) ? raiz : raiz + sep)
+const conTilde = (r, home) => (r === home ? '~' : dentroDe(r, home) ? `~${r.slice(home.length)}` : r)
+const esCarpeta = (r) => !!statSync(r, { throwIfNoEntry: false })?.isDirectory()
+const tieneBacklogEn = (r) => { try { return readdirSync(r).some((f) => /^BACKLOG.*\.md$/i.test(f)) } catch { return false } }
+const candidatasDocs = (r) => CANDIDATAS_DOCS.map((d) => join(r, d)).filter(esCarpeta)
+
+// → { ruta, padre (null en home), carpetas: [{ nombre, ruta, esGit, tieneBacklog }], aviso? }. Sin ocultas, node_modules ni enlaces.
+export function listarCarpetas(ruta, home = HOME) {
+  const pedida = ruta == null || ruta === '' ? '~' : ruta
+  if (typeof pedida !== 'string') throw new ErrorConfig('La ruta debe ser texto.')
+  const abs = pedida.trim().replace(/^~(?=\/|$)/, home)
+  if (!isAbsolute(abs)) throw new ErrorConfig(`La ruta debe ser absoluta (o empezar por ~): ${pedida}`)
+  const lexica = resolve(abs), raiz = resolve(home)
+  let real, raizReal
+  try { real = realpathSync(lexica); raizReal = realpathSync(raiz) } catch { throw new ErrorConfig(`No existe esa carpeta: ${pedida}`) }
+  if (!dentroDe(lexica, raiz) || !dentroDe(real, raizReal)) throw new ErrorConfig(`Solo se exploran carpetas dentro de ${raiz}: ${pedida} queda fuera.`)
+  if (!esCarpeta(real)) throw new ErrorConfig(`No es una carpeta: ${pedida}`)
+  const todas = readdirSync(real, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'node_modules')
+    .map((d) => d.name).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+  const carpetas = todas.slice(0, MAX_CARPETAS).map((nombre) => {
+    const r = join(lexica, nombre)
+    return { nombre, ruta: r, esGit: existsSync(join(r, '.git')), tieneBacklog: tieneBacklogEn(r) || candidatasDocs(r).some(tieneBacklogEn) }
+  })
+  return {
+    ruta: lexica, padre: lexica === raiz ? null : dirname(lexica), carpetas,
+    ...(todas.length > MAX_CARPETAS && { aviso: `Hay ${todas.length} carpetas; se muestran las primeras ${MAX_CARPETAS}. Escribe la ruta para llegar a otra.` }),
+  }
+}
+
+// «cwd» de una transcripción: de sus primeras ~20 líneas (las 3 primeras de un .jsonl real no lo traen). Caché por ruta+mtime+size.
+const cacheCwd = new Map()
+function cwdDe(ruta, st) {
+  const c = cacheCwd.get(ruta)
+  if (c && c.mtime === st.mtimeMs && c.size === st.size) return c.cwd
+  let cwd = null
+  try {
+    const fd = openSync(ruta, 'r')
+    try {
+      const buf = Buffer.alloc(Math.min(st.size, 64 * 1024))
+      for (const l of buf.toString('utf8', 0, readSync(fd, buf, 0, buf.length, 0)).split('\n').slice(0, 20)) {
+        try { const o = JSON.parse(l); if (typeof o?.cwd === 'string') { cwd = o.cwd; break } } catch {}
+      }
+    } finally { closeSync(fd) }
+  } catch {}
+  cacheCwd.set(ruta, { mtime: st.mtimeMs, size: st.size, cwd })
+  return cwd
+}
+
+// Carpetas donde se abrió Claude (cwd de ~/.claude/projects/*/*.jsonl) que aún no son proyectos: dentro de home, que existan,
+// sin el propio home; una subcarpeta suma en su carpeta madre si esta también sale y es un repo git. Más reciente primero, tope 12.
+export function sugerirProyectos(dir = TRANSCRIPCIONES, lista = [], { home = HOME, tope = 12 } = {}) {
+  if (!esCarpeta(dir)) return []
+  const raiz = resolve(home)
+  const repos = new Set(lista.map((p) => p.repo && resolve(expandir(p.repo))).filter(Boolean))
+  const yaVistas = new Set(lista.map((p) => p.transcripciones).filter(Boolean))
+  const porCwd = new Map()
+  for (const d of readdirSync(dir)) {
+    if (yaVistas.has(d)) continue
+    let archivos = []
+    try { archivos = readdirSync(join(dir, d)).filter((f) => f.endsWith('.jsonl')) } catch { continue }
+    const sts = archivos.map((f) => ({ ruta: join(dir, d, f), st: statSync(join(dir, d, f), { throwIfNoEntry: false }) })).filter((x) => x.st?.isFile())
+      .sort((a, b) => b.st.mtimeMs - a.st.mtimeMs)
+    let cwd = null
+    for (const x of sts) if ((cwd = cwdDe(x.ruta, x.st))) break
+    if (!cwd || !isAbsolute(cwd)) continue
+    cwd = resolve(cwd)
+    const s = porCwd.get(cwd) || { sesiones: 0, ultimo: 0 }
+    porCwd.set(cwd, { sesiones: s.sesiones + sts.length, ultimo: Math.max(s.ultimo, sts[0]?.st.mtimeMs || 0) })
+  }
+  const validas = [...porCwd.keys()].filter((c) => c !== raiz && dentroDe(c, raiz) && !repos.has(c) && esCarpeta(c))
+  const madres = new Map()
+  for (const c of validas) {
+    const madre = validas.filter((o) => o !== c && dentroDe(c, o) && existsSync(join(o, '.git'))).sort((a, b) => a.length - b.length)[0] || c
+    const s = porCwd.get(c), m = madres.get(madre) || { sesiones: 0, ultimo: 0 }
+    madres.set(madre, { sesiones: m.sesiones + s.sesiones, ultimo: Math.max(m.ultimo, s.ultimo) })
+  }
+  return [...madres].sort((a, b) => b[1].ultimo - a[1].ultimo).slice(0, tope).map(([ruta, s]) => ({
+    ruta, nombre: basename(ruta), ultimaActividad: new Date(s.ultimo).toISOString(), sesiones: s.sesiones, esGit: existsSync(join(ruta, '.git')),
+  }))
+}
+
+// Lo que se propone al elegir la carpeta de un proyecto: id único (sufijo -2, -3…), nombre legible, docs entre las candidatas
+// (si no hay, el propio repo) y notas dentro de la primera docs. Rutas con «~».
+export function propuestaProyecto(ruta, existentes = [], home = HOME) {
+  const abs = resolve(ruta.replace(/^~(?=\/|$)/, home)), base = basename(abs)
+  const raizId = base.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36) || 'proyecto'
+  const ids = new Set(existentes.map((p) => p.id))
+  let id = raizId
+  for (let i = 2; ids.has(id); i++) id = `${raizId}-${i}`
+  const limpio = base.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const docs = candidatasDocs(abs)
+  const elegidas = docs.length ? docs : [abs]
+  return {
+    id, nombre: limpio.charAt(0).toUpperCase() + limpio.slice(1),
+    docs: elegidas.map((d) => conTilde(d, resolve(home))),
+    notas: conTilde(join(elegidas[0], `NOTAS_${id.toUpperCase().replace(/-/g, '_')}.md`), resolve(home)),
+  }
+}
+
+// Entrada de proyectos.json para un proyecto nuevo: id [a-z0-9-] único (sin id y con repo, se propone desde el repo);
+// repo y docs, carpetas que ya existen (sin docs, el repo); «transcripciones» sale del repo. Lanza ErrorConfig (400) con todos los errores juntos.
 export function proyectoNuevo(b, existentes) {
   const errores = []
-  const id = typeof b.id === 'string' ? b.id.trim() : ''
+  const repo = b.repo == null || b.repo === '' ? undefined : validarCarpeta(b.repo, 'repo', errores)
+  let id = typeof b.id === 'string' ? b.id.trim() : ''
+  if (!id && repo) id = propuestaProyecto(expandir(repo), existentes).id
   const nombre = typeof b.nombre === 'string' ? b.nombre.replace(/\s+/g, ' ').trim() : ''
   if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(id)) errores.push('El id solo admite minúsculas, números y guiones (hasta 40, sin empezar por guion).')
   else if (existentes.some((p) => p.id === id)) errores.push(`Ya hay un proyecto con id «${id}».`)
   if (!nombre || nombre.length > 100) errores.push('Falta el nombre (hasta 100 caracteres).')
-  const carpeta = (v, campo) => {
-    if (typeof v !== 'string' || !v.trim()) return errores.push(`«${campo}» debe ser una ruta.`), null
-    const r = v.trim()
-    if (!isAbsolute(expandir(r))) return errores.push(`«${campo}» debe ser una ruta absoluta (o empezar por ~): ${r}`), null
-    if (!statSync(expandir(r), { throwIfNoEntry: false })?.isDirectory()) return errores.push(`«${campo}» no es una carpeta que exista: ${r}`), null
-    return r
-  }
-  const repo = b.repo == null || b.repo === '' ? undefined : carpeta(b.repo, 'repo')
-  const docs = (b.docs == null || b.docs === '' ? [] : Array.isArray(b.docs) ? b.docs : [b.docs]).map((d) => carpeta(d, 'docs'))
+  let docs = comoLista(b.docs).map((d) => validarCarpeta(d, 'docs', errores))
+  if (!docs.length && repo) docs = [repo]
   if (errores.length) throw Object.assign(new ErrorConfig(errores.join(' ')), { errores })
-  return { id, nombre, ...(repo && { repo }), ...(docs.length && { docs }) }
+  return { id, nombre, ...(repo && { repo, transcripciones: transcripcionesDe(repo) }), ...(docs.length && { docs }) }
+}
+
+// Cambios validados para editarProyecto (config.mjs): solo CAMPOS_PROYECTO; '' = quitar el campo (salvo nombre).
+// Si el proyecto queda con repo y sin «transcripciones» (y no se pidió quitarla), se rellena desde el repo.
+export function cambiosProyecto(cambios, actual) {
+  if (!cambios || typeof cambios !== 'object' || Array.isArray(cambios)) throw new ErrorConfig('Faltan los cambios del proyecto.')
+  const errores = [], limpios = {}
+  const vacio = (v) => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length)
+  for (const [k, v] of Object.entries(cambios)) {
+    if (!CAMPOS_PROYECTO.includes(k)) { errores.push(`«${k}» no se edita desde la vista (solo ${CAMPOS_PROYECTO.join(', ')}).`); continue }
+    if (k === 'nombre') {
+      const n = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : ''
+      if (!n || n.length > 100) errores.push('Falta el nombre (hasta 100 caracteres).'); else limpios.nombre = n
+    } else if (vacio(v)) limpios[k] = ''
+    else if (k === 'repo') limpios.repo = validarCarpeta(v, 'repo', errores)
+    else if (k === 'docs') limpios.docs = comoLista(v).map((d) => validarCarpeta(d, 'docs', errores))
+    else if (k === 'notas' || k === 'bitacora') limpios[k] = validarArchivo(v, k, errores)
+    else if (typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,200}$/.test(v.trim())) limpios.transcripciones = v.trim()
+    else errores.push('«transcripciones» es el nombre de una carpeta de ~/.claude/projects (sin «/»).')
+  }
+  if (errores.length) throw Object.assign(new ErrorConfig(errores.join(' ')), { errores })
+  const repo = 'repo' in limpios ? limpios.repo : actual?.repo
+  if (repo && !('transcripciones' in limpios) && !actual?.transcripciones) limpios.transcripciones = transcripcionesDe(repo)
+  return limpios
 }
 
 export const plantillaBacklog = (nombre, fecha) => `# Backlog — ${nombre}
 
 ## Estado
 - ${fecha} · backlog creado desde el tablero.
+- Para retomar (${fecha}): Backlog recién creado; aún no se empezó nada. Lo primero es describir la primera tarea de S1.
 
 ## S1 — Primera sesión
+Historia: Como <quién>, quiero <qué>, para <para qué>.
 - [ ] Describe aquí la primera tarea
 `
+
+// Backlog secundario con nombre: «Sprint 3 — Diseño» → BACKLOG_SPRINT_3_DISENO.md (sin tildes; nunca el principal).
+export function archivoDeNombre(nombre) {
+  const base = String(nombre ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60)
+  if (!base) throw new ErrorConfig('El nombre del backlog necesita al menos una letra o número.')
+  return `BACKLOG_${base}.md`
+}
+// Lee { nombre, archivo } del cuerpo: el nombre (si viene) decide el archivo y se añade al título.
+function destinoBacklog(b, porDefecto) {
+  const nombre = typeof b.nombre === 'string' && b.nombre.trim() ? b.nombre.trim().replace(/\s+/g, ' ') : null
+  if (nombre && b.archivo != null) throw new ErrorConfig('Indica el nombre o el archivo del backlog, no ambos.')
+  return { nombre, archivo: nombre ? archivoDeNombre(nombre) : b.archivo ?? porDefecto }
+}
 
 // Ruta de un backlog nuevo dentro de la carpeta docs elegida: nombre simple (sin / ni ..), .md, que el
 // patrón del proyecto reconozca, y que no exista (409). La carpeta se resuelve con realpath.
@@ -119,20 +282,44 @@ export function rutaBacklogNuevo(p, archivo = 'BACKLOG.md', carpeta) {
   return ruta
 }
 
+// Backlog local a partir de los ítems de una integración de solo lectura: un «## estado» por columna (en su orden) y un
+// «### tipo» dentro, con la marca «<!-- id:ID -->» para que la sincronía los reconozca. El título no se toca (si no, saldría conflicto).
+export function importarBacklog(nombre, integracion, items, columnas, fecha, soloMias = false) {
+  const lista = items.filter((x) => !soloMias || x.mio === true)
+  const orden = [...new Set([...(columnas || []), ...lista.map((x) => x.columna || 'Sin estado')])]
+  const tipos = [...new Set(lista.map((x) => x.tipo).filter(Boolean))]
+  const out = [`# Backlog — ${nombre}`, '', '## Estado', `- ${fecha} · importado de ${integracion}${soloMias ? ' (solo lo asignado a mí)' : ''}: ${lista.length} ítems.`]
+  for (const col of orden) {
+    const delEstado = lista.filter((x) => (x.columna || 'Sin estado') === col)
+    if (!delEstado.length) continue
+    out.push('', `## ${col}`)
+    for (const tipo of [...new Set(delEstado.map((x) => x.tipo || null))]) {
+      if (tipos.length > 1 || tipo) out.push('', `### ${tipo || 'Sin tipo'}`)
+      for (const x of delEstado.filter((y) => (y.tipo || null) === tipo)) out.push(`- [${x.hecha ? 'x' : ' '}] ${String(x.titulo).replace(/\s*\n\s*/g, ' ')} <!-- ${integracion}:${x.id} -->`)
+    }
+  }
+  return { contenido: out.join('\n') + '\n', total: lista.length, tipos }
+}
+
 // ---------- Backlogs ----------
 function contarCasillas(texto) {
   const hechas = (texto.match(/^\s*[-*] \[x\]/gim) || []).length
-  const pendientes = (texto.match(/^\s*[-*] \[ \]/gm) || []).length
+  const pendientes = (texto.match(/^\s*[-*] \[[ ~]\]/gm) || []).length
   return { hechas, total: hechas + pendientes }
 }
 
 // ---------- Estructura (vista «Mapa»): secciones ##/### con sus casillas anidadas ----------
 const RE_TITULO = /^(#{2,3})\s+(.+?)\s*#*\s*$/
-const RE_TAREA = /^(\s*)[-*] \[([ xX])\]\s?(.*)$/
+// «[~]» = en curso a mano (cuenta como pendiente); «[-]» = movida (fuera de los conteos).
+const RE_TAREA = /^(\s*)[-*] \[([ xX~-])\]\s?(.*)$/
 const RE_CERCA = /^\s*(```|~~~)/
 const RE_COMO = /c[oó]mo ejecutarlo/i
-const RE_ITEM = /^ ?(\d+[.)]|[-*])\s+(?!\[[ xX]\])(.+)$/
+const RE_ITEM = /^ ?(\d+[.)]|[-*])\s+(?!\[[ xX~-]\])(.+)$/
 const RE_DURACION = /\s*\(([^()]*\b(?:d[ií]as?|d|semanas?|sem|horas?|h)\b[^()]*)\)\s*$/i
+// «Qué se busca»: línea «Historia:|Objetivo:|Para qué:» (también en viñeta o en negrita); la descripción es el primer
+// párrafo de texto corrido bajo el título (sin casillas, listas, tablas, citas ni código).
+const RE_HISTORIA = /^\s*(?:[-*]\s+)?\**\s*(?:Historia|Objetivo|Para qu[eé])\s*:\s*\**\s*(.+)$/i
+const esParrafo = (l) => !/^\s*(?:[-*+]|\d+[.)])\s|^\s*\||^\s*<!--|^\s*(?:-{3,}|\*{3,}|_{3,})\s*$|^\s{4,}/.test(l)
 export const plano = (t) => String(t).replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*|__|`/g, '').trim()
 
 // «S1 — Migración … · **Opus** · rama `x`» → { titulo, clave: 'S1', meta: { modelo, rama, duracion, cerrado, nota } }
@@ -160,7 +347,7 @@ export function analizarTitulo(crudo) {
 }
 
 function cerrarSeccion(s) {
-  const contar = (ts) => ts.reduce((a, x) => { const h = contar(x.hijas); return { hechas: a.hechas + h.hechas + (x.hecha ? 1 : 0), total: a.total + h.total + 1 } }, { hechas: 0, total: 0 })
+  const contar = (ts) => ts.reduce((a, x) => { if (x.marca === '-') return a; const h = contar(x.hijas); return { hechas: a.hechas + h.hechas + (x.hecha ? 1 : 0), total: a.total + h.total + 1 } }, { hechas: 0, total: 0 })
   const propias = contar(s.tareas)
   s.hijas.forEach(cerrarSeccion)
   s.hechas = propias.hechas + s.hijas.reduce((a, h) => a + h.hechas, 0)
@@ -178,7 +365,7 @@ const textoDeCita = (lineas) => lineas.map((l) => l.replace(/^\s*>\s?/, '').trim
 // Árbol de secciones: [{ id, linea, titulo, tituloCrudo, clave, nivel, meta, hechas, total, estado, tareas:[{texto,hecha,linea,hijas,marcas?}], items, prompts:[{etiqueta,texto,clave,modelo}], hijas:[sección] }]
 export function estructura(texto) {
   const raiz = []
-  let padre = null, actual = null, pila = [], cerca = null, cita = null, rotulo = null, n = 0
+  let padre = null, actual = null, pila = [], cerca = null, cita = null, rotulo = null, n = 0, intro = false
   const cuenta = () => RE_COMO.test(plano(actual.titulo)) || (actual.nivel === 3 && padre && RE_COMO.test(plano(padre.titulo)))
   const emitir = (lineas, rot, esCita) => {
     const texto = esCita ? textoDeCita(lineas) : lineas.join('\n')
@@ -189,6 +376,7 @@ export function estructura(texto) {
   }
   for (const [i, linea] of String(texto).replace(/\t/g, '    ').split('\n').entries()) {
     if (RE_CERCA.test(linea)) {
+      intro = false
       if (cita) { emitir(cita.lineas, cita.rotulo, true); cita = null }
       if (cerca) { emitir(cerca.lineas, cerca.rotulo, false); cerca = null } else cerca = { rotulo, lineas: [] }
       rotulo = null
@@ -196,6 +384,7 @@ export function estructura(texto) {
     }
     if (cerca) { cerca.lineas.push(linea); continue }
     if (/^\s*>/.test(linea)) {
+      intro = false
       if (!cita) cita = { rotulo, lineas: [] }
       cita.lineas.push(linea)
       continue
@@ -208,8 +397,15 @@ export function estructura(texto) {
       const s = { id: `s${n++}`, nivel, linea: i, tituloCrudo: t[2], ...analizarTitulo(t[2]), tareas: [], items: [], prompts: [], hijas: [] }
       if (nivel === 3 && padre) padre.hijas.push(s)
       else { raiz.push(s); if (nivel === 2) padre = s }
-      actual = s; pila = []; rotulo = null
+      actual = s; pila = []; rotulo = null; intro = true
       continue
+    }
+    const hist = actual && linea.match(RE_HISTORIA)
+    if (hist) { actual.historia ??= plano(hist[1]).slice(0, 600); if (actual.descripcion) intro = false }
+    else if (actual && intro) {
+      if (!linea.trim()) { if (actual.descripcion) intro = false }
+      else if (esParrafo(linea)) actual.descripcion = actual.descripcion ? `${actual.descripcion} ${plano(linea)}` : plano(linea)
+      else intro = false
     }
     const m = actual && linea.match(RE_TAREA)
     if (actual && !actual.plan) { const pl = linea.match(/plans\/([A-Za-z0-9_-]+\.md)/); if (pl) actual.plan = pl[1] }
@@ -227,7 +423,7 @@ export function estructura(texto) {
     }
     const sangria = m[1].length
     const { texto: limpio, marcas } = extraerMarcas(m[3].trim())
-    const tarea = { texto: limpio.slice(0, 1500), hecha: m[2] !== ' ', linea: i, hijas: [], ...(Object.keys(marcas).length ? { marcas } : {}) }
+    const tarea = { texto: limpio.slice(0, 1500), hecha: /x/i.test(m[2]), linea: i, hijas: [], ...(/[~-]/.test(m[2]) ? { marca: m[2] } : {}), ...(Object.keys(marcas).length ? { marcas } : {}) }
     while (pila.length && pila.at(-1).sangria >= sangria) pila.pop()
     ;(pila.length ? pila.at(-1).tarea.hijas : actual.tareas).push(tarea)
     pila.push({ sangria, tarea })
@@ -237,17 +433,43 @@ export function estructura(texto) {
   for (const s of aplanar(raiz)) {
     for (const p of s.prompts) { const f = p.clave && s.filas?.find((x) => x.clave === p.clave); if (f) p.modelo = f.modelo }
     delete s.filas
+    if (s.descripcion) s.descripcion = s.descripcion.slice(0, 600)
   }
   raiz.forEach(cerrarSeccion)
   return raiz
 }
 export const aplanar = (arbol) => arbol.flatMap((s) => [s, ...aplanar(s.hijas)])
+// «Qué se busca» de un plan de Claude: el primer párrafo bajo «## Context» o «## Contexto».
+export const contextoDePlan = (arbol) => aplanar(arbol).find((s) => /^contexto?\b/i.test(plano(s.titulo)))?.descripcion ?? null
+
+// «- Para retomar (fecha): …» en «## Estado»: lo escribe quien cierra la sesión (/relevo), en lenguaje natural.
+// Las líneas sangradas que siguen son parte de la misma viñeta. Devuelve la de fecha más reciente (empate: la primera).
+const RE_RETOMAR = /^[-*]\s+\**\s*Para retomar\s*\(([^)]*)\)\s*:?\s*\**\s*:?\s*(.*)$/i
+export function retomarDe(estadoTxt) {
+  const lineas = String(estadoTxt ?? '').split('\n')
+  let mejor = null
+  lineas.forEach((l, i) => {
+    const m = l.match(RE_RETOMAR)
+    if (!m) return
+    const partes = [m[2]]
+    for (let j = i + 1; j < lineas.length && /^\s+\S/.test(lineas[j]) && !/^\s*[-*]\s/.test(lineas[j]); j++) partes.push(lineas[j].trim())
+    const texto = plano(partes.join(' ')).replace(/\s+/g, ' ')
+    if (texto && (!mejor || m[1].trim() > mejor.fecha)) mejor = { fecha: m[1].trim(), texto }
+  })
+  return mejor
+}
 
 // «Estás aquí»: lo que nombra la primera línea de «## Estado» (prefiere «Siguiente: X»;
 // si lo nombrado está cerrado o ya hecho, la sección siguiente no hecha); si no, la primera sección no terminada.
 export function estasAqui(arbol, estadoTxt = '') {
   const pasos = aplanar(arbol).filter((s) => s.estado !== 'doc')
-  const linea = String(estadoTxt).split('\n').find((l) => l.trim()) || ''
+  let enRetomar = false
+  const linea = String(estadoTxt).split('\n').find((l) => {
+    if (RE_RETOMAR.test(l)) return !(enRetomar = true)
+    if (enRetomar && /^\s+\S/.test(l)) return false
+    enRetomar = false
+    return l.trim()
+  }) || ''
   const sig = linea.match(/Siguiente:?\**\s*\**\s*([HS]\d+[a-z]?)\b/)
   const ref = sig || linea.match(/\b([HS]\d+[a-z]?)\b/)
   if (ref) {
@@ -292,7 +514,7 @@ export function frenteActivo(b, entradas = [], planes = []) {
     const hito = hitoDe(sec)
     if (!abierta(hito)) return null
     // La tarea abierta más profunda que contiene la línea y tiene hijas (si no, la abierta más profunda).
-    const cadena = tareas.filter((x) => x.sec === sec && x.t.linea <= L && L < x.fin && !x.t.hecha)
+    const cadena = tareas.filter((x) => x.sec === sec && x.t.linea <= L && L < x.fin && !x.t.hecha && x.t.marca !== '-')
     return { L, sec, hito, x: cadena.filter((x) => x.t.hijas.length).at(-1) || cadena.at(-1) || null }
   }
   for (const e of [...entradas].reverse()) {
@@ -497,7 +719,7 @@ function leerPlanes(p, menciones, duenos) {
     const contenido = readFileSync(ruta, 'utf8')
     const titulo = (contenido.match(/^#\s+(.+)$/m) || [, nombre])[1].trim()
     const arbol = estructura(contenido)
-    return [{ nombre, ruta, titulo, carpetas: [...carpetas], modificado: statSync(ruta).mtime.toISOString(), contenido, estructura: arbol, aqui: estasAqui(arbol, seccionEstado(contenido)) }]
+    return [{ nombre, ruta, titulo, contexto: contextoDePlan(arbol), carpetas: [...carpetas], modificado: statSync(ruta).mtime.toISOString(), contenido, estructura: arbol, aqui: estasAqui(arbol, seccionEstado(contenido)) }]
   }).sort((a, b) => b.modificado.localeCompare(a.modificado))
 }
 
@@ -580,7 +802,10 @@ function leerGit(p) {
   })
   const rama = (sh('git', ['branch', '--show-current'], p.repo) || '').trim()
   const sinPush = (sh('git', ['log', '--branches', '--not', '--remotes', '--pretty=%H'], p.repo) || '').split('\n').filter(Boolean)
-  const datos = { url, prs, commits, rama, sinPush, ramas: leerRamas(p.repo), grafo: grafoRamas(commits), actualizadoGh: prsCrudo ? new Date().toISOString() : cache.actualizadoGh || null }
+  // Ramas locales sin fusionar en la principal (origin/HEAD, si no main): las casillas hechas en ellas van «En prueba».
+  const principal = (sh('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], p.repo) || '').trim() || 'main'
+  const sinFusionar = (sh('git', ['for-each-ref', `--no-merged=${principal}`, 'refs/heads', '--format=%(refname:short)'], p.repo) || '').split('\n').filter(Boolean)
+  const datos = { url, prs, commits, rama, sinPush, sinFusionar, ramas: leerRamas(p.repo), grafo: grafoRamas(commits), actualizadoGh: prsCrudo ? new Date().toISOString() : cache.actualizadoGh || null }
   writeFileSync(rutaCache, JSON.stringify({ url, prs, actualizadoGh: datos.actualizadoGh }))
   return datos
 }
@@ -593,9 +818,11 @@ const rutaInstantanea = (p, cfg) => join(DATOS, `sync-${p.id}-${cfg.id}.json`)
 const hashDe = (t) => createHash('sha1').update(t).digest('hex')
 const conTiempo = (promesa, ms) => Promise.race([promesa, new Promise((_, mal) => setTimeout(() => mal(new Error(`Sin conexión: no respondió en ${ms / 1000} s.`)), ms).unref())])
 export class ErrorSincronia extends Error { constructor(msg, estado, extra) { super(msg); Object.assign(this, { estado, extra }) } }
-// «modo: 'lectura'»: solo se lee afuera; ni backlog, ni crear/actualizar, ni instantánea, ni sincronía.
-const esLectura = (cfg) => cfg?.modo === 'lectura'
+// «modo: 'lectura'» y «'participar'»: solo se lee afuera; ni backlog, ni crear/actualizar, ni instantánea, ni sincronía.
+// En «participar» además puedes asignarte ítems y cambiarles el estado afuera (endpoints /api/integraciones/asignar y /estado).
+const esLectura = noEscribeMd
 const SOLO_LECTURA = 'Esta integración es de solo lectura: no se sincroniza nada (ni afuera ni en el backlog).'
+const SOLO_PARTICIPAR = 'Esta integración está en modo participar: te asignas ítems y cambias su estado afuera, pero no se sincroniza con un backlog.'
 const AVISO_PRIMERA = 'Primera sincronía: usa la vista previa («Sincronizar») para elegir qué se crea; «auto» no aplica nada hasta entonces.'
 
 // Todo lo necesario para sincronizar una integración: config, backlog, adaptador enlazado y credenciales.
@@ -611,6 +838,12 @@ function contextoIntegracion(p, cfg, backlogs, adaptadores) {
   if (faltan.length) throw new ErrorSincronia(`Falta credencial: ${faltan.join(', ')}.`, 400, { estado: 'falta-credencial', paso })
   const deps = { memo: new Map() }
   const adaptador = { leer: () => mod.leer(cfg, cred, deps) }
+  // Participar: solo asignar y cambiar estado de ítems existentes; nunca crear ni actualizar.
+  if (cfg.modo === 'participar') {
+    if (mod.asignar) adaptador.asignar = (id, correo) => mod.asignar(cfg, cred, id, correo, deps)
+    if (mod.cambiarEstado) adaptador.cambiarEstado = (id, estado, op) => mod.cambiarEstado(cfg, cred, id, estado, deps, op)
+    if (mod.quienSoy) adaptador.quienSoy = () => mod.quienSoy(cfg, cred, deps)
+  }
   if (!lectura) Object.assign(adaptador, {
     crear: (c, cr, t) => mod.crear(c, cr, t, deps),
     actualizar: (c, cr, id, x) => mod.actualizar(c, cr, id, x, deps),
@@ -622,7 +855,7 @@ function contextoIntegracion(p, cfg, backlogs, adaptadores) {
 export async function sincronizar(p, idIntegracion, { elegidas = null, resoluciones = {}, hashPrevio, adaptadores = ADAPTADORES, rutasPermitidas } = {}) {
   const cfg = (p.integraciones || []).find((x) => x.id === idIntegracion)
   if (!cfg) throw new ErrorSincronia('Esa integración no está en proyectos.json.', 404)
-  if (esLectura(cfg)) throw new ErrorSincronia(SOLO_LECTURA, 400, { estado: 'solo-lectura' })
+  if (esLectura(cfg)) throw new ErrorSincronia(cfg.modo === 'participar' ? SOLO_PARTICIPAR : SOLO_LECTURA, 400, { estado: 'solo-lectura' })
   const ctx = contextoIntegracion(p, cfg, leerBacklogs(p), adaptadores)
   const ruta = ctx.backlog.ruta
   if (rutasPermitidas && !rutasPermitidas.has(ruta)) throw new ErrorSincronia('Ese archivo no lo administra el tablero.', 403)
@@ -664,7 +897,7 @@ async function leerIntegraciones(p, backlogs, { adaptadores = ADAPTADORES, aplic
   const rutaExt = join(DATOS, `externo-${p.id}.json`), cache = leerJson(rutaExt, {})
   const salida = await Promise.all(p.integraciones.map(async (cfg) => {
     const lectura = esLectura(cfg)
-    const base = { id: cfg.id, tipo: cfg.tipo, nombre: NOMBRES[cfg.tipo] || cfg.tipo, modo: lectura ? 'lectura' : 'sincronizar', backlog: lectura ? null : cfg.backlog, auto: !lectura && !!cfg.auto, config: configVisible(cfg), ultimaSincronia: cache[cfg.id]?.ultimaSincronia || null }
+    const base = { id: cfg.id, tipo: cfg.tipo, nombre: NOMBRES[cfg.tipo] || cfg.tipo, modo: cfg.modo || 'sincronizar', backlog: lectura ? null : cfg.backlog, auto: !lectura && !!cfg.auto, config: configVisible(cfg), ultimaSincronia: cache[cfg.id]?.ultimaSincronia || null }
     let ctx
     try { ctx = contextoIntegracion(p, cfg, backlogs, adaptadores) } catch (e) {
       return { ...base, estado: e.extra?.estado || 'error', mensaje: e.message, paso: e.extra?.paso || null }
@@ -681,13 +914,114 @@ async function leerIntegraciones(p, backlogs, { adaptadores = ADAPTADORES, aplic
     return {
       ...base, estado: error ? 'error' : 'conectado', mensaje: error, aviso: ctx.aviso, avisos: [...(fuera?.avisos || []), ...(base.auto && primera ? [AVISO_PRIMERA] : [])],
       url: fuera?.url || null, titulo: fuera?.titulo || null, columnas: fuera?.columnas || [],
-      items: (fuera?.items || []).map(({ id, titulo, hecha, columna, url, tipo, asignado, mio }) => ({ id, titulo, hecha, columna, url, tipo, asignado, mio })),
+      items: (fuera?.items || []).map(({ id, titulo, hecha, columna, url, tipo, asignado, mio, actualizado, descripcion, prioridad, iteracion, padre }) => ({ id, titulo, hecha, columna, url, tipo, asignado, mio, actualizado, descripcion, prioridad, iteracion, padre })),
       leidoEn: error ? cache[cfg.id]?.fecha || null : new Date().toISOString(), desdeCache: !!error && !!fuera,
       pendientes: acciones.filter((a) => a.tipo !== 'huerfana').length, porTipo, _auto: auto,
     }
   }))
   writeFileSync(rutaExt, JSON.stringify(cache))
   return salida
+}
+
+// Asignarse / quitarse un ítem o cambiarle el estado (modo «participar»). Misma ruta para los endpoints y el CLI.
+// Errores de validación: ErrorConfig. Errores de afuera: Error con `remoto = true`. Parchea el ítem en datos/externo-<p>.json (sin releer).
+export async function participar(p, cfg, { asignar, id, aMi, estado }, adaptadores = ADAPTADORES) {
+  if (!cfg) throw new ErrorConfig('Esa integración no está en proyectos.json.', 404)
+  if (cfg.modo !== 'participar') throw new ErrorConfig(`Solo puedes asignarte ítems o cambiar su estado en una integración en modo «participar» (pon "modo": "participar" en la integración «${cfg.id}» de proyectos.json o elígelo en Editar proyecto).`)
+  const mod = adaptadores[cfg.tipo]
+  if (!mod?.asignar || !mod?.cambiarEstado) throw new ErrorConfig(`${NOMBRES[cfg.tipo] || cfg.tipo}: este conector aún no participa.`)
+  id = String(id ?? '')
+  if (!/^\d+$/.test(id)) throw new ErrorConfig('Falta el id del ítem (solo números).')
+  if (asignar && typeof aMi !== 'boolean') throw new ErrorConfig('«aMi» debe ser sí o no.')
+  const rutaExt = join(DATOS, `externo-${p.id}.json`)
+  const columnas = leerJson(rutaExt, {})[cfg.id]?.columnas || []
+  let elegido
+  if (!asignar) {
+    elegido = typeof estado === 'string' ? columnas.find((x) => x.toLowerCase() === estado.trim().toLowerCase()) : undefined
+    if (!elegido) throw new ErrorConfig(`«${estado}» no es un estado conocido de esta integración${columnas.length ? ` (${columnas.join(', ')})` : ': recarga para leer los estados'}.`)
+  }
+  const ctx = contextoIntegracion(p, cfg, [], adaptadores)
+  let item, yo
+  try {
+    if (asignar) {
+      yo = leerJson(rutaExt, {})[cfg.id]?.yo
+      if (aMi && !(yo?.correo && Date.now() - Date.parse(yo.fecha) < 3600e3)) yo = { ...(await conTiempo(ctx.adaptador.quienSoy(), 15000)), fecha: new Date().toISOString() }
+      item = await conTiempo(ctx.adaptador.asignar(id, aMi ? yo.correo : null), 15000)
+    } else item = await conTiempo(ctx.adaptador.cambiarEstado(id, elegido, { columnas }), 15000)
+  } catch (e) { throw Object.assign(e instanceof Error ? e : new Error(String(e)), { remoto: true }) }
+  const correoYo = yo?.correo || leerJson(rutaExt, {})[cfg.id]?.yo?.correo
+  const cambios = { columna: item.columna, hecha: item.hecha, asignado: item.asignado ?? null }
+  // Azure también reasigna al cambiar el estado: `mio` se recalcula en ambos casos.
+  cambios.mio = !!item.asignado && ((asignar && aMi) || (!!correoYo && item.asignado.correo?.toLowerCase() === correoYo.toLowerCase()))
+  const ext = leerJson(rutaExt, {})
+  ext[cfg.id] = { ...ext[cfg.id], ...(yo ? { yo } : {}) }
+  const enCache = ext[cfg.id].items?.find((x) => String(x.id) === id)
+  if (enCache) Object.assign(enCache, cambios)
+  mkdirSync(DATOS, { recursive: true })
+  writeFileSync(rutaExt, JSON.stringify(ext))
+  return { id, cambios, enCache, titulo: enCache?.titulo ?? null }
+}
+
+// ---- Pedírselo a Claude: --tareas / --asignarme / --estado y la línea del hook ----
+const abiertas = (items) => items.filter((x) => !x.hecha)
+const esMia = (x) => !!x.mio
+const sinDueno = (x) => !x.asignado
+// Markdown por estado (orden de `columnas`): #id · tipo · P · iteración · asignado · título · descripción corta · url.
+export function textoTareas(items, { sinAsignar = false, mias = false } = {}, { columnas = [], nombre = '', id = '' } = {}) {
+  const sel = items.filter((x) => (sinAsignar ? !x.hecha && sinDueno(x) : mias ? esMia(x) : true))
+  const orden = [...columnas, ...sel.map((x) => x.columna).filter((c) => c && !columnas.includes(c))]
+  const por = new Map()
+  for (const x of sel) { const c = x.columna || 'Sin estado'; por.set(c, [...(por.get(c) || []), x]) }
+  const filtro = sinAsignar ? ' (sin asignar)' : mias ? ' (mías)' : ''
+  const lineas = [`## ${[nombre, id && `\`${id}\``].filter(Boolean).join(' ') || 'Tareas'}${filtro} — ${sel.length} ítem(s)`]
+  if (!sel.length) lineas.push('', 'Nada que mostrar con ese filtro.')
+  for (const c of [...new Set([...orden, ...por.keys()])]) {
+    const g = por.get(c)
+    if (!g) continue
+    lineas.push('', `### ${c} (${g.length})`)
+    for (const x of g) {
+      const corta = x.descripcion ? x.descripcion.replace(/\s+/g, ' ').trim().slice(0, 160) : ''
+      lineas.push(['#' + x.id, x.tipo, x.prioridad && `P${x.prioridad}`, x.iteracion, x.asignado ? `asignado a ${x.asignado.nombre}${x.mio ? ' (yo)' : ''}` : 'sin asignar', x.titulo, corta, x.url].filter(Boolean).join(' · ').replace(/^/, '- '))
+    }
+  }
+  return lineas.join('\n')
+}
+// Una línea por integración con caché (sin red): cuántos ítems sin asignar y cuántos míos abiertos, y cómo pedirlos.
+export function lineasIntegraciones(p, cache = {}) {
+  return (p.integraciones || []).filter((c) => (c.modo === 'participar' || c.modo === 'lectura') && cache[c.id]?.items).map((c) => {
+    const it = abiertas(cache[c.id].items)
+    return `- ${NOMBRES[c.tipo] || c.tipo} \`${c.id}\`: ${it.filter(sinDueno).length} sin asignar, ${it.filter(esMia).length} mías abiertas. Para recomendarte una: \`node ${join(AQUI, 'generar.mjs')} --tareas ${p.id} --sin-asignar\``
+  })
+}
+
+function tareasCli() {
+  const pos = (flag) => { const i = args.indexOf(flag); return i < 0 ? [] : args.slice(i + 1).filter((a, j, v) => !a.startsWith('--') && v.slice(0, j).every((z) => !z.startsWith('--'))) }
+  const valor = (flag) => { const i = args.indexOf(flag); return i < 0 ? null : args[i + 1] }
+  const accion = ['--tareas', '--asignarme', '--estado'].find((f) => args.includes(f))
+  const [pid, id, ...resto] = pos(accion)
+  const fallo = (m) => { console.error(m); process.exitCode = 1 }
+  const p = proyectos.find((x) => x.id === pid)
+  if (!p) return fallo(`Proyecto «${pid ?? ''}» no encontrado. Proyectos: ${proyectos.map((x) => x.id).join(', ')}.`)
+  const pedida = valor('--integracion')
+  const cands = (p.integraciones || []).filter((c) => (pedida ? c.id === pedida : accion === '--tareas' ? true : c.modo === 'participar'))
+  if (!cands.length) return fallo(pedida ? `«${p.id}» no tiene la integración «${pedida}».` : `«${p.id}» no tiene integraciones${accion === '--tareas' ? '' : ' en modo participar (activa "modo": "participar" en proyectos.json o en Editar proyecto)'}.`)
+  const cache = leerJson(join(DATOS, `externo-${p.id}.json`), {})
+  if (accion === '--tareas') {
+    for (const c of cands) {
+      const e = cache[c.id]
+      if (!e?.items) { console.log(`## ${NOMBRES[c.tipo] || c.tipo} \`${c.id}\`\n\nSin datos todavía: abre el tablero (node generar.mjs) para leerla.`); continue }
+      console.log(textoTareas(e.items, { sinAsignar: args.includes('--sin-asignar'), mias: args.includes('--mias') }, { columnas: e.columnas || [], nombre: NOMBRES[c.tipo] || c.tipo, id: c.id }) + '\n')
+    }
+    return
+  }
+  const c = cands[0]
+  if (cands.length > 1) return fallo(`«${p.id}» tiene varias integraciones en participar (${cands.map((x) => x.id).join(', ')}): indica una con --integracion.`)
+  const asignar = accion === '--asignarme'
+  const estado = resto.join(' ')
+  return participar(p, c, { asignar, id, aMi: !args.includes('--quitar'), estado }).then((r) => {
+    const t = r.titulo ? ` «${r.titulo}»` : ''
+    console.log(asignar ? (args.includes('--quitar') ? `✓ #${r.id}${t} quedó sin asignar.` : `✓ #${r.id}${t} quedó asignado a ti.`) : `✓ #${r.id}${t} ahora está en «${r.cambios.columna}».`)
+  }, (e) => fallo(e.message))
 }
 
 // --probar-conexiones: una lectura mínima por integración, con el resultado en español.
@@ -731,6 +1065,216 @@ function leerBitacoras() {
   return new Map(rutas.map((ruta) => [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa, jsonl) }]))
 }
 
+// Guía «Configurar este proyecto»: un paso por pieza, con lo que ya hay a mano (sin red: GitHub sale de p.git, que ya leyó gh).
+export function estadoConfiguracion(p, { git = null, backlogs = [], transcripciones = TRANSCRIPCIONES } = {}) {
+  const repo = p.repo && statSync(p.repo, { throwIfNoEntry: false })?.isDirectory()
+  const esGit = !!repo && existsSync(join(p.repo, '.git'))
+  const docs = (p.docs || []).filter((d) => statSync(d, { throwIfNoEntry: false })?.isDirectory())
+  const locales = backlogs.filter((b) => !b.esPlan)
+  let sesiones = 0
+  if (p.transcripciones && existsSync(transcripciones)) {
+    for (const d of readdirSync(transcripciones)) {
+      if (d === p.transcripciones || d.startsWith(`${p.transcripciones}-`)) sesiones += readdirSync(join(transcripciones, d)).filter((f) => f.endsWith('.jsonl')).length
+    }
+  }
+  const integ = p.integraciones || []
+  return [
+    { paso: 'repo', hecho: !!repo, detalle: repo ? p.repo : p.repo ? `No existe la carpeta ${p.repo}` : 'Sin carpeta del repo' },
+    { paso: 'git', hecho: esGit, detalle: esGit ? 'Repositorio git' : 'La carpeta no es un repositorio git' },
+    { paso: 'github', hecho: !!git?.url, detalle: git?.url || 'Sin remoto en GitHub (o gh sin sesión)' },
+    { paso: 'docs', hecho: !!docs.length && docs.length === (p.docs || []).length, detalle: p.docs?.length ? `${docs.length} de ${p.docs.length} carpeta(s) de documentos` : 'Sin carpeta de documentos' },
+    { paso: 'backlog', hecho: !!locales.length, detalle: locales.length ? locales.map((b) => b.archivo).join(', ') : 'Sin backlog' },
+    { paso: 'sesiones', hecho: sesiones > 0, detalle: sesiones ? `${sesiones} sesión(es) de Claude` : p.transcripciones ? 'Aún no hay sesiones de Claude en esta carpeta' : 'Sin carpeta de transcripciones' },
+    { paso: 'notas', hecho: !!p.notas, detalle: p.notas || 'Sin archivo de notas' },
+    { paso: 'integraciones', hecho: !!integ.length, detalle: integ.length ? integ.map((x) => x.id).join(', ') : 'Sin integraciones' },
+  ]
+}
+
+// ---------- Para retomar: hechos automáticos que la vista pone en frases ----------
+// La sesión de Claude más reciente del proyecto (su carpeta o subcarpetas «<prefijo>-…»): fecha del .jsonl y su título
+// (customTitle, si no aiTitle), leyendo solo las primeras ~20 líneas.
+function ultimaSesionDe(prefijo, dir) {
+  if (!prefijo || !existsSync(dir)) return null
+  let ult = null
+  for (const d of readdirSync(dir)) {
+    if (d !== prefijo && !d.startsWith(`${prefijo}-`)) continue
+    let archivos = []
+    try { archivos = readdirSync(join(dir, d)) } catch { continue }
+    for (const f of archivos) {
+      if (!f.endsWith('.jsonl')) continue
+      const ruta = join(dir, d, f)
+      const mtime = statSync(ruta, { throwIfNoEntry: false })?.mtimeMs
+      if (mtime != null && (!ult || mtime > ult.mtime)) ult = { ruta, mtime }
+    }
+  }
+  if (!ult) return null
+  let titulo = null
+  try {
+    const fd = openSync(ult.ruta, 'r')
+    try {
+      const buf = Buffer.alloc(64 * 1024)
+      const lineas = buf.toString('utf8', 0, readSync(fd, buf, 0, buf.length, 0)).split('\n').slice(0, 20)
+      const objs = lineas.flatMap((l) => { try { return [JSON.parse(l)] } catch { return [] } })
+      titulo = objs.find((o) => o?.customTitle)?.customTitle || objs.find((o) => o?.aiTitle)?.aiTitle || null
+    } finally { closeSync(fd) }
+  } catch {}
+  return { titulo, fecha: new Date(ult.mtime).toISOString() }
+}
+// p: { transcripciones, git }; b: el backlog principal (con estructura, aqui y, si hay, activo).
+export function hechosRetomar(p, b, { transcripciones = TRANSCRIPCIONES, ahora = new Date() } = {}) {
+  const git = p?.git || null
+  const commit = (git?.commits || []).reduce((m, c) => (!m || Date.parse(c.fecha) > Date.parse(m.fecha) ? c : m), null)
+  const sesion = ultimaSesionDe(p?.transcripciones, transcripciones)
+  const fechas = [b?.modificado, commit?.fecha, sesion?.fecha].map((f) => Date.parse(f)).filter(Number.isFinite)
+  const ult = fechas.length ? Math.max(...fechas) : null
+  // Lo siguiente: la sub-sesión siguiente del frente activo; si no, su tarea; si no, la sección «estás aquí».
+  let siguiente = null, pendientesSiguiente = 0
+  const sub = b?.activo?.subsesiones?.find((s) => s.estado === 'siguiente')
+  const secs = aplanar(b?.estructura || [])
+  if (sub) {
+    siguiente = { clave: sub.clave, titulo: sub.titulo ? `${sub.clave} — ${sub.titulo}` : sub.clave }
+    pendientesSiguiente = sub.abiertas.length
+  } else if (b?.activo?.tarea) {
+    siguiente = { clave: secs.find((s) => s.id === b.activo.seccion)?.clave || null, titulo: b.activo.tarea.titulo }
+    pendientesSiguiente = b.activo.tarea.abiertas.length
+  } else {
+    const sec = secs.find((s) => s.id === b?.aqui)
+    if (sec) { siguiente = { clave: sec.clave, titulo: plano(sec.titulo) }; pendientesSiguiente = sec.total - sec.hechas }
+  }
+  return {
+    ultimaActividad: ult == null ? null : new Date(ult).toISOString(),
+    diasSinActividad: ult == null ? null : Math.max(0, Math.floor((ahora - ult) / 86400e3)),
+    rama: git?.rama || null,
+    siguiente, pendientesSiguiente,
+    ultimoCommit: commit ? { titulo: commit.titulo, fecha: commit.fecha } : null,
+    prsAbiertos: (git?.prs || []).filter((pr) => pr.state === 'OPEN').length,
+    commitsSinSubir: git?.sinPush?.length || 0,
+    ultimaSesionClaude: sesion,
+  }
+}
+
+// ---------- Kanban: sesiones de Claude en vivo y columna de cada casilla ----------
+// Solo .jsonl tocados en la ventana (24 h); de cada uno, cabeza y cola de 64 KB (nunca el archivo entero) y caché por
+// ruta+mtime+size. Fuera de la huella de /api/version: la vista los sondea aparte con GET /api/sesiones.
+const TROZO_SESION = 64 * 1024
+const EDITORES = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
+const cacheSesiones = new Map()
+const textoUsuario = (o) => {
+  if (o?.type !== 'user' || o.isMeta) return null
+  const c = o.message?.content
+  const t = typeof c === 'string' ? c : Array.isArray(c) && !c.some((x) => x?.type === 'tool_result') ? c.filter((x) => x?.type === 'text').map((x) => x.text).join('\n') : ''
+  return t && t.trim() && !t.trimStart().startsWith('<') ? t.trim() : null
+}
+function resumenSesion(ruta, size) {
+  const fd = openSync(ruta, 'r')
+  const leer = (desde, largo) => { const buf = Buffer.alloc(largo); return buf.toString('utf8', 0, readSync(fd, buf, 0, largo, desde)) }
+  const objs = (t) => t.split('\n').flatMap((l) => { try { return [JSON.parse(l)] } catch { return [] } })
+  let cabeza, cola
+  try {
+    if (size <= 2 * TROZO_SESION) cabeza = cola = objs(leer(0, size))
+    else {
+      // Las líneas partidas por el corte no parsean y se descartan solas.
+      cabeza = objs(leer(0, TROZO_SESION))
+      cola = objs(leer(size - TROZO_SESION, TROZO_SESION))
+    }
+  } finally { closeSync(fd) }
+  if (!cabeza.length && !cola.length) return null
+  const todas = cabeza === cola ? cola : [...cabeza, ...cola]
+  const ultimo = (f) => { for (let i = todas.length - 1; i >= 0; i--) { const v = f(todas[i]); if (v) return v } return null }
+  const archivos = []
+  for (let i = cola.length - 1; i >= 0 && archivos.length < 5; i--) {
+    const usos = cola[i]?.type === 'assistant' && Array.isArray(cola[i].message?.content) ? cola[i].message.content : []
+    for (const u of [...usos].reverse()) {
+      const f = u?.type === 'tool_use' && EDITORES.has(u.name) && (u.input?.file_path || u.input?.notebook_path)
+      if (f && !archivos.includes(f) && archivos.length < 5) archivos.push(f)
+    }
+  }
+  const prompts = todas.map(textoUsuario).filter(Boolean)
+  const unicos = (re) => [...new Set(prompts.flatMap((t) => t.match(re) || []))]
+  return {
+    titulo: ultimo((o) => o?.customTitle) || ultimo((o) => o?.aiTitle) || null,
+    rama: ultimo((o) => o?.gitBranch),
+    inicio: cabeza.find((o) => o?.timestamp)?.timestamp || null,
+    archivos,
+    ultimoPrompt: prompts.at(-1)?.slice(0, 200) ?? null,
+    foco: { claves: unicos(/\b[HS]\d+[a-z]?\b/g), backlogs: unicos(/[\w.-]+\.md\b/g) },
+  }
+}
+// → { [proyectoId]: [{ sid, titulo, rama, inicio, ultimo, activa, archivos, ultimoPrompt, foco }] }, más reciente primero.
+export function sesionesActivas(lista, dir = TRANSCRIPCIONES, { ahora = Date.now(), ventanaMs = 24 * 3600e3, activaMs = 5 * 60e3 } = {}) {
+  const carpetas = existsSync(dir) ? readdirSync(dir) : []
+  return Object.fromEntries(lista.map((p) => {
+    const pre = p.transcripciones
+    const res = []
+    for (const d of pre ? carpetas.filter((d) => d === pre || d.startsWith(`${pre}-`)) : []) {
+      let archivos = []
+      try { archivos = readdirSync(join(dir, d)) } catch { continue }
+      for (const f of archivos) {
+        if (!f.endsWith('.jsonl')) continue
+        const ruta = join(dir, d, f)
+        const st = statSync(ruta, { throwIfNoEntry: false })
+        if (!st || ahora - st.mtimeMs > ventanaMs) continue
+        let c = cacheSesiones.get(ruta)
+        if (!c || c.mtime !== st.mtimeMs || c.size !== st.size) {
+          let r = null
+          try { r = resumenSesion(ruta, st.size) } catch {}
+          cacheSesiones.set(ruta, c = { mtime: st.mtimeMs, size: st.size, r })
+        }
+        if (c.r) res.push({ sid: f.slice(0, -6), ...c.r, ultimo: new Date(st.mtimeMs).toISOString(), activa: ahora - st.mtimeMs < activaMs, _m: st.mtimeMs })
+      }
+    }
+    return [p.id, res.sort((a, b) => b._m - a._m).map(({ _m, ...s }) => s)]
+  }))
+}
+
+// Rama de una sección: la de su título, la del hito, o «Rama `x`» en el texto bajo el título del hito.
+function ramaDe(lineas, sec, hito) {
+  if (sec.meta?.rama) return sec.meta.rama
+  if (!hito) return null
+  if (hito.meta?.rama) return hito.meta.rama
+  for (let i = hito.linea + 1; i < lineas.length && !RE_TITULO.test(lineas[i]); i++) {
+    const m = lineas[i].match(/\brama\s+`([^`]+)`/i)
+    if (m) return m[1]
+  }
+  return null
+}
+// Una tarjeta por casilla de primer nivel: por-hacer · en-curso ([~] o la sección que trabaja una sesión activa) ·
+// en-prueba (hecha y su rama con PR abierto o sin fusionar) · hecho · movida ([-]).
+export function columnasKanban(b, p, sesiones = []) {
+  const lineas = String(b.contenido || '').replace(/\t/g, '    ').split('\n')
+  const git = p?.git || {}
+  const abiertas = new Set((git.prs || []).filter((pr) => pr.state === 'OPEN').map((pr) => pr.headRefName))
+  const sinFusionar = new Set(git.sinFusionar || [])
+  const vivas = sesiones.filter((s) => s.activa && (s.foco?.backlogs?.includes(b.archivo) || s.archivos?.includes(b.ruta)))
+  const lineasDe = (t) => [t.linea, ...t.hijas.flatMap(lineasDe)]
+  const contar = (ts) => ts.reduce((a, x) => { if (x.marca === '-') return a; const h = contar(x.hijas); return { hechas: a.hechas + h.hechas + (x.hecha ? 1 : 0), total: a.total + h.total + 1 } }, { hechas: 0, total: 0 })
+  const enSesion = (sec, hito, t) => vivas.some((s) => {
+    const claves = s.foco?.claves || []
+    if (claves.length) return claves.includes(sec.clave) || (!!hito?.clave && claves.includes(hito.clave))
+    if (b.activo?.seccion !== sec.id) return false
+    return !b.activo.tarea || lineasDe(t).includes(b.activo.tarea.linea)
+  })
+  const tarjetas = []
+  const seccion = (sec, hito) => {
+    if (/^estado\b/i.test(plano(sec.titulo))) return
+    for (const t of sec.tareas) {
+      const estado = t.marca === '-' ? 'movida'
+        : t.hecha ? (() => { const r = ramaDe(lineas, sec, hito); return r && (abiertas.has(r) || sinFusionar.has(r)) ? 'en-prueba' : 'hecho' })()
+        : t.marca === '~' || enSesion(sec, hito, t) ? 'en-curso' : 'por-hacer'
+      tarjetas.push({
+        archivo: b.archivo, texto: t.texto, hecha: t.hecha, estado, seccion: sec.id, clave: sec.clave, hito: hito?.clave || null, linea: t.linea,
+        ...(t.marcas ? { marcas: t.marcas } : {}), ...(t.hijas.length ? { sub: contar(t.hijas) } : {}),
+      })
+    }
+  }
+  for (const s of b.estructura || []) {
+    const hito = s.nivel === 2 ? s : null
+    seccion(s, hito)
+    for (const h of aplanar(s.hijas)) seccion(h, hito)
+  }
+  return tarjetas
+}
+
 async function recolectar(opciones = {}) {
   cargarProyectos()
   mkdirSync(DATOS, { recursive: true })
@@ -753,8 +1297,12 @@ async function recolectar(opciones = {}) {
     for (const x of integraciones) delete x._auto
     const historial = actualizarHistorial(p, backlogs)
     const planes = leerPlanes(p, menciones, duenos)
-    for (const b of backlogs) if (!b.esPlan) b.activo = frenteActivo(b, historial[b.archivo], planes)
-    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git: leerGit(p), notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones }
+    for (const b of backlogs) if (!b.esPlan) { b.activo = frenteActivo(b, historial[b.archivo], planes); b.retomar = retomarDe(b.estado) }
+    const git = leerGit(p)
+    const configuracion = estadoConfiguracion(p, { git, backlogs })
+    const retomar = hechosRetomar({ transcripciones: p.transcripciones, git }, backlogs.find((b) => !b.esPlan) || null)
+    const kanban = backlogs.filter((b) => !b.esPlan).flatMap((b) => columnasKanban(b, { git }, opciones.sesiones?.[p.id] || []))
+    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones, configuracion, editable: p.editable, retomar, kanban }
   }))
 }
 
@@ -772,7 +1320,9 @@ export function alternarFavorito(titulo, favorito) {
 }
 
 async function construir(servidor = false, opciones = {}) {
-  const datos = { generado: new Date().toISOString(), servidor, favoritos: leerFavoritos(), proyectos: await recolectar(opciones) }
+  // Sesiones de Claude una sola vez: alimentan p.kanban y viajan en datos.sesiones (para file://, sin /api/sesiones).
+  const sesiones = sesionesActivas(cargarProyectos())
+  const datos = { generado: new Date().toISOString(), servidor, favoritos: leerFavoritos(), proyectos: await recolectar({ ...opciones, sesiones }), sesiones }
   // Credenciales: solo el resumen (completa, de dónde sale, últimos 4); configMtime para el 409 al editar integraciones.
   datos.credenciales = resumenCredenciales(leerCredenciales().datos, process.env, proyectos.flatMap((p) => p.integraciones || []))
   datos.configMtime = statConfig()?.mtimeMs ?? null
@@ -880,6 +1430,13 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
       if (req.method === 'GET' && ruta === '/api/ping') return enviar(res, 200, { tablero: true })
       if (req.method === 'GET' && ruta === '/api/version') return enviar(res, 200, { version: huella(), codigo })
       if (req.method === 'GET' && ruta === '/api/datos') return enviar(res, 200, (await fresco(true)).datos)
+      // Barato (sondeo cada 5 s): solo cabeza/cola de los .jsonl recientes y columnas sobre los datos ya construidos.
+      if (req.method === 'GET' && ruta === '/api/sesiones') {
+        const sesiones = sesionesActivas(proyectos)
+        const columnas = Object.fromEntries((cache?.datos.proyectos || []).map((p) => [p.id, p.backlogs.filter((b) => !b.esPlan)
+          .flatMap((b) => columnasKanban(b, p, sesiones[p.id] || []).map(({ archivo, linea, texto, estado }) => ({ archivo, linea, texto, estado })))]))
+        return enviar(res, 200, { sesiones, columnas })
+      }
       if (req.method !== 'POST') return enviar(res, 404, { error: 'no existe' })
       if (req.headers.origin !== `http://${host}` || !String(req.headers['content-type']).startsWith('application/json')) return enviar(res, 403, { error: 'origen no permitido' })
       if (ruta === '/api/salir') {
@@ -959,19 +1516,80 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         cargarProyectos(true)
         return enviar(res, 200, { ok: true, proyecto: nuevo, datos: (await fresco(true)).datos })
       }
+      // Elegir carpeta: subcarpetas (nunca archivos, nunca fuera de home); sin ruta, home + sugerencias de las sesiones de Claude;
+      // con ruta, la propuesta de id/nombre/docs/notas para esa carpeta.
+      if (ruta === '/api/carpetas') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const lista = listarCarpetas(b.ruta, HOME)
+        if (b.ruta == null || b.ruta === '') return enviar(res, 200, { ok: true, home: HOME, ...lista, sugerencias: sugerirProyectos(TRANSCRIPCIONES, cargarProyectos(), { home: HOME }) })
+        return enviar(res, 200, { ok: true, home: HOME, ...lista, propuesta: lista.padre ? propuestaProyecto(lista.ruta, cargarProyectos(), HOME) : null })
+      }
+      // Editar proyecto: solo CAMPOS_PROYECTO, en su sitio; integraciones y campos ajenos intactos. `previa` devuelve el bloque sin escribir.
+      if (ruta === '/api/proyectos/editar') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const p = cargarProyectos(true).find((x) => x.id === b.id)
+        if (!p) throw new ErrorConfig('Falta el proyecto o no está en proyectos.json.', 404)
+        const texto = editarProyecto(readFileSync(CONFIG, 'utf8'), p.id, cambiosProyecto(b.cambios, p))
+        const proyecto = JSON.parse(texto).find((x) => x?.id === p.id)
+        if (b.previa === true) return enviar(res, 200, { ok: true, previa: true, proyecto, archivo: CONFIG })
+        exigirMtime(b)
+        escribirAtomico(CONFIG, texto)
+        cargarProyectos(true)
+        return enviar(res, 200, { ok: true, proyecto, datos: (await fresco(true)).datos })
+      }
       // Backlog nuevo: plantilla mínima dentro de una carpeta «docs» del proyecto; nunca sobrescribe (409).
       if (ruta === '/api/backlog/crear') {
         if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
         const p = integracionDe(b)
-        const destino = rutaBacklogNuevo(p, b.archivo ?? undefined, b.carpeta ?? undefined)
+        const elegido = destinoBacklog(b, undefined)
+        const destino = rutaBacklogNuevo(p, elegido.archivo, b.carpeta ?? undefined)
         const d = new Date(), fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-        const contenido = plantillaBacklog(p.nombre || p.id, fecha)
+        const contenido = plantillaBacklog([p.nombre || p.id, elegido.nombre].filter(Boolean).join(' · '), fecha)
         if (b.previa === true) return enviar(res, 200, { ok: true, previa: true, archivo: basename(destino), ruta: destino, contenido })
         try { writeFileSync(destino, contenido, { flag: 'wx' }) } catch (e) {
           if (e.code === 'EEXIST') throw new ErrorConfig(`Ya existe ${basename(destino)}: el tablero nunca sobrescribe un backlog.`, 409)
           throw e
         }
         return enviar(res, 200, { ok: true, archivo: basename(destino), ruta: destino, contenido, datos: (await fresco(true)).datos })
+      }
+      // Participar: asignarme (o soltar) un ítem, o cambiarle el estado afuera. Nunca crea ni toca un .md.
+      if (ruta === '/api/integraciones/asignar' || ruta === '/api/integraciones/estado') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const p = integracionDe(b)
+        const cfg = (p.integraciones || []).find((x) => x.id === b.integracion)
+        const esAsignar = ruta === '/api/integraciones/asignar'
+        let r
+        try { r = await participar(p, cfg, { asignar: esAsignar, id: b.id, aMi: b.aMi, estado: b.estado }, adaptadores) } catch (e) {
+          if (!e.remoto) throw e
+          registrar(`${esAsignar ? 'asignar' : 'estado'} ${p.id}/${cfg.id} #${String(b.id)}: ${e?.message || e}`)
+          return enviar(res, 502, { error: String(e?.message || e) })
+        }
+        const c = await fresco()
+        const enDatos = c.datos.proyectos.find((x) => x.id === p.id)?.integraciones?.find((x) => x.id === cfg.id)?.items?.find((x) => String(x.id) === r.id)
+        if (enDatos) Object.assign(enDatos, r.cambios)
+        return enviar(res, 200, { ok: true, item: { ...(enDatos || r.enCache || {}), id: r.id, ...r.cambios }, datos: c.datos })
+      }
+      // Importar una integración de solo lectura a un BACKLOG_<ID>.md propio (nunca sobrescribe; `previa` no escribe).
+      if (ruta === '/api/integraciones/importar') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const p = integracionDe(b)
+        const cfg = (p.integraciones || []).find((x) => x.id === b.integracion)
+        if (!cfg) throw new ErrorConfig('Esa integración no está en proyectos.json.', 404)
+        if (!esLectura(cfg)) throw new ErrorConfig('Solo se importa desde una integración de solo lectura (las demás ya tienen su backlog).')
+        const elegido = destinoBacklog(b, `BACKLOG_${p.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}.md`)
+        const destino = rutaBacklogNuevo(p, elegido.archivo, b.carpeta ?? undefined)
+        const ctx = contextoIntegracion(p, cfg, [], adaptadores)
+        let fuera
+        try { fuera = await conTiempo(ctx.adaptador.leer(), 15000) } catch (e) { return enviar(res, 502, { error: String(e?.message || e) }) }
+        const d = new Date(), fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const { contenido, total, tipos } = importarBacklog([p.nombre || p.id, elegido.nombre].filter(Boolean).join(' · '), cfg.id, fuera.items, fuera.columnas, fecha, b.soloMias === true)
+        const resumen = { archivo: basename(destino), ruta: destino, contenido, total, tipos, avisos: fuera.avisos || [] }
+        if (b.previa === true) return enviar(res, 200, { ok: true, previa: true, ...resumen })
+        try { writeFileSync(destino, contenido, { flag: 'wx' }) } catch (e) {
+          if (e.code === 'EEXIST') throw new ErrorConfig(`Ya existe ${basename(destino)}: el tablero nunca sobrescribe un backlog.`, 409)
+          throw e
+        }
+        return enviar(res, 200, { ok: true, ...resumen, datos: (await fresco(true)).datos })
       }
       // Probar sin guardar: una lectura con la config propuesta (lo mismo que --probar-conexiones).
       if (ruta === '/api/integraciones/probar') {
@@ -982,7 +1600,7 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         let r
         try { r = await conTiempo(ctx.adaptador.leer(), 15000) } catch (e) { return enviar(res, 502, { error: String(e?.message || e) }) }
         const vinculadas = ctx.backlog ? tareasLocales(ctx.backlog.contenido, limpia.id).filter((t) => t.marca).length : 0
-        return enviar(res, 200, { ok: true, modo: esLectura(limpia) ? 'lectura' : 'sincronizar', titulo: r.titulo || null, url: r.url || null, columnas: r.columnas || [], items: r.items.length, avisos: [...(ctx.aviso ? [ctx.aviso] : []), ...(r.avisos || [])], vinculadas, ...(limpia.organizacion ? { organizacion: limpia.organizacion } : {}) })
+        return enviar(res, 200, { ok: true, modo: limpia.modo || 'sincronizar', titulo: r.titulo || null, url: r.url || null, columnas: r.columnas || [], items: r.items.length, avisos: [...(ctx.aviso ? [ctx.aviso] : []), ...(r.avisos || [])], vinculadas, ...(limpia.organizacion ? { organizacion: limpia.organizacion } : {}) })
       }
       // Descubrir para los desplegables (solo lectura): `consulta` parcial según el tipo; `clave` = id de una integración con credencial propia.
       if (ruta === '/api/integraciones/descubrir') {
@@ -1132,6 +1750,7 @@ function hookInicio() {
     for (const a of n.abiertas.slice(0, 8)) lineas.push(`  · ${a.slice(0, 200)}`)
     lineas.push('  Atiéndelas (responde con «→ respuesta (fecha)» y muévelas a «Respondidas») o menciónalas al empezar.')
   }
+  lineas.push(...lineasIntegraciones(p, leerJson(join(DATOS, `externo-${p.id}.json`), {})))
   process.stdout.write(lineas.join('\n') + '\n')
 }
 
@@ -1140,6 +1759,7 @@ let esPrincipal = false
 try { esPrincipal = realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)) } catch {}
 if (!esPrincipal) { /* importado */ }
 else if (!existsSync(CONFIG) && (console.error('Falta proyectos.json: copia proyectos.ejemplo.json a proyectos.json y edítalo (ver README.md).'), true)) process.exitCode = 1
+else if (['--tareas', '--asignarme', '--estado'].some((f) => args.includes(f))) await tareasCli()
 else if (args.includes('--hook-inicio')) hookInicio()
 else if (args.includes('--servir')) servir()
 else if (args.includes('--probar-conexiones')) await probarConexiones()

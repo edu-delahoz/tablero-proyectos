@@ -55,6 +55,8 @@ const prsDe = (prs, rama) => (prs || []).filter((p) => p.headRefName === rama)
 
 // 1) Sesión con PR mergeado y casillas abiertas (salvo que haya otro PR abierto de esa rama).
 // 2) Sub-backlog BACKLOG_Hn terminado con el hito «Hn» del padre abierto, o padre cerrado con hijo abierto.
+// 3) Sesión anunciada («Después: **S4 …**», «sigue **S3c …**») sin sección con casillas: la sesión
+//    que define trabajo escribe las casillas de la siguiente; un plan en ~/.claude/plans no cuenta.
 export function desajustes(backlogs, prs = []) {
   const out = []
   const docs = backlogs.filter((b) => !/^PLAN/i.test(b.archivo)).map((b) => ({ ...b, secs: secciones(b.contenido) }))
@@ -83,7 +85,40 @@ export function desajustes(backlogs, prs = []) {
       break
     }
   }
+  for (const b of docs) {
+    for (const id of sesionesSinCasillas(b.contenido)) out.push({ tipo: 'sesion-sin-casillas', archivo: b.archivo, ruta: b.ruta, clave: id })
+  }
   return out
+}
+
+const RE_ANUNCIO = /\b(Después:|sigue)\s/i
+const RE_DEF_SESION = /^\s*(?:#{2,3}\s+|[-*]\s+\*\*)(S\d+[a-z]?)\b/
+
+// Sesiones anunciadas como siguientes que no tienen una definición («## S4 —» o «- **S4 —**»)
+// seguida de al menos una casilla antes de la próxima definición o título.
+export function sesionesSinCasillas(texto) {
+  const lineas = []
+  let cerca = false
+  for (const l of String(texto).split('\n')) {
+    if (RE_CERCA.test(l)) { cerca = !cerca; continue }
+    if (!cerca) lineas.push(l)
+  }
+  const anunciadas = new Set()
+  for (const l of lineas) {
+    if (RE_CASILLA.test(l)) continue
+    const m = l.match(RE_ANUNCIO)
+    if (!m) continue
+    for (const b of l.slice(m.index).matchAll(/\*\*(S\d+[a-z]?)\b/g)) anunciadas.add(b[1])
+  }
+  const conCasillas = new Set()
+  let actual = null
+  for (const l of lineas) {
+    const d = l.match(RE_DEF_SESION)
+    if (d) { actual = d[1]; continue }
+    if (RE_TITULO.test(l)) { actual = null; continue }
+    if (actual && RE_CASILLA.test(l)) conCasillas.add(actual)
+  }
+  return [...anunciadas].filter((id) => !conCasillas.has(id))
 }
 
 // Qué impide abrir (modo 'crear') o mergear (modo 'merge') el PR de una rama.
@@ -105,6 +140,7 @@ export function bloqueosDeRama(backlogs, rama, modo = 'crear') {
 export function describir(d) {
   const lista = d.abiertas?.length ? ` — abiertas: ${d.abiertas.slice(0, 3).map((t) => `«${t.slice(0, 70)}»`).join(', ')}${d.abiertas.length > 3 ? ` (+${d.abiertas.length - 3})` : ''}` : ''
   if (d.tipo === 'pr-mergeado') return `${d.archivo} ${d.clave || d.titulo}: PR #${d.pr} (rama ${d.rama}) ya está mergeado pero la sección tiene ${d.abiertas.length} casilla(s) sin marcar${lista}`
+  if (d.tipo === 'sesion-sin-casillas') return `${d.archivo} ${d.clave}: se anuncia como siguiente sesión pero no tiene sección con casillas en el backlog (la sesión que la definió debe escribirlas)`
   if (d.tipo === 'padre-abierto') return `${d.archivo} ${d.clave}: ${d.hijo} está completo pero el hito ${d.clave} del padre sigue abierto${lista}`
   return `${d.archivo} ${d.clave}: el hito está cerrado pero ${d.hijo} tiene trabajo abierto${lista}`
 }

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, readFileSync, statSync, chmodSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { validarIntegracion, aplicarCambio, escribirAtomico } from './config.mjs'
+import * as CONFIG from './config.mjs'
+const { validarIntegracion, aplicarCambio, editarProyecto, escribirAtomico } = CONFIG
 
 const dir = mkdtempSync(join(tmpdir(), 'tablero-config-'))
 const ctx = { backlogs: ['BACKLOG.md'], otras: ['gh'] }
@@ -134,4 +135,40 @@ test('modo: lectura guarda sin backlog y rechaza auto; sincronizar (por defecto)
   const editado = JSON.parse(aplicarCambio(crudo, 'p', { op: 'guardar', idOriginal: 'ado', integracion: { ...l.limpia, proyecto: 'Q' } }))
   assert.equal(editado[0].integraciones[0].modo, 'lectura')
   assert.equal(editado[0].integraciones[0].proyecto, 'Q')
+})
+
+test('editarProyecto: cambia solo los campos pedidos en su sitio; integraciones, «~», orden y campos ajenos intactos', () => {
+  const lista = [
+    { id: 'otro', nombre: 'Otro', repo: '~/otro' },
+    { id: 'eap10', nombre: 'EAP10', futuro: { x: 1 }, notas: '~/n.md', planes: ['a.md'], integraciones: [{ id: 'ado', tipo: 'azure-devops', modo: 'lectura', organizacion: 'Org', proyecto: 'EAP10', tipoItem: '*', ajeno: true }] },
+  ]
+  const crudo = JSON.stringify(lista, null, 2) + '\n'
+  const nuevo = editarProyecto(crudo, 'eap10', { nombre: 'EAP 10', repo: '~/eap10', docs: ['~/eap10/docs'], notas: '' })
+  const [otro, p] = JSON.parse(nuevo)
+  assert.deepEqual(otro, lista[0])
+  assert.deepEqual(Object.keys(p), ['id', 'nombre', 'futuro', 'planes', 'integraciones', 'repo', 'docs'])
+  assert.equal(p.nombre, 'EAP 10')
+  assert.equal(p.repo, '~/eap10')
+  assert.deepEqual(p.integraciones, lista[1].integraciones)
+  assert.deepEqual(p.futuro, { x: 1 })
+  assert.deepEqual(p.planes, ['a.md'])
+  assert.ok(nuevo.startsWith('[\n  {'), 'conserva la sangría')
+  assert.throws(() => editarProyecto(crudo, 'eap10', { nombre: '' }), /nombre/)
+  assert.throws(() => editarProyecto(crudo, 'eap10', { integraciones: [] }), /no se edita/)
+  assert.throws(() => editarProyecto(crudo, 'eap10', { id: 'x' }), /no se edita/)
+  assert.throws(() => editarProyecto(crudo, 'nada', { nombre: 'x' }), (e) => e.estado === 404)
+  assert.throws(() => editarProyecto('{roto', 'eap10', { nombre: 'x' }), (e) => e.estado === 409)
+  assert.equal(editarProyecto(crudo, 'eap10', {}), crudo, 'sin cambios, el texto queda igual')
+})
+
+test('modo participar (S37): sin backlog, «*» permitido, «auto» rechazado; solo Azure DevOps; noEscribeMd', () => {
+  assert.ok(CONFIG.MODOS.includes('participar'))
+  const ado = { id: 'ado', tipo: 'azure-devops', organizacion: 'Org', proyecto: 'P' }
+  const p = validarIntegracion({ ...ado, modo: 'participar', tipoItem: '*' }, { backlogs: [] })
+  assert.deepEqual(p.errores, [])
+  assert.deepEqual(p.limpia, { id: 'ado', tipo: 'azure-devops', modo: 'participar', organizacion: 'Org', proyecto: 'P', tipoItem: '*' })
+  assert.match(validarIntegracion({ ...ado, modo: 'participar', auto: true }, { backlogs: [] }).errores[0], /«auto» no sirve/)
+  assert.match(validarIntegracion({ id: 'g', tipo: 'github-projects', propietario: 'u', numero: 1, modo: 'participar' }, { backlogs: [] }).errores.join(' '), /aún no participa/)
+  assert.match(validarIntegracion({ id: 't', tipo: 'trello', tablero: 'b', modo: 'participar' }, { backlogs: [] }).errores.join(' '), /aún no participa/)
+  assert.deepEqual(['lectura', 'participar', 'sincronizar', undefined].map((modo) => CONFIG.noEscribeMd({ modo })), [true, true, false, false])
 })

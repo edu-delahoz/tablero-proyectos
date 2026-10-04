@@ -18,6 +18,7 @@ const TR = join(dir, 'transcripciones')
 mkdirSync(join(TR, '-prueba'), { recursive: true })
 writeFileSync(join(TR, '-prueba', 'bbbb2222-0000.jsonl'), '')
 process.env.TABLERO_TRANSCRIPCIONES = TR
+process.env.TABLERO_HOME = dir // raíz de /api/carpetas: el temporal, nunca el home real
 writeFileSync(join(dir, 'proyectos.json'), JSON.stringify([{
   id: 'prueba', nombre: 'Prueba', docs: [dir], patronBacklogs: '^BACKLOG.*\\.md$', bitacora: BITACORA, transcripciones: '-prueba',
   integraciones: [
@@ -43,13 +44,18 @@ const falso = {
   async actualizar(cfg, cred, id, c) { Object.assign(fuera.get(id), c) },
   async listar(cfg, cred) { if (cfg.numero === 98) return new Promise(() => {}); if (cfg.numero === 99) throw new Error('GitHub Projects: Sin conexión con GitHub.'); return { recibido: cfg, cred, proyectos: [{ propietario: 'u', numero: 5, titulo: 'Falso' }] } },
 }
+const participaciones = []
 const escrituras = [] // crear/actualizar de Azure: en solo lectura nunca debe llamarse ninguno
 const ITEMS_ADO = [
   { id: '1', titulo: 'Mía', hecha: false, columna: 'Active', url: 'https://x/1', tipo: 'Task', asignado: { nombre: 'Yo', correo: 'yo@x' }, mio: true },
   { id: '2', titulo: 'Sin asignar', hecha: true, columna: 'Closed', url: 'https://x/2', tipo: 'Bug', asignado: null, mio: false },
 ]
 const adoFalso = {
-  async leer(cfg) { return { url: 'https://x', titulo: `${cfg.organizacion}/${cfg.proyecto}`, columnas: cfg.modo === 'lectura' ? ['Active', 'Closed'] : [], items: cfg.modo === 'lectura' ? ITEMS_ADO : [] } },
+  async leer(cfg) { const sinMd = cfg.modo === 'lectura' || cfg.modo === 'participar'; return { url: 'https://x', titulo: `${cfg.organizacion}/${cfg.proyecto}`, columnas: sinMd ? ['Active', 'Closed'] : [], items: sinMd ? ITEMS_ADO : [] } },
+  // Participar (S37): se registran en `participaciones`; el id 999 simula que Azure rechaza el cambio.
+  async quienSoy() { participaciones.push(['quienSoy']); return { id: 'u1', nombre: 'Yo', correo: 'yo@x' } },
+  async asignar(cfg, cred, id, correo) { participaciones.push(['asignar', id, correo]); if (id === '999') throw new Error('Azure DevOps rechazó el cambio: TF401320.'); return { id, columna: 'Active', hecha: false, asignado: correo ? { nombre: 'Yo', correo } : null } },
+  async cambiarEstado(cfg, cred, id, estado, deps, opciones) { participaciones.push(['cambiarEstado', id, estado, opciones?.columnas]); return { id, columna: estado, hecha: estado === 'Closed', asignado: id === '2' ? { nombre: 'Yo', correo: 'yo@x' } : null } }, // id 2: Azure reasigna al cambiar el estado
   async crear(...a) { escrituras.push(['crear', ...a]); return { id: 'Z', url: 'https://x/Z' } },
   async actualizar(...a) { escrituras.push(['actualizar', ...a]) },
   async listar(cfg) { return { recibido: cfg, proyectos: ['EAP10'] } },
@@ -459,7 +465,7 @@ test('primera sincronía (sin instantánea): la previa lo dice con el conteo y �
 
 test('vista: la plantilla trae modo, filtro Mías/Sin asignar, chips y la primera sincronía sin marcar', async () => {
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
-  for (const marca of ['data-integ-filtro', 'chip-asig', 'chip-tipo', 'id="fi-modo"', 'data-fi="tipoItem-todos"', 'Primera sincronía.', 'modo: lectura ? \'lectura\' : \'sincronizar\'']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+  for (const marca of ['data-integ-filtro', 'chip-asig', 'chip-tipo', 'id="fi-modo"', 'data-fi="tipoItem-todos"', 'Primera sincronía.', "modo: ['lectura', 'participar'].includes(c.modo) ? c.modo : 'sincronizar'"]) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
   // En solo lectura no hay botón «Sincronizar» ni «auto: no»: el guardia está en la tarjeta.
   assert.match(html, /integ\.estado === 'conectado' && !lectura \? \(editable\(\)/)
   // Los datos que alimentan chips y filtros llegan a la vista (EAP10, solo lectura).
@@ -472,7 +478,39 @@ test('vista: la plantilla trae modo, filtro Mías/Sin asignar, chips y la primer
 test('vista: la plantilla trae «Nuevo proyecto», el formulario de crear y «Crear backlog» (pestaña e integraciones)', async () => {
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
   for (const marca of ['id="nuevo-proyecto"', 'id="panel-crear"', 'id="form-crear"', "'/api/proyectos/crear'", "'/api/backlog/crear'", 'data-crear="backlog"', 'data-crear-campo', 'mtime: DATOS.configMtime']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
-  assert.equal(html.split('data-crear="backlog"').length - 1, 2, 'botón en la pestaña Backlogs y en el paso Modo y backlog')
+  assert.equal(html.split('data-crear="backlog"').length - 1, 4, 'botón en la pestaña Backlogs (vacía y «Otro backlog»), en el paso Modo y backlog y en la guía')
+  assert.ok(html.includes('Otro backlog') && html.includes('data-crear-campo="nombre"'), 'backlog secundario con nombre')
+})
+
+test('vista: la plantilla trae «Editar proyecto», la guía de configuración y el contador en «Todos»', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ["data-crear=\"editar\"", "'/api/proyectos/editar'", 'id="guia-config"', 'data-guia-ocultar', 'tablero.guia.', 'gh auth login', 'gh repo create', 'gh repo clone', '&& claude', 'P?.editable', 'cambios: {', "ir('integraciones'"]) assert.ok(html.includes(marca), marca)
+  assert.ok(html.includes('data-crear="backlog"'), 'el paso backlog reutiliza «Crear backlog»')
+})
+
+test('vista: la plantilla trae «Mis tareas» (#p=mias), los bloques y el contador en «Todos»', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['value="mias"', 'Mis tareas', 'function vistaMias', 'id="mis-asignadas"', 'id="mis-siguientes"', 'Asignadas a mí', 'Siguientes pasos en mis backlogs', 'asignadas a mí', "=== 'mias'"]) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
+test('vista: la plantilla trae la tarjeta «Para retomar» y «Qué se busca» en «En curso»', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['function tarjetaRetomar', 'Para retomar', 'Qué se busca', 'data-retomar', 'tablero.retomar.', 'Copiar prompt de la siguiente sesión', 'Detalle técnico', 'Nadie dejó un resumen', 'hito.historia', 'plan.contexto', 'function estadoSinRetomar']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
+test('vista: la plantilla trae la pestaña «Tablero» (kanban), la franja de Claude y «Mover a»', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ["['tablero', 'Tablero']", 'function vistaKanban', "'/api/sesiones'", 'data-kanban-col', 'Claude está trabajando', 'Mover a', 'scroll-snap', 'sin sesión activa', 'data-mover', 'draggable', 'derivada']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
+test('vista: la plantilla trae el selector de carpeta (Elegir…, recientes de Claude, explorar)', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ["'/api/carpetas'", 'function selectorCarpeta', 'Tus proyectos recientes', 'data-carpeta', 'Recientes de Claude', 'Explorar', 'Elige con el botón o pega la ruta', 'data-elegir-carpeta']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
+test('vista: la plantilla trae participar (Asignarme, estado, Terminé, descripción plegable)', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ["'/api/integraciones/asignar'", "'/api/integraciones/estado'", 'Asignarme', 'Quitarme', 'data-asignar', 'data-estado-item', 'data-termine', '✓ Terminé', 'value="participar"', 'Participar: ver el backlog del equipo', 'ver descripción', 'function controlesParticipar', 'function estadoHecho']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
 })
 
 test('crear proyecto: previa sin escribir, id inválido o duplicado y rutas inexistentes → 400, mtime viejo → 409', async () => {
@@ -504,7 +542,7 @@ test('crear proyecto: previa sin escribir, id inválido o duplicado y rutas inex
   assert.equal(r.estado, 200, r.json.error)
   const conf = JSON.parse(readFileSync(CONF, 'utf8'))
   assert.deepEqual(conf.slice(0, -1), JSON.parse(antes), 'los proyectos de antes quedan igual')
-  assert.deepEqual(conf.at(-1), { id: 'nuevo', nombre: 'Nuevo', repo: dir, docs: [docsNuevo] })
+  assert.deepEqual(conf.at(-1), { id: 'nuevo', nombre: 'Nuevo', repo: dir, transcripciones: dir.replace(/[^A-Za-z0-9]/g, '-'), docs: [docsNuevo] })
   assert.ok(r.json.datos.proyectos.some((p) => p.id === 'nuevo'))
   assert.equal((await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Otra vez', mtime: await mtime() })).estado, 400)
 })
@@ -527,7 +565,7 @@ test('crear backlog: sin docs, nombre con ruta o fuera del patrón → 400; exis
   assert.equal(pv.estado, 200, pv.json.error)
   assert.equal(pv.json.archivo, 'BACKLOG.md')
   assert.match(pv.json.contenido, /^# Backlog — Nuevo\n\n## Estado\n- \d{4}-\d{2}-\d{2} · /)
-  assert.match(pv.json.contenido, /\n## S1 — .*\n- \[ \] /)
+  assert.match(pv.json.contenido, /\n## S1 — .*\nHistoria: .*\n- \[ \] /)
   assert.ok(!existsSync(join(docsNuevo, 'BACKLOG.md')))
   const r = await post('/api/backlog/crear', { proyecto: 'nuevo' })
   assert.equal(r.estado, 200, r.json.error)
@@ -540,4 +578,227 @@ test('crear backlog: sin docs, nombre con ruta o fuera del patrón → 400; exis
   const otro = await post('/api/backlog/crear', { proyecto: 'nuevo', archivo: 'BACKLOG_NUEVO.md' })
   assert.equal(otro.estado, 200, otro.json.error)
   assert.ok(existsSync(join(docsNuevo, 'BACKLOG_NUEVO.md')))
+  // Backlog secundario con nombre: archivo derivado, título con el nombre, el principal intacto.
+  const sec = await post('/api/backlog/crear', { proyecto: 'nuevo', nombre: '  Sprint 3 — Diseño ', previa: true })
+  assert.equal(sec.estado, 200, sec.json.error)
+  assert.equal(sec.json.archivo, 'BACKLOG_SPRINT_3_DISENO.md')
+  assert.match(sec.json.contenido, /^# Backlog — Nuevo · Sprint 3 — Diseño\n/)
+  assert.ok(!existsSync(join(docsNuevo, 'BACKLOG_SPRINT_3_DISENO.md')), 'la previa no escribe')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', nombre: 'Sprint 3 — Diseño' })).estado, 200)
+  assert.ok(existsSync(join(docsNuevo, 'BACKLOG_SPRINT_3_DISENO.md')))
+  assert.equal(readFileSync(join(docsNuevo, 'BACKLOG.md'), 'utf8'), 'editado a mano\n', 'el principal no se toca')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', nombre: 'sprint 3 diseño' })).estado, 409, 'mismo nombre → mismo archivo → no sobrescribe')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', nombre: '***' })).estado, 400, 'nombre sin letras ni números')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', nombre: 'x', archivo: 'BACKLOG_Y.md' })).estado, 400, 'nombre o archivo, no ambos')
+})
+
+test('editar proyecto: 404, 400, 409 y previa no escriben; editar deja integraciones y demás proyectos intactos', async () => {
+  const antes = readFileSync(CONF, 'utf8')
+  const eap = () => JSON.parse(readFileSync(CONF, 'utf8')).find((p) => p.id === 'eap10')
+  const integ = eap().integraciones
+  const docsEap = join(dir, 'docs-eap10')
+  mkdirSync(docsEap)
+  assert.equal((await post('/api/proyectos/editar', { id: 'nada', cambios: { nombre: 'x' }, mtime: await mtime() })).estado, 404)
+  for (const [cambios, re] of [
+    [{ repo: join(dir, 'no-existe') }, /no es una carpeta/],
+    [{ docs: ['relativa'] }, /absoluta/],
+    [{ notas: join(dir, 'no-existe', 'N.md') }, /carpeta que exista/],
+    [{ nombre: '  ' }, /nombre/],
+    [{ integraciones: [] }, /no se edita/],
+    [{ transcripciones: '../x' }, /transcripciones/],
+  ]) {
+    const r = await post('/api/proyectos/editar', { id: 'eap10', cambios, mtime: await mtime() })
+    assert.equal(r.estado, 400, JSON.stringify(cambios))
+    assert.match(r.json.error, re)
+  }
+  const cambios = { repo: dir, docs: [docsEap], notas: join(docsEap, 'NOTAS.md') }
+  const pv = await post('/api/proyectos/editar', { id: 'eap10', cambios, previa: true })
+  assert.equal(pv.estado, 200, pv.json.error)
+  assert.deepEqual(pv.json.proyecto, { ...eap(), ...cambios, transcripciones: dir.replace(/[^A-Za-z0-9]/g, '-') })
+  assert.equal((await post('/api/proyectos/editar', { id: 'eap10', cambios, mtime: (await mtime()) - 1000 })).estado, 409)
+  assert.equal((await post('/api/proyectos/editar', { id: 'eap10', cambios })).estado, 400, 'sin mtime no escribe')
+  assert.equal(readFileSync(CONF, 'utf8'), antes)
+  const r = await post('/api/proyectos/editar', { id: 'eap10', cambios, mtime: await mtime() })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.deepEqual(eap().integraciones, integ, 'las integraciones quedan intactas')
+  assert.deepEqual(eap(), pv.json.proyecto)
+  const otros = (t) => JSON.parse(t).filter((p) => p.id !== 'eap10')
+  assert.deepEqual(otros(readFileSync(CONF, 'utf8')), otros(antes))
+  const p = r.json.datos.proyectos.find((x) => x.id === 'eap10')
+  assert.equal(p.editable.repo, dir)
+  assert.deepEqual(Object.fromEntries(p.configuracion.map((x) => [x.paso, x.hecho])).docs, true)
+  // Quitar un campo: '' lo borra; «nombre» no se puede quitar.
+  const q = await post('/api/proyectos/editar', { id: 'eap10', cambios: { notas: '' }, mtime: await mtime() })
+  assert.equal(q.estado, 200, q.json.error)
+  assert.ok(!('notas' in eap()))
+  assert.deepEqual(eap().integraciones, integ)
+})
+
+test('importar a .md: previa no escribe; crea BACKLOG_<ID>.md con marcas ado:; «solo mías»; existente → 409; sin docs o sin lectura → 400', async () => {
+  process.env.AZURE_DEVOPS_PAT = 'pat-importar-12345'
+  const docs = join(dir, 'docs-imp')
+  mkdirSync(docs, { recursive: true })
+  const integ = { id: 'ado', tipo: 'azure-devops', modo: 'lectura', organizacion: 'Org', proyecto: 'EAP10', tipoItem: '*' }
+  const conf = JSON.parse(readFileSync(CONF, 'utf8'))
+  conf.push({ id: 'imp', nombre: 'Importa', docs: [docs], integraciones: [integ, { id: 'gh2', tipo: 'github-projects', propietario: 'u', numero: 1, backlog: 'BACKLOG_PRUEBA.md' }] })
+  conf.push({ id: 'sd', nombre: 'Sin docs', integraciones: [integ] })
+  writeFileSync(CONF, JSON.stringify(conf))
+  const destino = join(docs, 'BACKLOG_IMP.md')
+  const base = { proyecto: 'imp', integracion: 'ado' }
+  const pv = await post('/api/integraciones/importar', { ...base, previa: true })
+  assert.equal(pv.estado, 200, pv.json.error)
+  assert.equal(pv.json.archivo, 'BACKLOG_IMP.md')
+  assert.ok(!existsSync(destino), 'la previa no escribe')
+  assert.match(pv.json.contenido, /^- \[ \] Mía <!-- ado:1 -->$/m)
+  assert.match(pv.json.contenido, /^- \[x\] Sin asignar <!-- ado:2 -->$/m)
+  assert.match(pv.json.contenido, /^## Active$/m)
+  assert.match(pv.json.contenido, /^### Bug$/m)
+  assert.deepEqual([pv.json.total, pv.json.tipos.sort()], [2, ['Bug', 'Task']])
+  // Solo mías: nada más que el ítem 1.
+  const mias = await post('/api/integraciones/importar', { ...base, soloMias: true, previa: true })
+  assert.equal(mias.json.total, 1)
+  assert.ok(!mias.json.contenido.includes('ado:2'))
+  // Validaciones: no escriben.
+  assert.equal((await post('/api/integraciones/importar', { proyecto: 'sd', integracion: 'ado' })).estado, 400, 'sin docs')
+  assert.equal((await post('/api/integraciones/importar', { proyecto: 'imp', integracion: 'gh2' })).estado, 400, 'no es de solo lectura')
+  assert.equal((await post('/api/integraciones/importar', { proyecto: 'imp', integracion: 'nada' })).estado, 404)
+  assert.equal((await post('/api/integraciones/importar', { ...base, archivo: '../BACKLOG_X.md' })).estado, 400)
+  assert.equal((await post('/api/integraciones/importar', { ...base }, { origin: 'http://evil.com' })).estado, 403)
+  assert.ok(!existsSync(destino))
+  const r = await post('/api/integraciones/importar', base)
+  assert.equal(r.estado, 200, r.json.error)
+  assert.equal(readFileSync(destino, 'utf8'), pv.json.contenido)
+  assert.ok(r.json.datos.proyectos.find((p) => p.id === 'imp').backlogs.some((b) => b.archivo === 'BACKLOG_IMP.md'))
+  // Nunca sobrescribe.
+  const antes = readFileSync(destino, 'utf8')
+  assert.equal((await post('/api/integraciones/importar', base)).estado, 409)
+  assert.equal((await post('/api/integraciones/importar', { ...base, previa: true })).estado, 409)
+  assert.equal(readFileSync(destino, 'utf8'), antes)
+  // Con nombre: otro backlog secundario, sin tocar el ya importado.
+  const sec = await post('/api/integraciones/importar', { ...base, nombre: 'Azure mías', soloMias: true })
+  assert.equal(sec.estado, 200, sec.json.error)
+  assert.equal(sec.json.archivo, 'BACKLOG_AZURE_MIAS.md')
+  assert.match(readFileSync(join(docs, 'BACKLOG_AZURE_MIAS.md'), 'utf8'), /^# Backlog — Importa · Azure mías\n/)
+  assert.equal(readFileSync(destino, 'utf8'), antes)
+  assert.equal(escrituras.length, 0, 'no se escribe nada en Azure')
+})
+
+test('vista: «Crear backlog local desde Azure» con vista previa, «solo las mías» y paso a modo sincronizar', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['data-crear="importar"', "'/api/integraciones/importar'", 'data-crear-check="soloMias"', 'Crear backlog local desde Azure', 'abrirForm(']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
+test('vista: Resumen con el avance de la integración y botón «Mis tareas» en la cabecera', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['function avanceIntegracion', 'id="ir-mias"', 'data-ir-mias', 'Cerrados por semana', 'function pintarBotonMias']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
+test('/api/sesiones: sesiones recientes por proyecto, barato, sin tocar la huella; /api/datos trae sesiones y kanban', async () => {
+  writeFileSync(BACKLOG, readFileSync(BACKLOG, 'utf8').replace('- [x] Uno', '- [ ] Uno')) // un test anterior la marcó
+  const r = join(TR, '-prueba', 'hhhh9999-0000.jsonl')
+  writeFileSync(r, JSON.stringify({ type: 'custom-title', customTitle: 'En vivo' }) + '\n' + JSON.stringify({ type: 'user', gitBranch: 'kb', timestamp: new Date().toISOString(), message: { content: 'Sesión S1 de BACKLOG_PRUEBA.md' } }) + '\n')
+  await get('/api/datos') // calienta la caché de datos
+  const v = (await get('/api/version')).json.version
+  const t0 = Date.now()
+  const s = await get('/api/sesiones')
+  assert.ok(Date.now() - t0 < 300, 'no construye los datos')
+  assert.equal(s.estado, 200)
+  const mia = s.json.sesiones.prueba.find((x) => x.titulo === 'En vivo')
+  assert.equal(mia.activa, true)
+  assert.equal(mia.rama, 'kb')
+  assert.ok(Array.isArray(s.json.columnas.prueba), 'estado de cada tarjeta para repintar')
+  assert.equal(s.json.columnas.prueba.find((c) => c.texto === 'Uno')?.estado, 'en-curso')
+  writeFileSync(r, readFileSync(r, 'utf8') + JSON.stringify({ type: 'user', message: { content: 'más' } }) + '\n')
+  assert.equal((await get('/api/version')).json.version, v, 'la actividad de Claude no entra en la huella')
+  assert.equal((await get('/api/sesiones', { host: `evil.com:${puerto}` })).estado, 403)
+  const d = (await get('/api/datos')).json
+  assert.ok(d.sesiones?.prueba)
+  assert.ok(Array.isArray(d.proyectos[0].kanban))
+  assert.equal(d.proyectos[0].kanban.find((c) => c.texto === 'Uno').archivo, 'BACKLOG_PRUEBA.md')
+})
+
+test('/api/carpetas: sin ruta → home + sugerencias; con ruta → subcarpetas y propuesta; nunca fuera de home ni archivos; solo con Origin', async () => {
+  const repo = join(dir, 'repo-sugerido')
+  mkdirSync(join(repo, '.git'), { recursive: true })
+  mkdirSync(join(repo, 'docs'), { recursive: true })
+  const tr = join(TR, repo.replace(/[^A-Za-z0-9]/g, '-'))
+  mkdirSync(tr, { recursive: true })
+  writeFileSync(join(tr, 'ssss0000.jsonl'), JSON.stringify({ type: 'user', cwd: repo, timestamp: new Date().toISOString(), message: { content: 'hola' } }) + '\n')
+  const h = await post('/api/carpetas', {})
+  assert.equal(h.estado, 200, h.json.error)
+  assert.equal(h.json.ruta, dir)
+  assert.equal(h.json.padre, null)
+  assert.ok(h.json.carpetas.some((c) => c.nombre === 'repo-sugerido' && c.esGit))
+  assert.ok(!h.json.carpetas.some((c) => c.nombre.endsWith('.md') || c.nombre.endsWith('.json')), 'nunca lista archivos')
+  assert.deepEqual(h.json.sugerencias.map((s) => s.ruta), [repo])
+  const r = await post('/api/carpetas', { ruta: repo })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.deepEqual(r.json.carpetas.map((c) => c.nombre), ['docs'])
+  assert.equal(r.json.propuesta.id, 'repo-sugerido')
+  assert.ok(!('sugerencias' in r.json))
+  for (const ruta of ['/etc', join(dir, '..'), join(dir, 'no-existe'), BACKLOG]) assert.equal((await post('/api/carpetas', { ruta })).estado, 400, ruta)
+  assert.equal((await post('/api/carpetas', {}, { origin: 'http://evil.com' })).estado, 403)
+})
+
+test('participar (S37): asignar y estado solo en «participar» (400 en lectura/sincronizar/otros conectores), nunca crea ni toca .md; parchea externo-<p>.json', async () => {
+  process.env.AZURE_DEVOPS_PAT = 'pat-participar-12345'
+  const conf = JSON.parse(readFileSync(CONF, 'utf8'))
+  conf.push({ id: 'part', nombre: 'Participa', integraciones: [
+    { id: 'ado', tipo: 'azure-devops', modo: 'participar', organizacion: 'Org', proyecto: 'EAP10', tipoItem: '*' },
+    { id: 'gh3', tipo: 'github-projects', modo: 'participar', propietario: 'u', numero: 1 },
+  ] })
+  writeFileSync(CONF, JSON.stringify(conf))
+  const antesConf = readFileSync(CONF, 'utf8'), antesMd = readFileSync(BACKLOG, 'utf8'), nEscrituras = escrituras.length
+  const d = await get('/api/datos')
+  assert.equal(d.json.proyectos.find((x) => x.id === 'part').integraciones.find((x) => x.id === 'ado').modo, 'participar')
+  // Fuera de «participar» → 400 y no se llama a nada.
+  for (const [proyecto, integracion, patron] of [['eap10', 'ado', /participar/], ['prueba', 'gh', /participar/], ['part', 'gh3', /aún no participa/]]) {
+    for (const ruta of ['/api/integraciones/asignar', '/api/integraciones/estado']) {
+      const r = await post(ruta, { proyecto, integracion, id: '1', aMi: true, estado: 'Closed' })
+      assert.equal(r.estado, 400, `${ruta} ${proyecto}/${integracion}`)
+      assert.match(r.json.error, patron)
+    }
+  }
+  assert.deepEqual(participaciones, [])
+  assert.equal((await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'nada', id: '1', aMi: true })).estado, 404)
+  assert.equal((await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: 'abc', aMi: true })).estado, 400)
+  assert.equal((await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: '2' })).estado, 400, 'aMi debe ser sí o no')
+  assert.equal((await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: '2', aMi: true }, { origin: 'http://evil.com' })).estado, 403)
+  assert.deepEqual(participaciones, [])
+  // Asignarme: correo por quienSoy (una vez, caché 1 h), ítem parcheado en la respuesta, en datos y en externo-part.json.
+  const a = await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: '2', aMi: true })
+  assert.equal(a.estado, 200, a.json.error)
+  assert.deepEqual(a.json.item.asignado, { nombre: 'Yo', correo: 'yo@x' })
+  assert.equal(a.json.item.mio, true)
+  const enDatos = a.json.datos.proyectos.find((x) => x.id === 'part').integraciones.find((x) => x.id === 'ado').items.find((x) => x.id === '2')
+  assert.deepEqual([enDatos.asignado?.correo, enDatos.mio], ['yo@x', true])
+  const ext = JSON.parse(readFileSync(join(dir, 'datos', 'externo-part.json'), 'utf8'))
+  assert.equal(ext.ado.yo.correo, 'yo@x')
+  assert.equal(ext.ado.items.find((x) => x.id === '2').mio, true)
+  const q = await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: '2', aMi: false })
+  assert.equal(q.estado, 200, q.json.error)
+  assert.deepEqual([q.json.item.asignado, q.json.item.mio], [null, false])
+  assert.deepEqual(participaciones, [['quienSoy'], ['asignar', '2', 'yo@x'], ['asignar', '2', null]])
+  // Cambiar estado: solo estados conocidos (las columnas leídas); el adaptador recibe esas columnas.
+  assert.equal((await post('/api/integraciones/estado', { proyecto: 'part', integracion: 'ado', id: '1', estado: 'Inventado' })).estado, 400)
+  const e = await post('/api/integraciones/estado', { proyecto: 'part', integracion: 'ado', id: '1', estado: 'Closed' })
+  assert.equal(e.estado, 200, e.json.error)
+  assert.deepEqual([e.json.item.columna, e.json.item.hecha], ['Closed', true])
+  assert.deepEqual(participaciones.at(-1), ['cambiarEstado', '1', 'Closed', ['Active', 'Closed']])
+  // Azure puede reasignar al cambiar el estado: el ítem queda «mío» en la respuesta y en la caché.
+  const re = await post('/api/integraciones/estado', { proyecto: 'part', integracion: 'ado', id: '2', estado: 'Active' })
+  assert.equal(re.estado, 200, re.json.error)
+  assert.equal(re.json.item.mio, true)
+  assert.equal(JSON.parse(readFileSync(join(dir, 'datos', 'externo-part.json'), 'utf8')).ado.items.find((x) => x.id === '2').mio, true)
+  // Azure rechaza → 502 con el mensaje y queda en servidor.log.
+  const mal = await post('/api/integraciones/asignar', { proyecto: 'part', integracion: 'ado', id: '999', aMi: true })
+  assert.equal(mal.estado, 502)
+  assert.match(mal.json.error, /rechazó/)
+  assert.match(readFileSync(join(dir, 'datos', 'servidor.log'), 'utf8'), /asignar part\/ado #999/)
+  // Sincronía sigue cerrada; nada se crea afuera ni se escribe un .md ni proyectos.json.
+  assert.equal((await post('/api/sincronia/previa', { proyecto: 'part', integracion: 'ado' })).estado, 400)
+  assert.equal(escrituras.length, nEscrituras)
+  assert.equal(readFileSync(CONF, 'utf8'), antesConf)
+  assert.equal(readFileSync(BACKLOG, 'utf8'), antesMd)
+  assert.ok(!existsSync(join(dir, 'datos', 'sync-part-ado.json')))
 })

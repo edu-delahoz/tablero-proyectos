@@ -1,7 +1,7 @@
 // Tests de coherencia backlog ↔ GitHub ↔ backlog padre. Sin dependencias: node --test
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { secciones, desajustes, bloqueosDeRama } from './coherencia.mjs'
+import { secciones, desajustes, bloqueosDeRama, sesionesSinCasillas } from './coherencia.mjs'
 import { analizarComando, proyectoDe } from './verificar_backlog.mjs'
 
 const H4 = `# Backlog H4
@@ -96,4 +96,25 @@ test('proyectoDe: por repo o carpeta de docs, sin confundir prefijos', () => {
   assert.equal(proyectoDe('/r/app/src', ps)?.id, 'a')
   assert.equal(proyectoDe('/r/docs', ps)?.id, 'a')
   assert.equal(proyectoDe('/r/app2', ps), undefined)
+})
+
+test('sesionesSinCasillas: sesión anunciada sin casillas (el caso S3 → S3b)', () => {
+  const t = `## H3
+- Estado: S3 hecha; sigue **S3c Fable** en la rama x.
+    - **S3b — correcciones (Opus)**
+      - [x] hallazgos
+    - **S3c — re-auditoría (Fable)**
+      - Resultado S3c:
+    - Después: **S4 Sonnet** consultas/UI; **S3b** ya hecha.
+## Otros
+- [x] **S5** no es anuncio (es casilla): Después: **S9**
+\`\`\`
+Después: **S7** dentro de código no cuenta
+\`\`\`
+## S6 — Sesión con título · rama \`r\`
+- [ ] algo`
+  assert.deepEqual(sesionesSinCasillas(t).sort(), ['S3c', 'S4'])
+  assert.deepEqual(sesionesSinCasillas(t + '\nDespués: **S6** y **S3b**'), ['S3c', 'S4'])
+  const d = desajustes([{ archivo: 'BACKLOG.md', ruta: '/x', contenido: t }]).filter((x) => x.tipo === 'sesion-sin-casillas')
+  assert.deepEqual(d.map((x) => x.clave).sort(), ['S3c', 'S4'])
 })
