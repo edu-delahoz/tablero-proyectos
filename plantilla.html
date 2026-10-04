@@ -913,7 +913,9 @@ function vistaBitacora() {
   const b = P.bitacora;
   const propias = b.registro.filter((f) => f.proyecto === P.id);
   const base = bitFiltro.todas ? b.registro : propias;
-  const filas = bitFiltro.pendientes ? base.filter((f) => f.pendiente) : base;
+  // Más recientes arriba; las fechas incompletas («2026-10-0?») al final.
+  const clave = (f) => (/^\d{4}-\d\d-\d\d/.test(f.fecha || '') ? f.fecha : '');
+  const filas = (bitFiltro.pendientes ? base.filter((f) => f.pendiente) : base).slice().sort((a, b) => clave(b).localeCompare(clave(a)));
   const costo = base.reduce((a, f) => a + (f.costo || 0), 0), min = base.reduce((a, f) => a + (f.minutos || 0), 0);
   const conCtx = base.filter((f) => f.contexto?.semaforo), rojas = conCtx.filter((f) => f.contexto.semaforo === '🔴').length;
   const horas = min >= 60 ? `${nf.format(min / 60)} h` : `${nf.format(min)} min`;
