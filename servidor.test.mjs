@@ -18,6 +18,7 @@ const TR = join(dir, 'transcripciones')
 mkdirSync(join(TR, '-prueba'), { recursive: true })
 writeFileSync(join(TR, '-prueba', 'bbbb2222-0000.jsonl'), '')
 process.env.TABLERO_TRANSCRIPCIONES = TR
+process.env.TABLERO_HOME = dir // raíz de /api/carpetas: el temporal, nunca el home real
 writeFileSync(join(dir, 'proyectos.json'), JSON.stringify([{
   id: 'prueba', nombre: 'Prueba', docs: [dir], patronBacklogs: '^BACKLOG.*\\.md$', bitacora: BITACORA, transcripciones: '-prueba',
   integraciones: [
@@ -699,4 +700,27 @@ test('/api/sesiones: sesiones recientes por proyecto, barato, sin tocar la huell
   assert.ok(d.sesiones?.prueba)
   assert.ok(Array.isArray(d.proyectos[0].kanban))
   assert.equal(d.proyectos[0].kanban.find((c) => c.texto === 'Uno').archivo, 'BACKLOG_PRUEBA.md')
+})
+
+test('/api/carpetas: sin ruta → home + sugerencias; con ruta → subcarpetas y propuesta; nunca fuera de home ni archivos; solo con Origin', async () => {
+  const repo = join(dir, 'repo-sugerido')
+  mkdirSync(join(repo, '.git'), { recursive: true })
+  mkdirSync(join(repo, 'docs'), { recursive: true })
+  const tr = join(TR, repo.replace(/[^A-Za-z0-9]/g, '-'))
+  mkdirSync(tr, { recursive: true })
+  writeFileSync(join(tr, 'ssss0000.jsonl'), JSON.stringify({ type: 'user', cwd: repo, timestamp: new Date().toISOString(), message: { content: 'hola' } }) + '\n')
+  const h = await post('/api/carpetas', {})
+  assert.equal(h.estado, 200, h.json.error)
+  assert.equal(h.json.ruta, dir)
+  assert.equal(h.json.padre, null)
+  assert.ok(h.json.carpetas.some((c) => c.nombre === 'repo-sugerido' && c.esGit))
+  assert.ok(!h.json.carpetas.some((c) => c.nombre.endsWith('.md') || c.nombre.endsWith('.json')), 'nunca lista archivos')
+  assert.deepEqual(h.json.sugerencias.map((s) => s.ruta), [repo])
+  const r = await post('/api/carpetas', { ruta: repo })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.deepEqual(r.json.carpetas.map((c) => c.nombre), ['docs'])
+  assert.equal(r.json.propuesta.id, 'repo-sugerido')
+  assert.ok(!('sugerencias' in r.json))
+  for (const ruta of ['/etc', join(dir, '..'), join(dir, 'no-existe'), BACKLOG]) assert.equal((await post('/api/carpetas', { ruta })).estado, 400, ruta)
+  assert.equal((await post('/api/carpetas', {}, { origin: 'http://evil.com' })).estado, 403)
 })

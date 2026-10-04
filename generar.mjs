@@ -14,7 +14,7 @@ import { execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
-import { join, dirname, basename, isAbsolute } from 'node:path'
+import { join, dirname, basename, isAbsolute, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extraerMarcas, tareasLocales, planificarSincronia, aplicarSincronia } from './integraciones/sincronia.mjs'
 import { leerCredenciales, credencialesPara, guardarCredencial, resumenCredenciales, REQUISITOS, RUTA_CREDENCIALES } from './integraciones/credenciales.mjs'
@@ -97,17 +97,125 @@ const comoLista = (v) => (v == null || v === '' ? [] : Array.isArray(v) ? v : [v
 // Carpeta de ~/.claude/projects de las sesiones abiertas en `repo`: Claude Code cambia todo lo no alfanumérico por «-».
 export const transcripcionesDe = (repo) => expandir(repo).replace(/[^A-Za-z0-9]/g, '-')
 
-// Entrada de proyectos.json para un proyecto nuevo: id [a-z0-9-] único; repo y docs, carpetas que ya existen;
-// «transcripciones» sale del repo. Lanza ErrorConfig (400) con todos los errores juntos.
+// ---------- Elegir carpeta sin pegar rutas (/api/carpetas) ----------
+// Nunca fuera de home (comprobado con realpath: un enlace no saca de ahí) y nunca lista archivos.
+// TABLERO_HOME cambia esa raíz (los tests la apuntan a un temporal).
+const HOME = process.env.TABLERO_HOME || homedir()
+const MAX_CARPETAS = 200
+const CANDIDATAS_DOCS = ['docs', 'documentacion', '.tablero']
+const dentroDe = (r, raiz) => r === raiz || r.startsWith(raiz.endsWith(sep) ? raiz : raiz + sep)
+const conTilde = (r, home) => (r === home ? '~' : dentroDe(r, home) ? `~${r.slice(home.length)}` : r)
+const esCarpeta = (r) => !!statSync(r, { throwIfNoEntry: false })?.isDirectory()
+const tieneBacklogEn = (r) => { try { return readdirSync(r).some((f) => /^BACKLOG.*\.md$/i.test(f)) } catch { return false } }
+const candidatasDocs = (r) => CANDIDATAS_DOCS.map((d) => join(r, d)).filter(esCarpeta)
+
+// → { ruta, padre (null en home), carpetas: [{ nombre, ruta, esGit, tieneBacklog }], aviso? }. Sin ocultas, node_modules ni enlaces.
+export function listarCarpetas(ruta, home = HOME) {
+  const pedida = ruta == null || ruta === '' ? '~' : ruta
+  if (typeof pedida !== 'string') throw new ErrorConfig('La ruta debe ser texto.')
+  const abs = pedida.trim().replace(/^~(?=\/|$)/, home)
+  if (!isAbsolute(abs)) throw new ErrorConfig(`La ruta debe ser absoluta (o empezar por ~): ${pedida}`)
+  const lexica = resolve(abs), raiz = resolve(home)
+  let real, raizReal
+  try { real = realpathSync(lexica); raizReal = realpathSync(raiz) } catch { throw new ErrorConfig(`No existe esa carpeta: ${pedida}`) }
+  if (!dentroDe(lexica, raiz) || !dentroDe(real, raizReal)) throw new ErrorConfig(`Solo se exploran carpetas dentro de ${raiz}: ${pedida} queda fuera.`)
+  if (!esCarpeta(real)) throw new ErrorConfig(`No es una carpeta: ${pedida}`)
+  const todas = readdirSync(real, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'node_modules')
+    .map((d) => d.name).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+  const carpetas = todas.slice(0, MAX_CARPETAS).map((nombre) => {
+    const r = join(lexica, nombre)
+    return { nombre, ruta: r, esGit: existsSync(join(r, '.git')), tieneBacklog: tieneBacklogEn(r) || candidatasDocs(r).some(tieneBacklogEn) }
+  })
+  return {
+    ruta: lexica, padre: lexica === raiz ? null : dirname(lexica), carpetas,
+    ...(todas.length > MAX_CARPETAS && { aviso: `Hay ${todas.length} carpetas; se muestran las primeras ${MAX_CARPETAS}. Escribe la ruta para llegar a otra.` }),
+  }
+}
+
+// «cwd» de una transcripción: de sus primeras ~20 líneas (las 3 primeras de un .jsonl real no lo traen). Caché por ruta+mtime+size.
+const cacheCwd = new Map()
+function cwdDe(ruta, st) {
+  const c = cacheCwd.get(ruta)
+  if (c && c.mtime === st.mtimeMs && c.size === st.size) return c.cwd
+  let cwd = null
+  try {
+    const fd = openSync(ruta, 'r')
+    try {
+      const buf = Buffer.alloc(Math.min(st.size, 64 * 1024))
+      for (const l of buf.toString('utf8', 0, readSync(fd, buf, 0, buf.length, 0)).split('\n').slice(0, 20)) {
+        try { const o = JSON.parse(l); if (typeof o?.cwd === 'string') { cwd = o.cwd; break } } catch {}
+      }
+    } finally { closeSync(fd) }
+  } catch {}
+  cacheCwd.set(ruta, { mtime: st.mtimeMs, size: st.size, cwd })
+  return cwd
+}
+
+// Carpetas donde se abrió Claude (cwd de ~/.claude/projects/*/*.jsonl) que aún no son proyectos: dentro de home, que existan,
+// sin el propio home; una subcarpeta suma en su carpeta madre si esta también sale y es un repo git. Más reciente primero, tope 12.
+export function sugerirProyectos(dir = TRANSCRIPCIONES, lista = [], { home = HOME, tope = 12 } = {}) {
+  if (!esCarpeta(dir)) return []
+  const raiz = resolve(home)
+  const repos = new Set(lista.map((p) => p.repo && resolve(expandir(p.repo))).filter(Boolean))
+  const yaVistas = new Set(lista.map((p) => p.transcripciones).filter(Boolean))
+  const porCwd = new Map()
+  for (const d of readdirSync(dir)) {
+    if (yaVistas.has(d)) continue
+    let archivos = []
+    try { archivos = readdirSync(join(dir, d)).filter((f) => f.endsWith('.jsonl')) } catch { continue }
+    const sts = archivos.map((f) => ({ ruta: join(dir, d, f), st: statSync(join(dir, d, f), { throwIfNoEntry: false }) })).filter((x) => x.st?.isFile())
+      .sort((a, b) => b.st.mtimeMs - a.st.mtimeMs)
+    let cwd = null
+    for (const x of sts) if ((cwd = cwdDe(x.ruta, x.st))) break
+    if (!cwd || !isAbsolute(cwd)) continue
+    cwd = resolve(cwd)
+    const s = porCwd.get(cwd) || { sesiones: 0, ultimo: 0 }
+    porCwd.set(cwd, { sesiones: s.sesiones + sts.length, ultimo: Math.max(s.ultimo, sts[0]?.st.mtimeMs || 0) })
+  }
+  const validas = [...porCwd.keys()].filter((c) => c !== raiz && dentroDe(c, raiz) && !repos.has(c) && esCarpeta(c))
+  const madres = new Map()
+  for (const c of validas) {
+    const madre = validas.filter((o) => o !== c && dentroDe(c, o) && existsSync(join(o, '.git'))).sort((a, b) => a.length - b.length)[0] || c
+    const s = porCwd.get(c), m = madres.get(madre) || { sesiones: 0, ultimo: 0 }
+    madres.set(madre, { sesiones: m.sesiones + s.sesiones, ultimo: Math.max(m.ultimo, s.ultimo) })
+  }
+  return [...madres].sort((a, b) => b[1].ultimo - a[1].ultimo).slice(0, tope).map(([ruta, s]) => ({
+    ruta, nombre: basename(ruta), ultimaActividad: new Date(s.ultimo).toISOString(), sesiones: s.sesiones, esGit: existsSync(join(ruta, '.git')),
+  }))
+}
+
+// Lo que se propone al elegir la carpeta de un proyecto: id único (sufijo -2, -3…), nombre legible, docs entre las candidatas
+// (si no hay, el propio repo) y notas dentro de la primera docs. Rutas con «~».
+export function propuestaProyecto(ruta, existentes = [], home = HOME) {
+  const abs = resolve(ruta.replace(/^~(?=\/|$)/, home)), base = basename(abs)
+  const raizId = base.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36) || 'proyecto'
+  const ids = new Set(existentes.map((p) => p.id))
+  let id = raizId
+  for (let i = 2; ids.has(id); i++) id = `${raizId}-${i}`
+  const limpio = base.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const docs = candidatasDocs(abs)
+  const elegidas = docs.length ? docs : [abs]
+  return {
+    id, nombre: limpio.charAt(0).toUpperCase() + limpio.slice(1),
+    docs: elegidas.map((d) => conTilde(d, resolve(home))),
+    notas: conTilde(join(elegidas[0], `NOTAS_${id.toUpperCase().replace(/-/g, '_')}.md`), resolve(home)),
+  }
+}
+
+// Entrada de proyectos.json para un proyecto nuevo: id [a-z0-9-] único (sin id y con repo, se propone desde el repo);
+// repo y docs, carpetas que ya existen (sin docs, el repo); «transcripciones» sale del repo. Lanza ErrorConfig (400) con todos los errores juntos.
 export function proyectoNuevo(b, existentes) {
   const errores = []
-  const id = typeof b.id === 'string' ? b.id.trim() : ''
+  const repo = b.repo == null || b.repo === '' ? undefined : validarCarpeta(b.repo, 'repo', errores)
+  let id = typeof b.id === 'string' ? b.id.trim() : ''
+  if (!id && repo) id = propuestaProyecto(expandir(repo), existentes).id
   const nombre = typeof b.nombre === 'string' ? b.nombre.replace(/\s+/g, ' ').trim() : ''
   if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(id)) errores.push('El id solo admite minúsculas, números y guiones (hasta 40, sin empezar por guion).')
   else if (existentes.some((p) => p.id === id)) errores.push(`Ya hay un proyecto con id «${id}».`)
   if (!nombre || nombre.length > 100) errores.push('Falta el nombre (hasta 100 caracteres).')
-  const repo = b.repo == null || b.repo === '' ? undefined : validarCarpeta(b.repo, 'repo', errores)
-  const docs = comoLista(b.docs).map((d) => validarCarpeta(d, 'docs', errores))
+  let docs = comoLista(b.docs).map((d) => validarCarpeta(d, 'docs', errores))
+  if (!docs.length && repo) docs = [repo]
   if (errores.length) throw Object.assign(new ErrorConfig(errores.join(' ')), { errores })
   return { id, nombre, ...(repo && { repo, transcripciones: transcripcionesDe(repo) }), ...(docs.length && { docs }) }
 }
@@ -1298,6 +1406,14 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         escribirAtomico(CONFIG, anadirProyecto(readFileSync(CONFIG, 'utf8'), nuevo))
         cargarProyectos(true)
         return enviar(res, 200, { ok: true, proyecto: nuevo, datos: (await fresco(true)).datos })
+      }
+      // Elegir carpeta: subcarpetas (nunca archivos, nunca fuera de home); sin ruta, home + sugerencias de las sesiones de Claude;
+      // con ruta, la propuesta de id/nombre/docs/notas para esa carpeta.
+      if (ruta === '/api/carpetas') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const lista = listarCarpetas(b.ruta, HOME)
+        if (b.ruta == null || b.ruta === '') return enviar(res, 200, { ok: true, home: HOME, ...lista, sugerencias: sugerirProyectos(TRANSCRIPCIONES, cargarProyectos(), { home: HOME }) })
+        return enviar(res, 200, { ok: true, home: HOME, ...lista, propuesta: lista.padre ? propuestaProyecto(lista.ruta, cargarProyectos(), HOME) : null })
       }
       // Editar proyecto: solo CAMPOS_PROYECTO, en su sitio; integraciones y campos ajenos intactos. `previa` devuelve el bloque sin escribir.
       if (ruta === '/api/proyectos/editar') {

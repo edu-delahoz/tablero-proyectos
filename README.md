@@ -170,7 +170,20 @@ final de `proyectos.json` (el resto queda igual). `id` en `[a-z0-9-]` y único; 
 lista) deben ser carpetas que existan, absolutas o con `~`. `mtime` es `datos.configMtime`: si el archivo
 cambió responde 409. Con `previa: true` devuelve la entrada sin escribir. Solo desde esta máquina.
 Con `repo`, rellena `transcripciones` (la carpeta de `~/.claude/projects`: la ruta con todo lo no
-alfanumérico cambiado por `-`).
+alfanumérico cambiado por `-`). Sin `docs` y con `repo`, `docs` = `[repo]`; sin `id` y con `repo`, se
+propone uno desde el nombre de la carpeta (único: `-2`, `-3`…).
+
+**Elegir carpeta (sin pegar rutas).** `POST /api/carpetas` `{ ruta? }` (solo desde esta máquina, con Origin)
+lista las subcarpetas de `ruta` (`~` vale): `{ home, ruta, padre, carpetas: [{ nombre, ruta, esGit,
+tieneBacklog }], aviso? }`. Nunca sale de home (comprobado con `realpath`, un enlace no saca de ahí), nunca
+lista archivos, ni ocultas, ni `node_modules`, ni enlaces; hasta 200 carpetas con `aviso`. Ruta fuera de
+home, inexistente o que no es carpeta → 400. Sin `ruta` lista home y añade `sugerencias`: las carpetas
+donde abriste Claude (el `cwd` de las primeras líneas de cada `.jsonl` de `~/.claude/projects`, con caché
+por mtime) que aún no son proyectos, dentro de home y que existan, más reciente primero, hasta 12
+(`[{ ruta, nombre, ultimaActividad, sesiones, esGit }]`; una subcarpeta suma en su repo git). Con `ruta`
+añade `propuesta` `{ id, nombre, docs, notas }`: `docs` = `docs`/`documentacion`/`.tablero` que existan (si
+no, la propia carpeta) y `notas` = `NOTAS_<ID>.md` en la primera, rutas con `~`. `TABLERO_HOME` cambia la
+raíz (para tests).
 
 **Editar proyecto.** `POST /api/proyectos/editar` `{ id, cambios, mtime, previa? }` cambia en su sitio solo
 `nombre`, `repo`, `docs`, `notas`, `transcripciones` y `bitacora`; las integraciones, `planes`,

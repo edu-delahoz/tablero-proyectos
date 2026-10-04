@@ -635,3 +635,92 @@ test('columnasKanban: por hacer, en curso (sesión activa o [~]), en prueba (PR 
   const f = por(columnasKanban(frente, { git }, [{ activa: true, archivos: ['/r/BACKLOG.md'], foco: { claves: [], backlogs: [] } }]))
   assert.equal(f['Mandar correo'], 'en-curso'); assert.equal(f.Campos, 'por-hacer')
 })
+
+// ---------- S35: elegir carpeta sin pegar rutas ----------
+const { listarCarpetas, sugerirProyectos, propuestaProyecto, proyectoNuevo } = await import('./generar.mjs')
+const { utimesSync: tocarC, symlinkSync: enlaceC } = await import('node:fs')
+
+// Un «home» falso en el temporal: proyectos con y sin git/backlog, ocultas, node_modules, un archivo y un enlace que sale.
+function homeFalso() {
+  const home = tmpS(join(tmpdirS(), 'tablero-home-'))
+  const dev = join(home, 'Desarrollo')
+  for (const d of ['alfa/.git', 'alfa/docs', 'beta/.tablero', 'Gamma', '.oculta', 'node_modules/x']) mkdirS(join(dev, d), { recursive: true })
+  escribirS(join(dev, 'alfa', 'docs', 'BACKLOG.md'), '# B\n')
+  escribirS(join(dev, 'beta', '.tablero', 'BACKLOG_BETA.md'), '# B\n')
+  escribirS(join(dev, 'leeme.txt'), 'no es carpeta')
+  enlaceC(tmpdirS(), join(dev, 'fuera'))
+  return { home, dev }
+}
+
+test('listarCarpetas: solo subcarpetas visibles de dentro de home, con git/backlog; «~» vale; fuera de home o inexistente → 400', () => {
+  const { home, dev } = homeFalso()
+  const r = listarCarpetas('~/Desarrollo', home)
+  assert.equal(r.ruta, dev)
+  assert.equal(r.padre, home)
+  assert.deepEqual(r.carpetas.map((c) => c.nombre), ['alfa', 'beta', 'Gamma'], 'sin ocultas, node_modules, archivos ni enlaces; orden sin mayúsculas')
+  assert.deepEqual(r.carpetas[0], { nombre: 'alfa', ruta: join(dev, 'alfa'), esGit: true, tieneBacklog: true })
+  assert.equal(r.carpetas[1].tieneBacklog, true, 'backlog en .tablero')
+  assert.deepEqual([r.carpetas[1].esGit, r.carpetas[2].esGit, r.carpetas[2].tieneBacklog], [false, false, false])
+  assert.equal(listarCarpetas('~', home).padre, null, 'en home no se sube más')
+  assert.equal(listarCarpetas(undefined, home).ruta, home)
+  for (const mala of ['/etc', join(home, '..'), '~/../', join(dev, 'no-existe'), join(dev, 'leeme.txt'), join(dev, 'fuera'), 'relativa/x']) {
+    assert.throws(() => listarCarpetas(mala, home), (e) => e.estado === 400 || e.codigo === 400 || /fuera|existe|carpeta|absoluta/i.test(e.message), mala)
+  }
+  // Tope de 200 con aviso.
+  const muchas = join(home, 'muchas')
+  for (let i = 0; i < 205; i++) mkdirS(join(muchas, `d${String(i).padStart(3, '0')}`), { recursive: true })
+  const m = listarCarpetas(muchas, home)
+  assert.equal(m.carpetas.length, 200)
+  assert.match(m.aviso, /200/)
+})
+
+test('sugerirProyectos: carpetas «cwd» de las sesiones de Claude, sin las ya configuradas, más reciente primero, tope 12', () => {
+  const { home, dev } = homeFalso()
+  const TR = join(home, '.claude', 'projects')
+  const sesion = (cwd, sid, ms) => {
+    const d = join(TR, cwd.replace(/[^A-Za-z0-9]/g, '-'))
+    mkdirS(d, { recursive: true })
+    const r = join(d, `${sid}.jsonl`)
+    escribirS(r, [{ type: 'custom-title', customTitle: 't' }, { type: 'mode' }, { type: 'user', cwd, timestamp: new Date(ms).toISOString(), message: { content: 'hola' } }].map((o) => JSON.stringify(o)).join('\n') + '\n')
+    tocarC(r, new Date(ms), new Date(ms))
+  }
+  const ahora = Date.now()
+  sesion(join(dev, 'alfa'), 'a1', ahora - 3 * 86400e3)
+  sesion(join(dev, 'alfa'), 'a2', ahora - 86400e3)
+  sesion(join(dev, 'alfa', 'docs'), 'a3', ahora - 60e3) // subcarpeta: suma en «alfa»
+  sesion(join(dev, 'beta'), 'b1', ahora - 7200e3) // ya configurada
+  sesion(join(dev, 'Gamma'), 'g1', ahora - 3600e3)
+  sesion(join(dev, 'borrada'), 'x1', ahora - 10e3) // ya no existe
+  sesion('/opt/fuera', 'o1', ahora - 10e3) // fuera de home
+  sesion(home, 'h1', ahora - 10e3) // el propio home no es un proyecto
+  const r = sugerirProyectos(TR, [{ id: 'beta', repo: join(dev, 'beta') }], { home })
+  assert.deepEqual(r.map((s) => s.ruta), [join(dev, 'alfa'), join(dev, 'Gamma')])
+  assert.equal(r[0].nombre, 'alfa')
+  assert.equal(r[0].sesiones, 3)
+  assert.equal(r[0].esGit, true)
+  assert.equal(r[1].esGit, false)
+  assert.ok(Date.parse(r[0].ultimaActividad) > Date.parse(r[1].ultimaActividad))
+  for (let i = 0; i < 15; i++) { mkdirS(join(dev, `p${i}`)); sesion(join(dev, `p${i}`), `p${i}`, ahora - (i + 1) * 1000) }
+  assert.equal(sugerirProyectos(TR, [], { home }).length, 12)
+  assert.deepEqual(sugerirProyectos(join(home, 'no-existe'), [], { home }), [])
+})
+
+test('propuestaProyecto: id único (sufijo -2), nombre legible, docs de las candidatas y notas dentro de docs, con «~»', () => {
+  const { home, dev } = homeFalso()
+  const a = propuestaProyecto(join(dev, 'alfa'), [], home)
+  assert.deepEqual(a, { id: 'alfa', nombre: 'Alfa', docs: ['~/Desarrollo/alfa/docs'], notas: '~/Desarrollo/alfa/docs/NOTAS_ALFA.md' })
+  assert.deepEqual(propuestaProyecto(join(dev, 'beta'), [{ id: 'beta' }, { id: 'beta-2' }], home),
+    { id: 'beta-3', nombre: 'Beta', docs: ['~/Desarrollo/beta/.tablero'], notas: '~/Desarrollo/beta/.tablero/NOTAS_BETA_3.md' })
+  mkdirS(join(dev, 'Mi Proyecto_Ñandú'))
+  const g = propuestaProyecto(join(dev, 'Mi Proyecto_Ñandú'), [], home)
+  assert.equal(g.id, 'mi-proyecto-nandu')
+  assert.equal(g.nombre, 'Mi Proyecto Ñandú')
+  assert.deepEqual(g.docs, ['~/Desarrollo/Mi Proyecto_Ñandú'], 'sin candidatas: el propio repo')
+})
+
+test('proyectoNuevo: sin docs y con repo → docs = [repo]; sin id y con repo → id propuesto único', () => {
+  const { dev } = homeFalso()
+  assert.deepEqual(proyectoNuevo({ id: 'g', nombre: 'G', repo: join(dev, 'Gamma') }, []).docs, [join(dev, 'Gamma')])
+  assert.deepEqual(proyectoNuevo({ id: 'g', nombre: 'G', repo: join(dev, 'Gamma'), docs: [join(dev, 'alfa')] }, []).docs, [join(dev, 'alfa')])
+  assert.equal(proyectoNuevo({ nombre: 'G', repo: join(dev, 'Gamma') }, [{ id: 'gamma' }]).id, 'gamma-2')
+})
