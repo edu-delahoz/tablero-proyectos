@@ -1,7 +1,7 @@
 // Endpoints de sincronía del servidor local, en proceso, con un adaptador en memoria. node --test
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,9 +24,16 @@ writeFileSync(join(dir, 'proyectos.json'), JSON.stringify([{
     { id: 'gh', tipo: 'github-projects', propietario: 'usuario', numero: 1, backlog: 'BACKLOG_PRUEBA.md' },
     { id: 'tr', tipo: 'tipo-inexistente', backlog: 'BACKLOG_PRUEBA.md' },
   ],
+}, {
+  // Como EAP10: sin docs ni repo, solo una integración de solo lectura.
+  id: 'eap10', nombre: 'EAP10',
+  integraciones: [{ id: 'ado', tipo: 'azure-devops', modo: 'lectura', organizacion: 'Org', proyecto: 'EAP10', tipoItem: '*' }],
 }]))
 process.env.TABLERO_PROYECTOS = join(dir, 'proyectos.json')
 process.env.TABLERO_DATOS = join(dir, 'datos')
+// Credenciales: siempre un archivo del temporal, nunca ~/.config/tablero.
+const CRED = join(dir, 'config', 'credenciales.json')
+process.env.TABLERO_CREDENCIALES = CRED
 
 const fuera = new Map([['E1', { id: 'E1', titulo: 'Desde afuera', hecha: false, columna: 'Todo', url: 'https://x/E1' }]])
 let n = 0
@@ -34,16 +41,29 @@ const falso = {
   async leer() { return { url: 'https://x', titulo: 'Falso', columnas: ['Todo', 'Done'], items: [...fuera.values()] } },
   async crear(cfg, cred, t) { const id = `N${++n}`; fuera.set(id, { id, titulo: t.titulo, hecha: t.hecha, url: `https://x/${id}` }); return { id, url: `https://x/${id}` } },
   async actualizar(cfg, cred, id, c) { Object.assign(fuera.get(id), c) },
+  async listar(cfg, cred) { if (cfg.numero === 98) return new Promise(() => {}); if (cfg.numero === 99) throw new Error('GitHub Projects: Sin conexión con GitHub.'); return { recibido: cfg, cred, proyectos: [{ propietario: 'u', numero: 5, titulo: 'Falso' }] } },
 }
+const escrituras = [] // crear/actualizar de Azure: en solo lectura nunca debe llamarse ninguno
+const ITEMS_ADO = [
+  { id: '1', titulo: 'Mía', hecha: false, columna: 'Active', url: 'https://x/1', tipo: 'Task', asignado: { nombre: 'Yo', correo: 'yo@x' }, mio: true },
+  { id: '2', titulo: 'Sin asignar', hecha: true, columna: 'Closed', url: 'https://x/2', tipo: 'Bug', asignado: null, mio: false },
+]
+const adoFalso = {
+  async leer(cfg) { return { url: 'https://x', titulo: `${cfg.organizacion}/${cfg.proyecto}`, columnas: cfg.modo === 'lectura' ? ['Active', 'Closed'] : [], items: cfg.modo === 'lectura' ? ITEMS_ADO : [] } },
+  async crear(...a) { escrituras.push(['crear', ...a]); return { id: 'Z', url: 'https://x/Z' } },
+  async actualizar(...a) { escrituras.push(['actualizar', ...a]) },
+  async listar(cfg) { return { recibido: cfg, proyectos: ['EAP10'] } },
+}
+const trelloFalso = { async listar(cfg, cred) { return { recibido: cfg, cred, tableros: [] } } }
 
-let srv, puerto
+let srv, puerto, salidas = 0
 before(async () => {
   const { crearManejador } = await import('./generar.mjs')
   let manejador
   srv = createServer((q, r) => manejador(q, r))
   await new Promise((ok) => srv.listen(0, '127.0.0.1', ok))
   puerto = srv.address().port
-  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso } })
+  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso, trello: trelloFalso, 'azure-devops': adoFalso }, codigo: 'c1', alSalir: () => { salidas++ } })
 })
 after(() => srv.close())
 
@@ -173,4 +193,351 @@ test('bitácora: POST reescribe solo la fila pedida; 409 si cambió; 400 si no v
   const c = await post('/api/bitacora', { ...ok, sid: 'dddd4444' })
   assert.equal(c.estado, 409)
   assert.equal(readFileSync(BITACORA, 'utf8'), despues)
+})
+
+test('/api/favoritos: guarda por título en datos/favoritos.json, alterna, valida y exige Origin', async () => {
+  const archivo = join(dir, 'datos', 'favoritos.json')
+  assert.deepEqual((await get('/api/datos')).json.favoritos, [])
+  for (const opts of [{ host: `evil.com:${puerto}` }, { origin: 'http://evil.com' }, { tipo: 'text/plain' }]) assert.equal((await post('/api/favoritos', { titulo: 'S1 — Base', favorito: true }, opts)).estado, 403)
+  assert.equal(existsSync(archivo), false)
+  for (const malo of [{}, { titulo: '', favorito: true }, { titulo: 'S1', favorito: 'sí' }, { titulo: 'x'.repeat(201), favorito: true }]) assert.equal((await post('/api/favoritos', malo)).estado, 400)
+
+  const a = await post('/api/favoritos', { titulo: ' S1 —  Base ', favorito: true })
+  assert.equal(a.estado, 200)
+  assert.deepEqual(a.json.datos.favoritos, ['S1 — Base'])
+  assert.deepEqual(JSON.parse(readFileSync(archivo, 'utf8')), { favoritos: ['S1 — Base'] })
+  await post('/api/favoritos', { titulo: 'S1 — Base', favorito: true }) // idempotente
+  const b = await post('/api/favoritos', { titulo: 'S2 — Otra', favorito: true })
+  assert.deepEqual(b.json.datos.favoritos, ['S1 — Base', 'S2 — Otra'])
+  const c = await post('/api/favoritos', { titulo: 'S1 — Base', favorito: false })
+  assert.deepEqual(c.json.datos.favoritos, ['S2 — Otra'])
+  await post('/api/favoritos', { titulo: 'S2 — Otra', favorito: false })
+})
+
+test('robustez: enviar sobre una respuesta destruida o ya enviada no lanza', async () => {
+  const { crearManejador } = await import('./generar.mjs')
+  const m = crearManejador({ puerto, adaptadores: {} })
+  const req = { headers: { host: `127.0.0.1:${puerto}` }, url: '/api/ping', method: 'GET' }
+  const llamadas = []
+  const res = (extra) => ({ writeHead: () => llamadas.push('writeHead'), end: () => llamadas.push('end'), ...extra })
+  await m(req, res({ destroyed: true }))
+  await m(req, res({ headersSent: true }))
+  assert.deepEqual(llamadas, [])
+  await m(req, res({}))
+  assert.deepEqual(llamadas, ['writeHead', 'end'])
+})
+
+test('robustez: un manejador que lanza (o rechaza) se registra y no tumba el proceso', async () => {
+  const { protegerManejador, protegerProceso } = await import('./generar.mjs')
+  const log = []
+  protegerManejador(async () => { throw new Error('boom') }, (m) => log.push(m))({}, {})
+  protegerManejador(() => { throw new Error('sync') }, (m) => log.push(m))({}, {})
+  await new Promise((r) => setTimeout(r, 10))
+  assert.equal(log.length, 2)
+  assert.ok(log.some((l) => /boom/.test(l)) && log.some((l) => /sync/.test(l)))
+  const eventos = new Map()
+  protegerProceso({ on: (e, f) => eventos.set(e, f) }, (m) => log.push(m))
+  eventos.get('uncaughtException')(new Error('x'))
+  eventos.get('unhandledRejection')(new Error('y'))
+  assert.equal(log.length, 4)
+})
+
+test('/api/version trae la huella del código; POST /api/salir (local, con Origin) avisa al servidor', async () => {
+  assert.equal((await get('/api/version')).json.codigo, 'c1')
+  assert.equal((await post('/api/salir', {}, { origin: 'http://evil.com' })).estado, 403)
+  assert.equal(salidas, 0)
+  assert.deepEqual(await post('/api/salir', {}), { estado: 200, json: { ok: true } })
+  assert.equal(salidas, 1)
+})
+
+test('asegurarServidor: arranca si no hay, deja el vigente y recicla si la huella cambió (SIGTERM si no sale)', async () => {
+  const { asegurarServidor, pidDelLog } = await import('./generar.mjs')
+  const prueba = (estado, remoto, { sale = true } = {}) => {
+    const hechos = []
+    let vivo = estado
+    return asegurarServidor({
+      codigo: 'nuevo', log: (m) => hechos.push(m),
+      vivo: async () => vivo, codigoRemoto: async () => remoto,
+      salir: async () => { hechos.push('salir'); if (sale) vivo = false },
+      matar: () => { hechos.push('matar'); vivo = false },
+      arrancar: async () => { hechos.push('arrancar'); vivo = true },
+    }).then((r) => [r, hechos.filter((m) => !/^reinicio/.test(m)), hechos.some((m) => /^reinicio por código nuevo/.test(m))])
+  }
+  assert.deepEqual(await prueba(false, null), ['arrancado', ['arrancar'], false])
+  assert.deepEqual(await prueba(true, 'nuevo'), ['vigente', [], false])
+  assert.deepEqual(await prueba(true, 'viejo'), ['reciclado', ['salir', 'arrancar'], true])
+  assert.deepEqual(await prueba(true, null, { sale: false }), ['reciclado', ['salir', 'matar', 'arrancar'], true])
+  const log = '2026 arranque (pid 11, puerto 47321)\n2026 arranque (pid 22, puerto 9)\n2026 arranque (pid 33, puerto 47321)\n'
+  assert.equal(pidDelLog(log, 47321), 33)
+  assert.equal(pidDelLog(log, 1), null)
+})
+
+// ---------- Integraciones desde la vista (S16) ----------
+const CONF = join(dir, 'proyectos.json')
+const mtime = async () => (await get('/api/datos')).json.configMtime
+
+test('integraciones: guardar añade solo campos de la lista blanca, edita en su sitio y quitar deja el resto', async () => {
+  const antes = JSON.parse(readFileSync(CONF, 'utf8'))
+  const nueva = { id: 'gh2', tipo: 'github-projects', propietario: 'otro', numero: '7', backlog: 'BACKLOG_PRUEBA.md', token: 'no-se-guarda' }
+  const r = await post('/api/integraciones/guardar', { proyecto: 'prueba', integracion: nueva, mtime: await mtime() })
+  assert.equal(r.estado, 200, r.json.error)
+  let p = JSON.parse(readFileSync(CONF, 'utf8'))[0]
+  assert.deepEqual(p.integraciones.map((x) => x.id), ['gh', 'tr', 'gh2'])
+  assert.deepEqual(p.integraciones[2], { id: 'gh2', tipo: 'github-projects', backlog: 'BACKLOG_PRUEBA.md', propietario: 'otro', numero: 7 })
+  assert.deepEqual({ ...p, integraciones: undefined }, { ...antes[0], integraciones: undefined })
+  assert.ok(r.json.datos.proyectos[0].integraciones.some((x) => x.id === 'gh2'), 'la vista recibe la integración nueva sin reiniciar')
+  assert.deepEqual(r.json.datos.proyectos[0].integraciones.find((x) => x.id === 'gh2').config, { id: 'gh2', tipo: 'github-projects', backlog: 'BACKLOG_PRUEBA.md', propietario: 'otro', numero: 7 }, 'la vista recibe la config (lista blanca) para editar')
+  // Editar renombrando: en su sitio y avisa.
+  const e = await post('/api/integraciones/guardar', { proyecto: 'prueba', idOriginal: 'gh2', integracion: { ...nueva, id: 'gh3', numero: 8 }, mtime: await mtime() })
+  assert.equal(e.json.renombrada, true)
+  p = JSON.parse(readFileSync(CONF, 'utf8'))[0]
+  assert.deepEqual(p.integraciones.map((x) => [x.id, x.numero]), [['gh', 1], ['tr', undefined], ['gh3', 8]])
+  const q = await post('/api/integraciones/quitar', { proyecto: 'prueba', id: 'gh3', mtime: await mtime() })
+  assert.equal(q.estado, 200)
+  assert.deepEqual(JSON.parse(readFileSync(CONF, 'utf8')), antes)
+})
+
+test('integraciones: 409 si proyectos.json cambió, 400 con errores si no valida, 403 sin Origin', async () => {
+  const m = await mtime()
+  const cfg = { id: 'gh9', tipo: 'github-projects', propietario: 'u', numero: 1, backlog: 'BACKLOG_PRUEBA.md' }
+  assert.equal((await post('/api/integraciones/guardar', { proyecto: 'prueba', integracion: cfg, mtime: m - 1000 })).estado, 409)
+  assert.equal((await post('/api/integraciones/quitar', { proyecto: 'prueba', id: 'gh', mtime: m - 1000 })).estado, 409)
+  const mala = await post('/api/integraciones/guardar', { proyecto: 'prueba', integracion: { ...cfg, id: 'gh', backlog: 'NADA.md' }, mtime: m })
+  assert.equal(mala.estado, 400)
+  assert.ok(mala.json.errores.some((x) => /Ya hay otra/.test(x)) && mala.json.errores.some((x) => /NADA.md/.test(x)))
+  assert.equal((await post('/api/integraciones/guardar', { proyecto: 'prueba', integracion: cfg, mtime: m }, { origin: 'http://evil.com' })).estado, 403)
+  assert.equal((await post('/api/integraciones/guardar', { proyecto: 'nada', integracion: cfg, mtime: m })).estado, 404)
+  assert.ok(!JSON.parse(readFileSync(CONF, 'utf8'))[0].integraciones.some((x) => x.id === 'gh9'))
+})
+
+test('integraciones: descubrir con un conector que nunca responde → 502 en ≤ 16 s', async () => {
+  const t0 = Date.now()
+  const r = await post('/api/integraciones/descubrir', { tipo: 'github-projects', consulta: { propietario: 'u', numero: 98 } })
+  assert.equal(r.estado, 502)
+  assert.match(r.json.error, /no respondió/)
+  assert.ok(Date.now() - t0 <= 16000)
+})
+
+test('integraciones: probar lee con la config propuesta sin guardar', async () => {
+  const antes = readFileSync(CONF, 'utf8')
+  const r = await post('/api/integraciones/probar', { proyecto: 'prueba', integracion: { id: 'nueva', tipo: 'github-projects', propietario: 'u', numero: 5, backlog: 'BACKLOG_PRUEBA.md' } })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.deepEqual([r.json.titulo, r.json.columnas, typeof r.json.items], ['Falso', ['Todo', 'Done'], 'number'])
+  assert.equal(readFileSync(CONF, 'utf8'), antes)
+  assert.equal((await post('/api/integraciones/probar', { proyecto: 'prueba', integracion: { id: 'x', tipo: 'github-projects', backlog: 'BACKLOG_PRUEBA.md' } })).estado, 400)
+})
+
+test('integraciones: descubrir pasa solo los campos de la consulta, traduce errores y no toca proyectos.json', async () => {
+  const antes = readFileSync(CONF, 'utf8')
+  const r = await post('/api/integraciones/descubrir', { tipo: 'github-projects', consulta: { propietario: 'u', numero: 5, basura: 'x', token: 'no' } })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.deepEqual(r.json.recibido, { propietario: 'u', numero: 5 })
+  assert.equal(r.json.proyectos[0].titulo, 'Falso')
+  assert.deepEqual((await post('/api/integraciones/descubrir', { tipo: 'github-projects' })).json.recibido, {})
+  const mal = await post('/api/integraciones/descubrir', { tipo: 'github-projects', consulta: { propietario: 'u', numero: 99 } })
+  assert.deepEqual([mal.estado, mal.json.error], [502, 'GitHub Projects: Sin conexión con GitHub.'])
+  assert.equal((await post('/api/integraciones/descubrir', { tipo: 'nada' })).estado, 400)
+  assert.equal((await post('/api/integraciones/descubrir', { tipo: 'azure-devops', consulta: { organizacion: 'o' } })).json.estado, 'falta-credencial')
+  assert.equal((await post('/api/integraciones/descubrir', { tipo: 'github-projects' }, { origin: 'http://evil.com' })).estado, 403)
+  // Trello sin credencial: 400 con el paso a seguir; con ella, el conector la recibe y el JSON no la devuelve al guardarla.
+  const entorno = [process.env.TRELLO_KEY, process.env.TRELLO_TOKEN]
+  delete process.env.TRELLO_KEY; delete process.env.TRELLO_TOKEN
+  try {
+    const sin = await post('/api/integraciones/descubrir', { tipo: 'trello' })
+    assert.deepEqual([sin.estado, sin.json.estado], [400, 'falta-credencial'])
+    assert.ok(sin.json.paso)
+    await post('/api/credenciales', { clave: 'trello', campos: { key: 'k-descubrir-1', token: 't-descubrir-2' } })
+    const con = await post('/api/integraciones/descubrir', { tipo: 'trello', consulta: {} })
+    assert.equal(con.estado, 200, con.json.error)
+    assert.deepEqual(con.json.cred, { key: 'k-descubrir-1', token: 't-descubrir-2' })
+    await post('/api/credenciales', { clave: 'trello', campos: { key: '', token: '' } })
+  } finally { if (entorno[0] !== undefined) process.env.TRELLO_KEY = entorno[0]; if (entorno[1] !== undefined) process.env.TRELLO_TOKEN = entorno[1] }
+  assert.equal(readFileSync(CONF, 'utf8'), antes)
+})
+
+test('integraciones: Azure DevOps acepta la URL de la organización y responde el nombre normalizado', async () => {
+  const entorno = process.env.AZURE_DEVOPS_PAT
+  delete process.env.AZURE_DEVOPS_PAT
+  try {
+    await post('/api/credenciales', { clave: 'azure-devops', campos: { pat: 'pat-normaliza-12345' } })
+    const d = await post('/api/integraciones/descubrir', { tipo: 'azure-devops', consulta: { organizacion: ' https://dev.azure.com/CodeFactory2026-2/ ' } })
+    assert.equal(d.estado, 200, d.json.error)
+    assert.equal(d.json.organizacion, 'CodeFactory2026-2')
+    assert.deepEqual(d.json.recibido, { organizacion: 'CodeFactory2026-2' })
+    const mal = await post('/api/integraciones/descubrir', { tipo: 'azure-devops', consulta: { organizacion: 'https://ejemplo.com/x' } })
+    assert.equal(mal.estado, 400)
+    assert.match(mal.json.error, /No entiendo la organización/)
+    const p = await post('/api/integraciones/probar', { proyecto: 'prueba', integracion: { id: 'ado', tipo: 'azure-devops', organizacion: 'https://dev.azure.com/CodeFactory2026-2/EAP10/_boards', backlog: 'BACKLOG_PRUEBA.md' } })
+    assert.equal(p.estado, 200, p.json.error)
+    assert.equal(p.json.organizacion, 'CodeFactory2026-2')
+    assert.equal(p.json.titulo, 'CodeFactory2026-2/EAP10')
+    await post('/api/credenciales', { clave: 'azure-devops', campos: { pat: '' } })
+  } finally { if (entorno !== undefined) process.env.AZURE_DEVOPS_PAT = entorno }
+})
+
+test('credenciales: se guardan en 0600, la respuesta y /api/datos solo traen el resumen, nunca el valor', async () => {
+  const SECRETO = 'tok-SUPERSECRETO-abcdef123456', CLAVE = 'key-OTROSECRETO-998877'
+  const r = await post('/api/credenciales', { clave: 'trello', campos: { key: CLAVE, token: SECRETO } })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.deepEqual(r.json.credenciales.trello, { tipo: 'trello', guardada: true, fuente: 'archivo', fin: '…3456' })
+  assert.equal(statSync(CRED).mode & 0o777, 0o600)
+  assert.deepEqual(JSON.parse(readFileSync(CRED, 'utf8')), { trello: { key: CLAVE, token: SECRETO } })
+  const html = await new Promise((ok) => request({ host: '127.0.0.1', port: puerto, path: '/', headers: { host: `127.0.0.1:${puerto}` } }, (x) => { let t = ''; x.on('data', (c) => { t += c }); x.on('end', () => ok(t)) }).end())
+  for (const texto of [JSON.stringify(r.json), JSON.stringify((await get('/api/datos')).json), html]) {
+    assert.ok(!texto.includes('SUPERSECRETO') && !texto.includes('OTROSECRETO'), 'un secreto salió del servidor')
+  }
+  assert.equal((await post('/api/credenciales', { clave: 'trello', campos: { pat: 'x' } })).estado, 400)
+  assert.equal((await post('/api/credenciales', { clave: 'github-projects', campos: { token: 'x' } })).estado, 400)
+  assert.equal((await post('/api/credenciales', { clave: 'trello', campos: { token: 'con espacio' } })).estado, 400)
+  assert.equal((await post('/api/credenciales', { clave: 'trello', campos: { token: 'x' } }, { origin: 'http://evil.com' })).estado, 403)
+  assert.equal(JSON.parse(readFileSync(CRED, 'utf8')).trello.token, SECRETO)
+})
+
+test('solo lectura: proyecto sin docs ni repo genera; ítems con tipo/asignado/mío; sin sincronía ni escrituras', async () => {
+  const entorno = process.env.AZURE_DEVOPS_PAT
+  process.env.AZURE_DEVOPS_PAT = 'pat-lectura-12345'
+  try {
+    const antesMd = readFileSync(BACKLOG, 'utf8'), antesConf = readFileSync(CONF, 'utf8')
+    const d = await get('/api/datos')
+    assert.equal(d.estado, 200)
+    const p = d.json.proyectos.find((x) => x.id === 'eap10')
+    assert.deepEqual([p.backlogs, p.git], [[], null])
+    const i = p.integraciones[0]
+    assert.deepEqual([i.estado, i.modo, i.backlog, i.auto, i.pendientes], ['conectado', 'lectura', null, false, 0])
+    assert.equal(i.config.modo, 'lectura', 'la vista recibe el modo para que editar no lo devuelva a sincronizar')
+    assert.deepEqual(i.items, ITEMS_ADO)
+    assert.ok(!JSON.stringify(d.json).includes('pat-lectura'))
+    const html = await fetch(`http://127.0.0.1:${puerto}/`)
+    assert.equal(html.status, 200)
+    assert.match(await html.text(), /EAP10/)
+    // Sincronía (previa y aplicar) → 400 «solo lectura»; nada se llama ni se escribe.
+    for (const ruta of ['/api/sincronia/previa', '/api/sincronia/aplicar']) {
+      const r = await post(ruta, { proyecto: 'eap10', integracion: 'ado', acciones: ['traer:1'], hashPrevio: 'x' })
+      assert.equal(r.estado, 400)
+      assert.match(r.json.error, /solo lectura/)
+    }
+    const { sincronizar } = await import('./generar.mjs')
+    const cfgP = JSON.parse(readFileSync(CONF, 'utf8')).find((x) => x.id === 'eap10')
+    await assert.rejects(sincronizar({ ...cfgP, docs: [dir] }, 'ado', { elegidas: 'auto', adaptadores: { 'azure-devops': adoFalso } }), /solo lectura/)
+    // Probar: sin backlog, vinculadas 0.
+    const pr = await post('/api/integraciones/probar', { proyecto: 'eap10', integracion: { id: 'ado', tipo: 'azure-devops', modo: 'lectura', organizacion: 'Org', proyecto: 'EAP10' } })
+    assert.equal(pr.estado, 200, pr.json.error)
+    assert.deepEqual([pr.json.vinculadas, pr.json.modo, pr.json.items], [0, 'lectura', 2])
+    // Guardar → editar: sigue en lectura.
+    const g = await post('/api/integraciones/guardar', { proyecto: 'eap10', idOriginal: 'ado', integracion: { ...i.config, proyecto: 'EAP10' }, mtime: await mtime() })
+    assert.equal(g.estado, 200, g.json.error)
+    assert.equal(JSON.parse(readFileSync(CONF, 'utf8')).find((x) => x.id === 'eap10').integraciones[0].modo, 'lectura')
+    assert.equal(readFileSync(CONF, 'utf8'), antesConf)
+    assert.deepEqual(escrituras, [])
+    assert.equal(readFileSync(BACKLOG, 'utf8'), antesMd)
+    assert.ok(!existsSync(join(dir, 'datos', 'sync-eap10-ado.json')))
+  } finally { if (entorno !== undefined) process.env.AZURE_DEVOPS_PAT = entorno; else delete process.env.AZURE_DEVOPS_PAT }
+})
+
+test('primera sincronía (sin instantánea): la previa lo dice con el conteo y «auto» no aplica nada', async () => {
+  const otro = join(dir, 'primera')
+  mkdirSync(otro, { recursive: true })
+  const md = '# P\n\n- [ ] Local\n'
+  writeFileSync(join(otro, 'BACKLOG_P.md'), md)
+  const creados = []
+  const gh = { ...falso, async crear(...a) { creados.push(a); return { id: 'Q', url: 'https://x/Q' } }, async actualizar(...a) { creados.push(a) } }
+  const p = { id: 'primera', docs: [otro], integraciones: [{ id: 'g', tipo: 'github-projects', propietario: 'u', numero: 1, backlog: 'BACKLOG_P.md', auto: true }] }
+  const { sincronizar } = await import('./generar.mjs')
+  const previa = await sincronizar(p, 'g', { adaptadores: { 'github-projects': gh } })
+  assert.equal(previa.primera, true)
+  assert.deepEqual(previa.conteo, { 'crear-fuera': 1, traer: fuera.size })
+  const r = await sincronizar(p, 'g', { elegidas: 'auto', adaptadores: { 'github-projects': gh } })
+  assert.deepEqual(r.resultados, [])
+  assert.match(r.aviso, /Primera sincronía/)
+  assert.deepEqual(creados, [])
+  assert.equal(readFileSync(join(otro, 'BACKLOG_P.md'), 'utf8'), md)
+  assert.ok(!existsSync(join(dir, 'datos', 'sync-primera-g.json')))
+  // Con instantánea ya no es la primera.
+  writeFileSync(join(dir, 'datos', 'sync-primera-g.json'), '{}')
+  assert.equal((await sincronizar(p, 'g', { adaptadores: { 'github-projects': gh } })).primera, false)
+})
+
+test('vista: la plantilla trae modo, filtro Mías/Sin asignar, chips y la primera sincronía sin marcar', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['data-integ-filtro', 'chip-asig', 'chip-tipo', 'id="fi-modo"', 'data-fi="tipoItem-todos"', 'Primera sincronía.', 'modo: lectura ? \'lectura\' : \'sincronizar\'']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+  // En solo lectura no hay botón «Sincronizar» ni «auto: no»: el guardia está en la tarjeta.
+  assert.match(html, /integ\.estado === 'conectado' && !lectura \? \(editable\(\)/)
+  // Los datos que alimentan chips y filtros llegan a la vista (EAP10, solo lectura).
+  const d = await (await fetch(`http://127.0.0.1:${puerto}/api/datos`)).json()
+  const ado = d.proyectos.find((p) => p.id === 'eap10').integraciones[0]
+  assert.equal(ado.modo, 'lectura')
+  assert.equal(ado.backlog, null)
+})
+
+test('vista: la plantilla trae «Nuevo proyecto», el formulario de crear y «Crear backlog» (pestaña e integraciones)', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['id="nuevo-proyecto"', 'id="panel-crear"', 'id="form-crear"', "'/api/proyectos/crear'", "'/api/backlog/crear'", 'data-crear="backlog"', 'data-crear-campo', 'mtime: DATOS.configMtime']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+  assert.equal(html.split('data-crear="backlog"').length - 1, 2, 'botón en la pestaña Backlogs y en el paso Modo y backlog')
+})
+
+test('crear proyecto: previa sin escribir, id inválido o duplicado y rutas inexistentes → 400, mtime viejo → 409', async () => {
+  const docsNuevo = join(dir, 'docs-nuevo')
+  mkdirSync(docsNuevo)
+  const antes = readFileSync(CONF, 'utf8')
+  const pv = await post('/api/proyectos/crear', { id: 'nuevo', nombre: '  Nuevo   proyecto ', docs: docsNuevo, previa: true })
+  assert.equal(pv.estado, 200, pv.json.error)
+  assert.deepEqual(pv.json.proyecto, { id: 'nuevo', nombre: 'Nuevo proyecto', docs: [docsNuevo] })
+  assert.equal(readFileSync(CONF, 'utf8'), antes)
+  for (const [cuerpo, re] of [
+    [{ id: 'Con Espacios', nombre: 'x' }, /minúsculas/],
+    [{ id: 'prueba', nombre: 'x' }, /Ya hay un proyecto/],
+    [{ id: 'otro', nombre: '' }, /Falta el nombre/],
+    [{ id: 'otro', nombre: 'x', repo: join(dir, 'no-existe') }, /no es una carpeta/],
+    [{ id: 'otro', nombre: 'x', docs: ['relativa/docs'] }, /absoluta/],
+    [{ id: 'otro', nombre: 'x', docs: [BACKLOG] }, /no es una carpeta/],
+  ]) {
+    const r = await post('/api/proyectos/crear', { ...cuerpo, mtime: await mtime() })
+    assert.equal(r.estado, 400, JSON.stringify(cuerpo))
+    assert.match(r.json.error, re)
+  }
+  const m = await mtime()
+  assert.equal((await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Nuevo', docs: docsNuevo, mtime: m - 1000 })).estado, 409)
+  assert.equal((await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Nuevo', docs: docsNuevo })).estado, 400, 'sin mtime no escribe')
+  assert.equal((await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Nuevo', docs: docsNuevo, mtime: m }, { origin: 'http://evil.com' })).estado, 403)
+  assert.equal(readFileSync(CONF, 'utf8'), antes)
+  const r = await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Nuevo', repo: dir, docs: [docsNuevo], mtime: m })
+  assert.equal(r.estado, 200, r.json.error)
+  const conf = JSON.parse(readFileSync(CONF, 'utf8'))
+  assert.deepEqual(conf.slice(0, -1), JSON.parse(antes), 'los proyectos de antes quedan igual')
+  assert.deepEqual(conf.at(-1), { id: 'nuevo', nombre: 'Nuevo', repo: dir, docs: [docsNuevo] })
+  assert.ok(r.json.datos.proyectos.some((p) => p.id === 'nuevo'))
+  assert.equal((await post('/api/proyectos/crear', { id: 'nuevo', nombre: 'Otra vez', mtime: await mtime() })).estado, 400)
+})
+
+test('crear backlog: sin docs, nombre con ruta o fuera del patrón → 400; existente → 409 sin tocarlo; previa no escribe', async () => {
+  const docsNuevo = join(dir, 'docs-nuevo')
+  assert.match((await post('/api/backlog/crear', { proyecto: 'eap10' })).json.error, /no tiene carpeta de documentos/)
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nada' })).estado, 404)
+  for (const archivo of ['../BACKLOG.md', 'sub/BACKLOG.md', '/tmp/BACKLOG.md', 'BACKLOG..md', 'NOTAS.md', 'BACKLOG.txt']) {
+    assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', archivo })).estado, 400, archivo)
+  }
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo', carpeta: dir })).estado, 400, 'carpeta que no es docs del proyecto')
+  const ex = await post('/api/backlog/crear', { proyecto: 'prueba', archivo: 'BACKLOG_PRUEBA.md' })
+  assert.equal(ex.estado, 409)
+  assert.match(ex.json.error, /nunca sobrescribe/)
+  const antesPrueba = readFileSync(BACKLOG, 'utf8')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'prueba', archivo: 'BACKLOG_PRUEBA.md', previa: true })).estado, 409)
+  assert.equal(readFileSync(BACKLOG, 'utf8'), antesPrueba)
+  const pv = await post('/api/backlog/crear', { proyecto: 'nuevo', previa: true })
+  assert.equal(pv.estado, 200, pv.json.error)
+  assert.equal(pv.json.archivo, 'BACKLOG.md')
+  assert.match(pv.json.contenido, /^# Backlog — Nuevo\n\n## Estado\n- \d{4}-\d{2}-\d{2} · /)
+  assert.match(pv.json.contenido, /\n## S1 — .*\n- \[ \] /)
+  assert.ok(!existsSync(join(docsNuevo, 'BACKLOG.md')))
+  const r = await post('/api/backlog/crear', { proyecto: 'nuevo' })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.equal(readFileSync(join(docsNuevo, 'BACKLOG.md'), 'utf8'), pv.json.contenido)
+  const b = (await get('/api/datos')).json.proyectos.find((p) => p.id === 'nuevo').backlogs
+  assert.deepEqual(b.map((x) => [x.archivo, x.total]), [['BACKLOG.md', 1]])
+  writeFileSync(join(docsNuevo, 'BACKLOG.md'), 'editado a mano\n')
+  assert.equal((await post('/api/backlog/crear', { proyecto: 'nuevo' })).estado, 409)
+  assert.equal(readFileSync(join(docsNuevo, 'BACKLOG.md'), 'utf8'), 'editado a mano\n')
+  const otro = await post('/api/backlog/crear', { proyecto: 'nuevo', archivo: 'BACKLOG_NUEVO.md' })
+  assert.equal(otro.estado, 200, otro.json.error)
+  assert.ok(existsSync(join(docsNuevo, 'BACKLOG_NUEVO.md')))
 })

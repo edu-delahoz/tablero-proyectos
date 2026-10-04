@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { leer, crear, actualizar, descripcionHtml, traducirError } from './azure-devops.mjs'
+import { leer, crear, actualizar, listar, descripcionHtml, traducirError, normalizarOrganizacion } from './azure-devops.mjs'
 
 const R = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'integraciones', 'azure-devops.json'), 'utf8'))
 const CFG = { id: 'ado', tipo: 'azure-devops', organizacion: 'org-ejemplo', proyecto: 'proyecto-ejemplo', tipoItem: 'Task' }
@@ -19,10 +19,11 @@ function ado(rutas = {}) {
     const ruta = decodeURIComponent(u.pathname.split('/_apis/')[1]).replace(/^(wit\/workitems)\/\d+$/, '$1/N')
     const clave = `${init.method} ${ruta}`
     llamadas.push({ clave, url, query: Object.fromEntries(u.searchParams), metodo: init.method, cuerpo: init.body ? JSON.parse(init.body) : null, cabeceras: init.headers })
-    const r = rutas[clave] ?? {
-      'POST wit/wiql': R.wiql, 'GET wit/workitems': R.items, 'GET wit/workitemtypes/Task/states': R.estados,
+    const r0 = rutas[clave] ?? {
+      'POST wit/wiql': (c) => (/@Me/.test(c.query) ? R.mias : R.wiql), 'GET wit/workitems': R.items, 'GET wit/workitemtypes': R.tipos,
       'POST wit/workitems/$Task': R.nuevo, 'PATCH wit/workitems/N': R.nuevo,
     }[clave]
+    const r = typeof r0 === 'function' ? r0(init.body ? JSON.parse(init.body) : null) : r0
     if (r instanceof Error) throw r
     if (r === undefined) throw new Error(`ruta no simulada: ${clave}`)
     return r.ok !== undefined && r.status !== undefined ? r : res(r)
@@ -34,6 +35,7 @@ test('leer: WIQL por tipo, ítems con estado/hecha/URL y estados del tipo; Autho
   const d = ado()
   const r = await leer(CFG, CRED, d)
   assert.deepEqual(r.columnas, ['To Do', 'Active', 'Done', 'Removed'])
+  assert.equal(d.llamadas.filter((l) => l.clave === 'GET wit/workitemtypes').length, 1)
   assert.deepEqual(r.items.map((x) => [x.id, x.titulo, x.hecha, x.columna]), [['101', 'Crear el esquema', true, 'Done'], ['102', 'Probar el login', false, 'Active'], ['103', 'Sin empezar', false, 'To Do']])
   assert.equal(r.items[0].url, 'https://dev.azure.com/org-ejemplo/proyecto-ejemplo/_workitems/edit/101')
   assert.equal(r.items[1].actualizado, '2026-01-11T10:00:00Z')
@@ -41,12 +43,12 @@ test('leer: WIQL por tipo, ítems con estado/hecha/URL y estados del tipo; Autho
   assert.match(wiql.cuerpo.query, /\[System\.WorkItemType\] = 'Task' AND \[System\.State\] <> 'Removed'/)
   assert.equal(wiql.query['api-version'], '7.1')
   assert.equal(wiql.cabeceras.Authorization, `Basic ${Buffer.from(':PAT-secreto').toString('base64')}`)
-  assert.equal(d.llamadas[1].query.fields, 'System.Title,System.State,System.ChangedDate')
+  assert.equal(d.llamadas[1].query.fields, 'System.Title,System.State,System.ChangedDate,System.AssignedTo,System.WorkItemType')
 })
 
 test('leer: lotes de 200 ids; estados configurables; aviso si fallan los estados', async () => {
   const muchos = { workItems: Array.from({ length: 450 }, (_, i) => ({ id: i + 1 })) }
-  const d = ado({ 'POST wit/wiql': muchos, 'GET wit/workitems': { value: [] }, 'GET wit/workitemtypes/Task/states': res('no', 404) })
+  const d = ado({ 'POST wit/wiql': muchos, 'GET wit/workitems': { value: [] }, 'GET wit/workitemtypes': res('no', 404) })
   const r = await leer(CFG, CRED, d)
   const lotes = d.llamadas.filter((l) => l.clave === 'GET wit/workitems').map((l) => l.query.ids.split(',').length)
   assert.deepEqual(lotes, [200, 200, 50])
@@ -102,4 +104,109 @@ test('errores en español: 401, 203 con HTML de login, 404, timeout, red; ningú
   assert.equal(mRed, 'Sin conexión con Azure DevOps.')
   for (const m of [m401, m203, m404, mTime, mRed]) assert.ok(!/PAT-secreto|UEFULXNlY3JldG8|https?:/.test(m), m)
   assert.match(traducirError({ status: 500, cuerpo: 'a\n b' }), /respondió 500: a b/)
+})
+
+test('listar: proyectos de la organización (sin proyecto en la URL) y tipos con sus estados', async () => {
+  const d = ado({
+    'GET projects': { value: [{ name: 'P1' }, { name: 'P2' }] },
+    'GET wit/workitemtypes': { value: [{ name: 'Task', states: [{ name: 'To Do' }, { name: 'Done' }] }, { name: 'Bug' }, { name: 'Viejo', isDisabled: true, states: [] }] },
+    'GET wit/workitemtypes/Bug/states': { value: [{ name: 'New' }, { name: 'Closed' }] },
+  })
+  const p = await listar({ organizacion: 'org-ejemplo' }, CRED, d)
+  assert.deepEqual(p.proyectos, ['P1', 'P2'])
+  assert.match(d.llamadas[0].url, /^https:\/\/dev\.azure\.com\/org-ejemplo\/_apis\/projects/)
+  const t = await listar({ organizacion: 'org-ejemplo', proyecto: 'P1' }, CRED, d)
+  assert.deepEqual(t.tipos, [{ nombre: 'Task', estados: ['To Do', 'Done'] }, { nombre: 'Bug', estados: ['New', 'Closed'] }])
+})
+
+test('listar: PAT inválido (203) traducido sin filtrar el PAT; exige organización', async () => {
+  await assert.rejects(listar({ organizacion: 'o' }, CRED, ado({ 'GET projects': res('<html>login</html>', 203) })), (e) => /Credencial inválida/.test(e.message) && !/PAT-secreto/.test(e.message))
+  await assert.rejects(listar({}, CRED, ado()), /organización/)
+})
+
+test('listar sin proyecto: 404 sin «undefined»; 203 sugiere el scope «Project and Team: Read»', async () => {
+  await assert.rejects(listar({ organizacion: 'org-x' }, CRED, ado({ 'GET projects': res('no', 404) })), (e) => /No existe la organización org-x o el PAT/.test(e.message) && !/undefined/.test(e.message))
+  await assert.rejects(listar({ organizacion: 'o' }, CRED, ado({ 'GET projects': res('<html>login</html>', 203) })), (e) => /Project and Team: Read/.test(e.message) && /a mano/.test(e.message))
+})
+
+test('normalizarOrganizacion: nombre, URLs de dev.azure.com y visualstudio.com, proyecto con decodeURIComponent', () => {
+  const casos = [
+    ['CodeFactory2026-2', { organizacion: 'CodeFactory2026-2' }],
+    ['  Org  ', { organizacion: 'Org' }],
+    ['https://dev.azure.com/Org', { organizacion: 'Org' }],
+    ['http://dev.azure.com/Org/', { organizacion: 'Org' }],
+    ['dev.azure.com/Org', { organizacion: 'Org' }],
+    ['https://usuario@dev.azure.com/Org', { organizacion: 'Org' }],
+    ['https://Org.visualstudio.com', { organizacion: 'Org' }],
+    ['https://Org.visualstudio.com/DefaultCollection', { organizacion: 'Org' }],
+    ['https://Org.visualstudio.com/Proy', { organizacion: 'Org', proyecto: 'Proy' }],
+    ['https://dev.azure.com/Org/Proy/_boards/board', { organizacion: 'Org', proyecto: 'Proy' }],
+    ['https://dev.azure.com/Org/_settings', { organizacion: 'Org' }],
+    ['https://dev.azure.com/Org/Mi%20Proyecto/_boards', { organizacion: 'Org', proyecto: 'Mi Proyecto' }],
+  ]
+  for (const [entrada, esperado] of casos) assert.deepEqual(normalizarOrganizacion(entrada), esperado, entrada)
+  for (const mal of ['', '   ', 'https://ejemplo.com/Org', 'https://dev.azure.com', 'ftp://dev.azure.com/Org', 'con espacios', undefined]) {
+    assert.throws(() => normalizarOrganizacion(mal), /No entiendo la organización/, String(mal))
+  }
+})
+
+test('una config guardada con la URL completa llama a dev.azure.com/<organización>/_apis', async () => {
+  const d = ado()
+  await leer({ ...CFG, organizacion: 'https://dev.azure.com/org-ejemplo/' }, CRED, d)
+  assert.ok(d.llamadas.length > 0)
+  for (const l of d.llamadas) assert.match(l.url, /^https:\/\/dev\.azure\.com\/org-ejemplo\/proyecto-ejemplo\/_apis\//)
+  const r = await leer({ ...CFG, organizacion: 'https://dev.azure.com/org-ejemplo/', proyecto: 'Mi Proyecto' }, CRED, ado())
+  assert.ok(r.items.every((x) => x.url.startsWith('https://dev.azure.com/org-ejemplo/Mi%20Proyecto/_workitems/edit/')), 'urlItem codifica el proyecto')
+  assert.equal(r.url, 'https://dev.azure.com/org-ejemplo/Mi%20Proyecto/_workitems')
+})
+
+test('leer: varios tipos (IN), «*» sin filtro y tipoItem antiguo intacto; estados = unión de los tipos con una sola llamada', async () => {
+  const d = ado()
+  const r = await leer({ ...CFG, tipoItem: ['Task', 'Bug'] }, CRED, d)
+  assert.match(d.llamadas[0].cuerpo.query, /\[System\.WorkItemType\] IN \('Task', 'Bug'\) AND \[System\.State\] <> 'Removed'/)
+  assert.match(d.llamadas[0].cuerpo.query, /ORDER BY \[System\.ChangedDate\] DESC$/)
+  assert.deepEqual(r.columnas, ['To Do', 'Active', 'Done', 'Removed', 'New', 'Resolved'])
+  assert.equal(d.llamadas.filter((l) => l.clave === 'GET wit/workitemtypes').length, 1)
+  const d2 = ado()
+  const r2 = await leer({ ...CFG, tipoItem: '*' }, CRED, d2)
+  assert.ok(!/WorkItemType/.test(d2.llamadas[0].cuerpo.query))
+  assert.equal(r2.columnas.length, 6) // Epic aporta «New» y «Done», ya presentes
+  const d3 = ado()
+  await leer({ ...CFG, tipoItem: "O'Brien" }, CRED, d3)
+  assert.match(d3.llamadas[0].cuerpo.query, /= 'O''Brien'/)
+  const d4 = ado()
+  await leer(CFG, CRED, d4)
+  assert.match(d4.llamadas[0].cuerpo.query, /\[System\.WorkItemType\] = 'Task'/)
+})
+
+test('leer: asignado (objeto, texto, sin asignar), tipo y «mío» por @Me; si @Me falla, aviso y sin «mio»', async () => {
+  const r = await leer(CFG, CRED, ado())
+  assert.deepEqual(r.items.map((x) => [x.tipo, x.asignado, x.mio]), [
+    ['Task', { nombre: 'Ana Ejemplo', correo: 'ana@ejemplo.com' }, true],
+    ['Bug', { nombre: 'Luis Ejemplo', correo: 'luis@ejemplo.com' }, false],
+    ['Task', null, false],
+  ])
+  const r2 = await leer(CFG, CRED, ado({ 'POST wit/wiql': (c) => (/@Me/.test(c.query) ? res('no', 400) : R.wiql) }))
+  assert.equal(r2.items.length, 3)
+  assert.ok(r2.items.every((x) => !('mio' in x)))
+  assert.match(r2.avisos[0], /No se pudo saber cuáles son tuyas/)
+})
+
+test('leer: tope de 500 con aviso, los más recientes primero y lotes en paralelo (máx. 4)', async () => {
+  const muchos = { workItems: Array.from({ length: 1700 }, (_, i) => ({ id: i + 1 })) }
+  let vivas = 0, maximo = 0
+  const d = ado({ 'POST wit/wiql': (c) => (/@Me/.test(c.query) ? { workItems: [] } : muchos), 'GET wit/workitems': () => ({ value: [] }) })
+  const f = d.fetch
+  d.fetch = async (url, init) => { vivas++; maximo = Math.max(maximo, vivas); await new Promise((ok) => setTimeout(ok, 2)); try { return await f(url, init) } finally { vivas-- } }
+  const r = await leer(CFG, CRED, d)
+  const lotes = d.llamadas.filter((l) => l.clave === 'GET wit/workitems').map((l) => l.query.ids.split(',').length)
+  assert.deepEqual(lotes, [200, 200, 100])
+  assert.ok(maximo <= 4)
+  assert.match(r.avisos[0], /Mostrando 500 de 1700/)
+})
+
+test('crear con lista de tipos usa el primero', async () => {
+  const d = ado({ 'POST wit/workitems/$Bug': R.nuevo })
+  await crear({ ...CFG, tipoItem: ['Bug', 'Task'] }, CRED, { titulo: 'X' }, d)
+  assert.equal(d.llamadas[0].clave, 'POST wit/workitems/$Bug')
 })

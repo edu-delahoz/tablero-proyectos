@@ -1,7 +1,7 @@
 // Bitácora de sesiones (BITACORA.md de metodologia-claude): parser, asociación a proyectos y
 // edición de una sola fila. Formato de fila: el que escribe ../registrar_sesion.sh (hook SessionEnd):
 // | Fecha | Tarea (sid8) | Modo | Modelo | ~N min | $X | ctx Ak→Bk 🟢 | Calidad | Seguridad | Notas |
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, statSync, openSync, readSync, closeSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 
@@ -82,7 +82,8 @@ export function parsearBitacora(texto) {
 
 // sid corto (8 hex) → id de proyecto, por los <sid>.jsonl de las carpetas de transcripción de cada
 // proyecto. Si una carpeta casa con el prefijo de varios proyectos, gana el prefijo más largo.
-export function sidsPorProyecto(proyectos, dirTranscripciones) {
+// Si se pasa `rutas` (Map), se llena sid → ruta del .jsonl (para leer la rama con ramaDeTranscripcion).
+export function sidsPorProyecto(proyectos, dirTranscripciones, rutas = new Map()) {
   const mapa = new Map()
   if (!existsSync(dirTranscripciones)) return mapa
   const conPrefijo = proyectos.filter((p) => p.transcripciones)
@@ -91,11 +92,73 @@ export function sidsPorProyecto(proyectos, dirTranscripciones) {
     if (!p) continue
     let archivos = []
     try { archivos = readdirSync(join(dirTranscripciones, d)) } catch { continue }
-    for (const f of archivos) if (/^[0-9a-f]{8}.*\.jsonl$/.test(f) && !mapa.has(f.slice(0, 8))) mapa.set(f.slice(0, 8), p.id)
+    for (const f of archivos) if (/^[0-9a-f]{8}.*\.jsonl$/.test(f) && !mapa.has(f.slice(0, 8))) {
+      mapa.set(f.slice(0, 8), p.id)
+      rutas.set(f.slice(0, 8), join(dirTranscripciones, d, f))
+    }
   }
   return mapa
 }
-export const asociar = (bit, mapa) => ({ ...bit, registro: bit.registro.map((f) => ({ ...f, proyecto: (f.sid && mapa.get(f.sid)) || null })) })
+
+// Primer `gitBranch` no vacío en las ~50 primeras líneas del .jsonl (o null). Cache por ruta y mtime.
+const cacheRamas = new Map()
+export function ramaDeTranscripcion(ruta) {
+  let mtime
+  try { mtime = statSync(ruta).mtimeMs } catch { return null }
+  const c = cacheRamas.get(ruta)
+  if (c && c.mtime === mtime) return c.rama
+  let rama = null
+  try {
+    const fd = openSync(ruta, 'r')
+    try {
+      const buf = Buffer.alloc(256 * 1024)
+      const n = readSync(fd, buf, 0, buf.length, 0)
+      for (const l of buf.toString('utf8', 0, n).split('\n').slice(0, 50)) {
+        const m = l.match(/"gitBranch"\s*:\s*"([^"]+)"/)
+        if (m) { rama = m[1]; break }
+      }
+    } finally { closeSync(fd) }
+  } catch { rama = null }
+  cacheRamas.set(ruta, { mtime, rama })
+  return rama
+}
+
+export const asociar = (bit, mapa, rutas = new Map()) => ({
+  ...bit,
+  registro: bit.registro.map((f) => ({ ...f, proyecto: (f.sid && mapa.get(f.sid)) || null, rama: (f.sid && rutas.has(f.sid) ? ramaDeTranscripcion(rutas.get(f.sid)) : null) })),
+})
+
+// Semana ISO («2026-W40») de una fecha AAAA-MM-DD.
+export function semanaISO(fecha) {
+  const d = new Date(`${fecha}T00:00:00Z`)
+  const dia = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dia)
+  const ini = Date.UTC(d.getUTCFullYear(), 0, 1)
+  return `${d.getUTCFullYear()}-W${String(Math.ceil(((d - ini) / 864e5 + 1) / 7)).padStart(2, '0')}`
+}
+// «Opus 5.5» → «Opus»; vacío → null.
+export const normalizarModelo = (m) => { const t = String(m ?? '').trim().replace(/[\s-]*v?\d+(?:[.,]\d+)*.*$/, ''); return t || null }
+
+// Agrega el registro por 'dia'|'semana'|'mes'|'rama'|'modelo' → { grupos: [{ clave, costo, minutos, sesiones }], excluidas }.
+// Se excluyen (y se cuentan en `excluidas`) las filas con costo «?» y, por tiempo, las de fecha incompleta;
+// por rama, las sin rama. Orden: por clave en fechas; por costo descendente en rama/modelo.
+export function agregar(registro, { por }) {
+  const tiempo = { dia: (f) => f, semana: semanaISO, mes: (f) => f.slice(0, 7) }[por]
+  if (!tiempo && por !== 'rama' && por !== 'modelo') throw new Error(`agregar: «por» desconocido (${por})`)
+  const grupos = new Map()
+  let excluidas = 0
+  for (const f of registro) {
+    const fecha = (String(f.fecha).match(/^\d{4}-\d{2}-\d{2}/) || [])[0]
+    const clave = tiempo ? (fecha && tiempo(fecha)) : por === 'rama' ? f.rama : normalizarModelo(f.modelo)
+    if (!clave || f.costo == null) { excluidas++; continue }
+    const g = grupos.get(clave) || { clave, costo: 0, minutos: 0, sesiones: 0 }
+    g.costo += f.costo; g.minutos += f.minutos ?? 0; g.sesiones++
+    grupos.set(clave, g)
+  }
+  const lista = [...grupos.values()].map((g) => ({ ...g, costo: Math.round(g.costo * 100) / 100 }))
+  lista.sort(tiempo ? (a, b) => a.clave.localeCompare(b.clave) : (a, b) => b.costo - a.costo)
+  return { grupos: lista, excluidas }
+}
 
 // Valida lo que llega del navegador; devuelve los valores limpios.
 export function validarEdicion({ sid, calidad, seguridad, notas } = {}) {

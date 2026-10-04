@@ -6,7 +6,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
-import { estructura, analizarTitulo, estasAqui, hitosDePlan, vincular, aplanar, plano, grafoRamas, fusionarRamas, anadirNota } from './generar.mjs'
+import { estructura, analizarTitulo, estasAqui, hitosDePlan, vincular, aplanar, plano, grafoRamas, fusionarRamas, anadirNota, asignarPlanes, frenteActivo } from './generar.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const fixture = (f) => readFileSync(join(AQUI, 'fixtures', f), 'utf8')
@@ -90,6 +90,12 @@ test('estasAqui: «Siguiente: S3» en el Estado de H4', () => {
 test('estasAqui: «H3 CERRADO» salta a la siguiente sección no terminada (H4)', () => {
   const a = estructura(MVP)
   assert.equal(estasAqui(a, estadoDe(MVP)), porClave(a, 'H4').id)
+})
+
+test('estasAqui: «Siguiente: S5c» con S5c ya hecha apunta a la siguiente no hecha', () => {
+  const t = '## Estado\n- S5c hecha. Siguiente: **S5c**\n## S5 — Cinco\n- [x] a\n### S5b — b\n- [x] b\n### S5c — c\n- [x] c\n## S6 — Seis\n- [ ] d\n'
+  const a = estructura(t)
+  assert.equal(estasAqui(a, estadoDe(t)), porClave(a, 'S6').id)
 })
 
 test('estasAqui: sin Estado, la primera sección no terminada; sin pendientes, null', () => {
@@ -240,4 +246,149 @@ test('estructura: las marcas de integración salen del texto y quedan en «marca
   assert.deepEqual(s.tareas.map((t) => [t.texto, t.marcas]), [['Uno', { gh: 'PVTI_1', trello: 'abc' }], ['Dos', undefined]])
   assert.deepEqual(s.tareas[0].hijas[0].marcas, { ado: '7' })
   assert.deepEqual([s.hechas, s.total], [2, 3])
+})
+
+test('estructura: «Plan: …/plans/x.md» da `plan` y la etiqueta «S7 — Sonnet. Prompt» da clave y modelo', () => {
+  const a = estructura('## H9 — Algo\n\nPlan: `~/.claude/plans/x-y.md`. Rama `r`.\n\n- [ ] tarea\n\n## Cómo ejecutarlo\n\n**S7 — Sonnet.** Prompt:\n> Haz S7.\n')
+  assert.equal(a[0].plan, 'x-y.md')
+  assert.equal(a[1].plan, undefined)
+  const p = a[1].prompts[0]
+  assert.deepEqual([p.clave, p.modelo], ['S7', 'Sonnet'])
+})
+
+test('asignarPlanes: cada plan va al proyecto con más menciones; la asignación manual manda', () => {
+  const m = new Map([
+    ['iep', new Map([['a.md', new Map([['x', 1]])], ['b.md', new Map([['x', 5]])], ['c.md', new Map([['x', 2]])]])],
+    ['tablero', new Map([['a.md', new Map([['x', 3], ['y', 2]])], ['b.md', new Map([['x', 1]])], ['c.md', new Map([['x', 2]])]])],
+  ])
+  const r = asignarPlanes(m, new Map([['b.md', 'tablero']]))
+  assert.equal(r.get('a.md'), 'tablero') // 5 contra 1
+  assert.equal(r.get('b.md'), 'tablero') // manual, aunque iep tenga más
+  assert.equal(r.get('c.md'), 'iep') // empate: el primero
+})
+
+// ---------- Frente activo ----------
+const FRENTE = `# Backlog
+
+## Estado
+- H2 CERRADO. Siguiente: **H5**
+
+## H2 — Base ✅ CERRADO
+- [x] Uno
+- [x] Dos
+
+## H3 — Consulta
+- [x] Listas
+- [ ] **Revisión en iPhone**, rama \`fix\`:
+  - [x] Hoja de filtros
+  - [ ] **Personas mal migradas (PR aparte):** ~32 registros.
+    - **S1 — parche ETL (Opus)** — sin BD.
+      - [x] separar_personas
+      - [x] tests
+    - **S1b — continuación (Opus)**
+      - [x] mapeo
+    - **S2 — siguiente (Opus, Supabase local)**: migración formacion_persona + pgTAP.
+- [ ] **Fixes post-producción** — plan \`~/.claude/plans/fixes-pebble.md\`:
+  - [x] Rama 1
+
+## H5 — Dashboard
+- [ ] Tarjetas
+`
+const backlogFrente = (contenido = FRENTE) => ({ archivo: 'BACKLOG_MVP.md', contenido, estructura: estructura(contenido) })
+const PLANES_F = [
+  { nombre: 'otro.md', titulo: 'Plan: H3 en BACKLOG_OTRO.md' },
+  { nombre: 'federated-swing.md', titulo: 'Plan: cerrar los 5 pendientes de H3 en BACKLOG_MVP.md' },
+  { nombre: 'viejo.md', titulo: 'Plan: H3 viejo' },
+]
+
+test('estructura: linea en secciones y tareas', () => {
+  const a = estructura(FRENTE), h3 = porClave(a, 'H3')
+  assert.equal(FRENTE.split('\n')[h3.linea], '## H3 — Consulta')
+  assert.match(FRENTE.split('\n')[h3.tareas[1].hijas[1].linea], /^ {2}- \[ \] \*\*Personas mal migradas/)
+})
+
+test('frenteActivo: última edición en H3 → Personas mal migradas, S2 siguiente y plan por clave', () => {
+  const b = backlogFrente()
+  const h = [{ inicial: true, anadidas: [] }, { anadidas: ['      - [x] mapeo', '    - **S1b — continuación (Opus)**'] }]
+  const a = frenteActivo(b, h, PLANES_F)
+  assert.equal(a.seccion, porClave(b.estructura, 'H3').id)
+  assert.equal(a.tarea.titulo, 'Personas mal migradas')
+  assert.deepEqual([a.tarea.hechas, a.tarea.total, a.tarea.abiertas], [3, 3, []])
+  assert.deepEqual(a.subsesiones.map((s) => [s.clave, s.estado, s.hechas, s.total]), [['S1', 'hecho', 2, 2], ['S1b', 'hecho', 1, 1], ['S2', 'siguiente', 0, 0]])
+  assert.match(a.subsesiones[2].texto, /^S2 — siguiente .*pgTAP\.$/)
+  assert.equal(a.plan, 'federated-swing.md')
+})
+
+test('frenteActivo: hito completo o solo líneas de Estado → null', () => {
+  const b = backlogFrente()
+  assert.equal(frenteActivo(b, [{ anadidas: ['- [x] Dos'] }], PLANES_F), null)
+  assert.equal(frenteActivo(b, [{ anadidas: ['- H2 CERRADO. Siguiente: **H5**'] }], PLANES_F), null)
+  assert.equal(frenteActivo(b, [], PLANES_F), null)
+})
+
+test('frenteActivo: la entrada más reciente con una línea útil manda; las de Estado se ignoran', () => {
+  const b = backlogFrente()
+  const h = [{ anadidas: ['- [ ] Tarjetas'] }, { anadidas: ['  - [x] Rama 1'] }, { anadidas: ['- H2 CERRADO. Siguiente: **H5**', 'línea que ya no existe'] }]
+  const a = frenteActivo(b, h, PLANES_F)
+  assert.equal(a.tarea.titulo, 'Fixes post-producción')
+  assert.equal(a.plan, 'fixes-pebble.md', 'la mención dentro de la tarea manda sobre el título')
+  assert.deepEqual(a.subsesiones, [])
+})
+
+test('frenteActivo: sin tarea abierta usa la primera sección abierta del hito', () => {
+  const t = `## H6 — Plan\n\n### S12 — Hecha\n- [x] a\n\n### S13 — Pendiente\n- [ ] b\n`
+  const b = backlogFrente(t)
+  const a = frenteActivo(b, [{ anadidas: ['- [x] a'] }], [])
+  assert.equal(a.seccion, porClave(b.estructura, 'S13').id)
+  assert.equal(a.tarea, null)
+})
+
+// Forma de BACKLOG_MVP.md tras S3b: sub-sesiones anidadas, S3c abierta y S4 ya con casillas.
+const SUBS = `## H3 — Consulta
+- [ ] **Revisión en iPhone**, rama \`fix\`:
+  - [ ] **Personas mal migradas (PR aparte):** ~32 registros.
+    - **S3 — auditoría (Fable, solo lectura)**, rama \`h3\`.
+      - [x] Auditar las dos migraciones
+    - **S3b — correcciones (Opus)**
+      - [x] Hallazgos 1–4
+      - [x] pgTAP
+    - **S3c — re-auditoría corta (Fable)**
+      - [ ] Re-auditar el diff
+      - [ ] Sacar __pycache__ del índice
+      - [ ] Escribir S4
+      - Resultado S3c:
+    - Después: **S4 Sonnet** consultas/UI.
+    - **S4 — consultas y UI (Sonnet)**
+      - [ ] Fichas con la N:M
+      - [ ] E2E
+`
+const PLANES_S = [
+  { nombre: 'vamos-hacer-s3-mis-melodic-kernighan.md', titulo: 'H4 · S3 partida en S3a + S3b' },
+  { nombre: 'sesi-n-s3-de-backlog-mvp-md-federated-sunrise.md', titulo: 'S3 (Fable) — Auditoría de las migraciones de personas H3' },
+  { nombre: 'federated-swing.md', titulo: 'Plan: cerrar los 5 pendientes de H3 en BACKLOG_MVP.md' },
+]
+const ultimaS3b = [{ anadidas: ['      - [x] pgTAP'] }]
+
+test('frenteActivo: Falta = solo las casillas de la sub-sesión siguiente (S3c), no las de S4', () => {
+  const a = frenteActivo(backlogFrente(SUBS), ultimaS3b, PLANES_S)
+  assert.equal(a.tarea.titulo, 'Personas mal migradas')
+  assert.deepEqual(a.subsesiones.map((s) => [s.clave, s.estado, s.hechas, s.total]), [['S3', 'hecho', 1, 1], ['S3b', 'hecho', 2, 2], ['S3c', 'siguiente', 0, 3], ['S4', 'pendiente', 0, 2]])
+  assert.deepEqual(a.tarea.abiertas, ['Re-auditar el diff', 'Sacar pycache del índice', 'Escribir S4'])
+  assert.deepEqual([a.tarea.hechas, a.tarea.total], [3, 8])
+})
+
+test('frenteActivo: plan por sub-sesión (mención en la siguiente, en la hecha, por nombre con la clave)', () => {
+  const b = backlogFrente(SUBS)
+  // (c) Sin menciones: el plan cuyo nombre lleva «s3» y el backlog; no el de H4 ni el del hito.
+  assert.deepEqual([frenteActivo(b, ultimaS3b, PLANES_S)].map((a) => [a.plan, a.planDe])[0], ['sesi-n-s3-de-backlog-mvp-md-federated-sunrise.md', 'S3'])
+  // Con un plan de S3c por nombre, manda sobre el de S3; «s3» no casa con «s3c».
+  const conS3c = [{ nombre: 'sesi-n-s3c-de-backlog-mvp-md-swift-ember.md', titulo: 'S3c — re-auditoría' }, ...PLANES_S]
+  assert.deepEqual([frenteActivo(b, ultimaS3b, conS3c)].map((a) => [a.plan, a.planDe])[0], ['sesi-n-s3c-de-backlog-mvp-md-swift-ember.md', null])
+  // (b) Mención en la sub-sesión hecha más reciente.
+  const enS3b = SUBS.replace('      - [x] pgTAP', '      - [x] pgTAP (plan `~/.claude/plans/s3b-plan.md`)')
+  const ultima = [{ anadidas: ['      - [x] Hallazgos 1–4'] }]
+  assert.deepEqual([frenteActivo(backlogFrente(enS3b), ultima, conS3c)].map((a) => [a.plan, a.planDe])[0], ['s3b-plan.md', 'S3b'])
+  // (a) Mención dentro de la siguiente manda sobre todo.
+  const enS3c = enS3b.replace('      - Resultado S3c:', '      - Plan: `~/.claude/plans/s3c-plan.md`')
+  assert.deepEqual([frenteActivo(backlogFrente(enS3c), ultima, conS3c)].map((a) => [a.plan, a.planDe])[0], ['s3c-plan.md', null])
 })

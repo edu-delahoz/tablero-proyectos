@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { leer, crear, actualizar, traducirError } from './github-projects.mjs'
+import { leer, crear, actualizar, listar, traducirError } from './github-projects.mjs'
 
 const R = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'integraciones', 'github-projects.json'), 'utf8'))
 const CFG = { id: 'gh', tipo: 'github-projects', propietario: 'usuario', numero: 1 }
@@ -15,7 +15,7 @@ function gh(respuestas = {}) {
   const exec = async (args) => {
     const query = args.find((a) => a.startsWith('query=')).slice(6)
     const vars = Object.fromEntries(args.filter((a, i) => args[i - 1] === '-f' || args[i - 1] === '-F').filter((a) => !a.startsWith('query=')).map((a) => [a.slice(0, a.indexOf('=')), a.slice(a.indexOf('=') + 1)]))
-    const op = query.match(/(addProjectV2DraftIssue|updateProjectV2ItemFieldValue|updateProjectV2DraftIssue|updateIssue|node\(id|repositoryOwner)/)[1]
+    const op = query.match(/(addProjectV2DraftIssue|updateProjectV2ItemFieldValue|updateProjectV2DraftIssue|updateIssue|node\(id|repositoryOwner|viewer)/)[1]
     llamadas.push({ op, vars, args })
     const r = respuestas[op] ?? { repositoryOwner: R.proyecto, addProjectV2DraftIssue: R.crear, updateProjectV2ItemFieldValue: R.ok, 'node(id': R.contenido, updateProjectV2DraftIssue: { data: {} } }[op]
     if (r instanceof Error) throw r
@@ -77,4 +77,21 @@ test('errores en español: 404 / NOT_FOUND, credencial, scope, timeout, sin gh, 
   await assert.rejects(leer(CFG, {}, falla({ killed: true, signal: 'SIGTERM' })), /no respondió en 10 s/)
   await assert.rejects(leer(CFG, {}, falla({ code: 'ENOENT' })), /No está instalado gh/)
   assert.equal(traducirError({ stderr: 'error connecting to api.github.com' }), 'Sin conexión con GitHub.')
+})
+
+test('listar: sin proyecto → Projects abiertos del usuario y de sus orgs; con proyecto → campos de selección y de texto', async () => {
+  const proy = (n, t, closed = false) => ({ number: n, title: t, url: `https://github.com/p/${n}`, closed })
+  const d = gh({ viewer: { data: { viewer: { login: 'yo', projectsV2: { nodes: [proy(1, 'Mío'), proy(2, 'Cerrado', true)] },
+    organizations: { nodes: [{ login: 'acme', projectsV2: { nodes: [proy(9, 'De la org')] } }, { login: 'vacia', projectsV2: { nodes: [] } }] } } } } })
+  const r = await listar({}, {}, d)
+  assert.deepEqual(r.proyectos.map((x) => [x.propietario, x.numero, x.titulo]), [['yo', 1, 'Mío'], ['acme', 9, 'De la org']])
+  const c = await listar({ propietario: 'usuario', numero: 1 }, {}, gh({ repositoryOwner: R.proyecto }))
+  assert.deepEqual(c.camposSeleccion, [{ nombre: 'Status', opciones: ['Todo', 'In Progress', 'Done'] }])
+  assert.deepEqual(c.camposTexto, ['Sección'])
+})
+
+test('listar: errores de gh traducidos y proyecto inexistente', async () => {
+  const sinScope = Object.assign(new Error('x'), { stderr: 'missing scope read:project' })
+  await assert.rejects(listar({}, {}, gh({ viewer: sinScope })), /gh auth refresh -s project/)
+  await assert.rejects(listar({ propietario: 'u', numero: 3 }, {}, gh({ repositoryOwner: { data: { repositoryOwner: null } } })), /No existe el proyecto u\/3/)
 })

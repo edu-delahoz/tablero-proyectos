@@ -64,6 +64,9 @@ nav#pestanas button[aria-current="page"] { color: var(--texto); border-bottom-co
 .cuenta { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 4px; border-radius: 9px; background: var(--peligro); color: var(--fondo); font-size: 12px; text-align: center; font-weight: 600; }
 
 main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; min-width: 0; }
+.tarjeta-proy { cursor: pointer; }
+.tarjeta-proy:hover { border-color: var(--acento); }
+.chips-proy { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-top: 8px; }
 .rejilla { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
 .tarjeta { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 16px; min-width: 0; }
 .tarjeta h2 { font: 600 1rem/1.3 var(--titulos); margin: 0 0 10px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; min-width: 0; }
@@ -158,6 +161,7 @@ details.grupo > summary { list-style: none; } details.grupo > summary::-webkit-d
 details.grupo > summary::before { content: "▸ "; } details.grupo[open] > summary::before { content: "▾ "; }
 ul.tareas { list-style: none; margin: 0; padding: 0; }
 ul.tareas ul.tareas { margin-left: 0; }
+ul.tareas.falta li { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .tarea { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 .6em; padding: 3px 0; }
 .tarea > ul { grid-column: 2; }
 .casilla { color: var(--suave); white-space: pre; }
@@ -288,6 +292,23 @@ a.chip-ext:hover { border-color: var(--azul); }
 .resultado-sync { margin-top: 10px; font-size: .92em; }
 .resultado-sync .mal { color: var(--peligro); }
 
+/* ---------- Formulario de integración ---------- */
+.form-integ { margin-bottom: 18px; }
+.paso-fi { border: 0; border-top: 1px dashed var(--borde); margin: 0; padding: 4px 0 8px; min-width: 0; }
+.paso-fi legend { padding: 0; }
+.campo-fi { display: grid; gap: 2px; margin: 0 0 8px; min-width: 0; }
+.campo-fi > span { font-size: .85em; color: var(--suave); }
+.campo-fi input:not([type=checkbox]), .campo-fi select { max-width: 100%; width: min(100%, 28em); padding: 4px 6px; background: var(--superficie); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio); font: inherit; }
+.chip-asig, .chip-tipo { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--borde); font: .78em/1.5 var(--mono); white-space: nowrap; vertical-align: baseline; }
+.chip-asig.sin { color: var(--suave); border-style: dashed; }
+.chip-tipo { color: var(--azul); }
+.filtro-integ { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; font-size: .9em; border: 0; padding: 0; }
+.tipos-fi { display: flex; flex-wrap: wrap; gap: 4px 14px; border: 0; padding: 0; margin: 0 0 8px; }
+.campo-fi.marca-fi { display: flex; gap: 6px; align-items: baseline; }
+.campo-fi.marca-fi > span { color: inherit; font-size: 1em; }
+.manual-fi { display: flex; flex-wrap: wrap; gap: 0 16px; }
+#fi-prueba:focus { outline: 2px solid var(--acento); }
+
 /* ---------- Edición de .md ---------- */
 .editor-md textarea { display: block; width: 100%; min-height: 62vh; resize: vertical; padding: 12px; font-size: 13px; line-height: 1.55; background: var(--codigo); color: var(--texto); border: 1px solid var(--borde); tab-size: 2; }
 .editor-md .pie, .sync-previa .pie { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 8px; }
@@ -295,8 +316,33 @@ a.chip-ext:hover { border-color: var(--azul); }
 .boton.primario::before { color: inherit; }
 .boton[disabled] { opacity: .55; cursor: progress; }
 .bit-totales { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0 0 10px; }
+.en-curso { border-left: 3px solid var(--acento); min-width: 0; overflow-wrap: anywhere; }
+.en-curso .prompt-copiable pre { max-height: 14em; overflow: auto; }
 .bit-totales b { font-family: var(--mono); font-size: 1.15em; }
+.buscador { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0 0 10px; font-size: .9em; }
+.buscador input[type=search] { flex: 1 1 220px; max-width: 360px; font: inherit; padding: 4px 8px; color: var(--texto); background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio); }
+.paso[hidden], .lista button[hidden] { display: none; }
+.estrella { background: none; border: 0; padding: 0 2px; cursor: pointer; color: var(--suave); font: inherit; line-height: 1; }
+.estrella.on { color: var(--aviso); } .estrella:hover:not(:disabled) { color: var(--aviso); } .estrella:disabled { cursor: default; opacity: .6; }
 .bit-filtros { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0 0 10px; font-size: .9em; }
+/* Gráficos: serie 1-3 de la paleta validada (dataviz), claro/oscuro */
+:root { --g1: light-dark(#2a78d6, #3987e5); --g2: light-dark(#eb6834, #d95926); --g3: light-dark(#1baf7a, #199e70); }
+.graf-rej { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 22px 28px; }
+.graf-cab { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 14px; }
+.graf h3 { margin: 0; font-size: 1em; }
+.graf-sel { display: flex; gap: 12px; font-size: .9em; }
+.graf svg { width: 100%; height: auto; display: block; margin-top: 6px; overflow: visible; }
+.graf .eje { fill: var(--suave); font: 11px var(--mono); }
+.graf .eje.val { fill: var(--texto); }
+.graf .rej { stroke: var(--borde); stroke-width: 1; opacity: .6; }
+.graf .barra { cursor: default; }
+.graf .barra:hover, .graf .barra:focus-visible { opacity: .8; outline: none; stroke: var(--texto); stroke-width: 1; }
+.graf-nota { margin: 4px 0 0; font-size: .85em; }
+.graf-ley { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; font-size: .9em; }
+.graf-ley i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.graf-tabla { margin-top: 6px; font-size: .9em; } .graf-tabla summary { cursor: pointer; color: var(--suave); }
+#graf-tip { position: fixed; z-index: 50; pointer-events: none; white-space: pre; padding: 5px 8px; font-size: 12px; background: var(--panel); color: var(--texto); border: 1px solid var(--borde); box-shadow: 0 2px 8px #0003; }
+#graf-tip[hidden] { display: none; }
 .bit-tabla { overflow-x: auto; }
 .bit-tabla table { border-collapse: collapse; width: 100%; font-size: .85em; }
 .bit-tabla th, .bit-tabla td { text-align: left; vertical-align: top; padding: 5px 8px; border-top: 1px solid var(--borde); }
@@ -367,10 +413,12 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
       <div class="titulo-cab"><h1><span class="logo" aria-hidden="true">✻</span> Tablero de proyectos</h1><span id="rama-cab"></span></div>
       <div class="controles">
         <label>Proyecto <select id="proyecto"></select></label>
+        <button class="boton" type="button" id="nuevo-proyecto" data-crear="proyecto" hidden>＋ Nuevo proyecto</button>
         <label>Tema <select id="tema"></select></label>
       </div>
     </header>
     <nav id="pestanas" aria-label="Secciones"></nav>
+    <div id="panel-crear" aria-live="polite"></div>
     <main id="contenido"></main>
   </div>
   <footer id="barra-estado" aria-label="Barra de estado"></footer>
@@ -412,7 +460,7 @@ const CASILLA = () => ['[ ]', '[x]'];
 const GLIFO_SEG = { hecho: '██', 'en-curso': '▒▒', pendiente: '░░' };
 const ESTADO_PR = (pr) => pr.isDraft && pr.state === 'OPEN' ? ['DRAFT', 'borrador'] : [pr.state, { MERGED: 'mergeado', OPEN: 'abierto', CLOSED: 'cerrado' }[pr.state]];
 
-let P = null, pestana = leer('tablero.pestana') || 'resumen', sel = {}, ramaFoco = null;
+let P = null, todos = false, pestana = leer('tablero.pestana') || 'resumen', sel = {}, ramaFoco = null;
 let modo = { backlogs: 'mapa', planes: 'mapa' };
 try { Object.assign(modo, JSON.parse(leer('tablero.modo') || '{}')); } catch {}
 const abiertos = new Map(); // «archivo#sección» → abierta/cerrada por el usuario
@@ -420,6 +468,7 @@ let enVivo = false; // true mientras el sondeo de /api/version responde
 const borradores = new Map(); // ruta → texto sin guardar
 let bitFiltro = { todas: false, pendientes: false }, bitBorrador = new Map(); // bitácora: filtros y campos sin guardar por sid
 let editando = null; // ruta del .md en edición
+const busqueda = { backlogs: '', planes: '' }; let soloFav = false; // búsqueda por pestaña y filtro de favoritas
 
 // Enlaza «PR #N», «#N» y hashes de commits conocidos con GitHub antes de renderizar el markdown.
 function enlazar(md) {
@@ -502,8 +551,11 @@ function chips(meta = {}) {
     + (meta.duracion ? `<span class="chip ch-dur">${esc(meta.duracion)}</span>` : '');
 }
 const glifo = (ultimo) => `<span class="glifo" aria-hidden="true">${ultimo ? '└─' : '├─'}</span>`;
-function cabeceraPaso({ titulo, meta, esAqui, ultimo, hechas, total, estado }) {
-  return `<summary>${glifo(ultimo)}<span class="icono" aria-hidden="true">${ICONO[estado]}</span>
+const favoritos = () => new Set(DATOS.favoritos || []);
+const esFavorita = (s) => !!s.clave && /^S/.test(s.clave) && favoritos().has(plano(s.titulo));
+const estrella = (s) => !s.clave || !/^S/.test(s.clave) ? '' : `<button type="button" class="estrella${esFavorita(s) ? ' on' : ''}" data-fav="${esc(plano(s.titulo))}" aria-pressed="${esFavorita(s)}" aria-label="Favorita: ${esc(plano(s.titulo))}" title="${editable() ? 'Marcar o quitar de favoritas' : 'Abre el tablero con el servidor para marcar favoritas'}"${editable() ? '' : ' disabled'}>${esFavorita(s) ? '★' : '☆'}</button>`;
+function cabeceraPaso({ titulo, meta, esAqui, ultimo, hechas, total, estado, extra = '' }) {
+  return `<summary>${glifo(ultimo)}<span class="icono" aria-hidden="true">${ICONO[estado]}</span>${extra}
     <span class="cab-paso"><span class="sr">${ETIQUETA[estado]}: </span><span class="titulo">${inlineTitulo(titulo)}</span>${chips(meta)}${esAqui ? '<span class="etq-aqui">◀ estás aquí</span>' : ''}</span>
     ${total ? `<span class="avance">${barra(hechas, total, 10)}<span class="n">${hechas}/${total}</span></span>` : ''}</summary>`;
 }
@@ -516,9 +568,9 @@ function paso(s, ctx) {
   const contieneAqui = aplanar(s.hijas).some((x) => x.id === doc.aqui);
   const abierto = abiertos.has(k) ? abiertos.get(k) : (esAqui || contieneAqui || s.estado === 'pendiente');
   const hijas = s.hijas.filter((x) => x.estado !== 'doc');
-  return `<li class="paso est-${s.estado}${esAqui ? ' actual' : ''}" id="${idPaso(clave, s.id)}">
+  return `<li class="paso est-${s.estado}${esAqui ? ' actual' : ''}${esFavorita(s) ? ' fav' : ''}" id="${idPaso(clave, s.id)}">
     <details data-k="${esc(k)}"${abierto ? ' open' : ''}>
-      ${cabeceraPaso({ titulo: s.titulo, meta: s.meta, esAqui, ultimo, hechas: s.hechas, total: s.total, estado: s.estado })}
+      ${cabeceraPaso({ titulo: s.titulo, meta: s.meta, esAqui, ultimo, hechas: s.hechas, total: s.total, estado: s.estado, extra: estrella(s) })}
       <div class="cuerpo">${cuerpo(s)}${hijas.length ? `<ol class="linea">${hijas.map((x, i) => paso(x, { ...ctx, ultimo: i === hijas.length - 1 })).join('')}</ol>` : ''}</div>
     </details></li>`;
 }
@@ -662,9 +714,8 @@ function mapaPlan(doc) {
 }
 
 // ---------- Resumen: mapa en miniatura ----------
-function segmentos(b) {
-  const secs = b.estructura.filter((s) => s.estado !== 'doc');
-  return `<div class="segmentos" aria-label="Avance por sección">${secs.map((s) => `<button class="seg est-${s.estado}${s.id === b.aqui ? ' actual' : ''}" style="--p:${pct(s.hechas, s.total)}%" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${s.id}"
+function segmentos(b, secs = aplanar(b.estructura).filter((s) => s.estado !== 'doc'), aqui = b.aqui) {
+  return `<div class="segmentos" aria-label="Avance por sección">${secs.map((s) => `<button class="seg est-${s.estado}${s.id === aqui || s.actual ? ' actual' : ''}" style="--p:${pct(s.hechas, s.total)}%" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${s.id}"
       title="${esc(plano(s.titulo))} · ${s.hechas}/${s.total}" aria-label="${esc(s.clave || plano(s.titulo))}: ${ETIQUETA[s.estado]}, ${s.hechas} de ${s.total}"><span class="bloque" aria-hidden="true">${GLIFO_SEG[s.estado]}</span><span class="clave" aria-hidden="true">${esc(s.clave || '·')}</span></button>`).join('')}</div>`;
 }
 
@@ -690,6 +741,35 @@ function barraVista(doc, p) {
       <button data-modo="mapa" aria-pressed="${modo[p] !== 'documento'}">Mapa</button><button data-modo="documento" aria-pressed="${modo[p] === 'documento'}">Documento</button></div>
     <div>${acciones(doc.ruta)}</div></div>`;
 }
+// Búsqueda (se aplica sobre el DOM ya pintado, sin repintar: el foco del campo no se pierde).
+const barraBusqueda = (p, conFav) => `<div class="buscador"><label class="sr" for="buscar">Buscar</label>
+  <input id="buscar" type="search" data-buscar="${p}" placeholder="${p === 'planes' ? 'Buscar en los planes…' : 'Buscar sesiones y tareas…'}" value="${esc(busqueda[p])}" autocomplete="off">
+  ${conFav ? `<label><input type="checkbox" data-solo-fav${soloFav ? ' checked' : ''}> ★ Solo favoritas (${favoritos().size})</label>` : ''}<span class="suave" id="cuenta-busqueda" aria-live="polite"></span></div>`;
+let filtrando = false;
+function aplicarBusqueda() {
+  const q = (busqueda[pestana] || '').trim().toLowerCase(), fav = soloFav && pestana === 'backlogs';
+  const cont = $('#contenido');
+  if (!cont || !['backlogs', 'planes'].includes(pestana)) return;
+  let n = 0;
+  filtrando = true;
+  const pasos = [...cont.querySelectorAll('li.paso')];
+  for (const li of pasos) {
+    const ok = (!q || li.textContent.toLowerCase().includes(q)) && (!fav || li.classList.contains('fav') || !!li.querySelector('li.paso.fav'));
+    li.hidden = !ok;
+    if (ok && q) { const propio = [...li.querySelectorAll(':scope > details > summary, :scope > details > .cuerpo > :not(ol)')].some((x) => x.textContent.toLowerCase().includes(q)); if (propio) n++; }
+  }
+  if (q) for (const li of pasos) if (!li.hidden) { const d = li.querySelector(':scope > details'); if (d && [...d.querySelectorAll(':scope > .cuerpo > :not(ol)')].some((x) => x.textContent.toLowerCase().includes(q))) d.open = true; }
+  if (!q && fav) n = pasos.filter((li) => !li.hidden && li.classList.contains('fav')).length;
+  const actual = P.planes.find((p) => p.nombre === sel.planes) || P.planes[0];
+  if (pestana === 'planes') for (const b of cont.querySelectorAll('.lista button[data-busca]')) {
+    const coincide = !q || b.dataset.busca.includes(q);
+    b.hidden = !coincide && b.dataset.sel !== actual?.nombre;
+    if (coincide && q) n++;
+  }
+  setTimeout(() => { filtrando = false; });
+  const c = $('#cuenta-busqueda');
+  if (c) c.textContent = q || fav ? `${n} coincidencia${n === 1 ? '' : 's'}` : '';
+}
 const promptLinea = () => `<div class="prompt" aria-hidden="true"><b>❯</b> tablero --proyecto ${esc(P.id)} --vista ${esc(pestana)}${sel[pestana] ? ' ' + esc(sel[pestana]) : ''}</div>`;
 
 // ---------- Edición de un .md ----------
@@ -705,7 +785,14 @@ function vistaEditor(ruta) {
       <span class="suave">⌘S / Ctrl+S guarda · Esc cancela</span></div></form>`;
 }
 async function api(ruta, cuerpo) {
-  const r = await fetch(ruta, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo) });
+  // Timeout de cliente (20 s) y un único reintento si falla por red (servidor reiniciándose, corte).
+  let r;
+  for (let intento = 0; ; intento++) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
+    try { r = await fetch(ruta, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo), signal: ctl.signal }); break; }
+    catch { if (intento) throw new Error('El servidor no respondió; reintenta.'); }
+    finally { clearTimeout(t); }
+  }
   const j = await r.json().catch(() => ({ error: `Respuesta inválida (${r.status})` }));
   if (!r.ok) throw Object.assign(new Error(j.error || `Error ${r.status}`), { estado: r.status, actual: j.actual });
   return j;
@@ -716,8 +803,8 @@ function avisar(texto, error) {
   clearTimeout(avisar.t); avisar.t = setTimeout(() => { el.textContent = ''; }, error ? 8000 : 3000);
 }
 function recargarDatos(nuevos) {
-  const i = DATOS.proyectos.indexOf(P);
-  DATOS = nuevos; P = DATOS.proyectos[Math.max(0, i)];
+  const id = P?.id;
+  DATOS = nuevos; P = DATOS.proyectos.find((p) => p.id === id) || DATOS.proyectos[0];
 }
 async function guardarEdicion(form, forzar) {
   const ruta = form.dataset.ruta, texto = form.querySelector('textarea').value, boton = form.querySelector('[type=submit]');
@@ -825,7 +912,7 @@ function detalleCambios(c, app) {
   if ('titulo' in c) partes.push(`renombrar a «${c.titulo}»`);
   return partes.join(' · ');
 }
-function filaAccion(a, integ) {
+function filaAccion(a, integ, primera) {
   const enlace = a.url ? ` <a href="${esc(a.url)}" target="_blank" rel="noopener">↗<span class="sr"> abrir en ${esc(integ.nombre)}</span></a>` : '';
   const caja = (marcada) => `<input type="checkbox" name="accion" value="${esc(a.clave)}"${marcada ? ' checked' : ''} aria-label="Aplicar: ${esc(a.titulo)}">`;
   if (a.tipo === 'huerfana') return `<div class="accion"><span aria-hidden="true">·</span><div class="det">${esc(a.titulo)} <span class="suave">${esc(a.id)}</span></div></div>`;
@@ -837,7 +924,7 @@ function filaAccion(a, integ) {
   const det = a.tipo === 'crear-fuera' ? `${estadoTxt(a.hecha)}${a.seccion ? ` · sección ${a.seccion}` : ''}${a.subtareas?.length ? ` · ${a.subtareas.length} subtareas como checklist` : ''}`
     : a.tipo === 'traer' ? `${a.columna || 'sin columna'} → ${estadoTxt(a.hecha)}`
     : detalleCambios(a.cambios, a.tipo === 'actualizar-fuera');
-  return `<div class="accion">${caja(true)}<div class="det">${esc(a.titulo)}${enlace}<span class="suave">${esc(det)}</span></div></div>`;
+  return `<div class="accion">${caja(!(primera && (a.tipo === 'crear-fuera' || a.tipo === 'traer')))}<div class="det">${esc(a.titulo)}${enlace}<span class="suave">${esc(det)}</span></div></div>`;
 }
 function vistaPrevia(integ) {
   const pv = previas.get(integ.id);
@@ -849,42 +936,68 @@ function vistaPrevia(integ) {
       <button class="boton" type="button" data-cerrar-sync="${esc(integ.id)}">Cerrar</button></div>`;
   }
   if (!pv.acciones.length) return `<div class="resultado-sync" role="status">Todo sincronizado: no hay cambios. <button class="boton" type="button" data-cerrar-sync="${esc(integ.id)}">Cerrar</button></div>`;
-  const app = integ.nombre;
+  const app = integ.nombre, nC = pv.conteo?.['crear-fuera'] || 0, nT = pv.conteo?.traer || 0;
+  const avisoPrimera = pv.primera ? `<div class="integ-paso" role="note"><strong>Primera sincronía.</strong> Se crearían ${nC} ${integ.tipo === 'azure-devops' ? 'work item' : 'ítem'}${nC === 1 ? '' : 's'} en el proyecto real de ${esc(app)}${nT ? ` y se traerían ${nT} al backlog` : ''}. Por eso esas acciones vienen <strong>sin marcar</strong>: marca solo las que quieras.</div>` : '';
   return `<form class="sync-previa" data-integ="${esc(integ.id)}" aria-label="Vista previa de la sincronía">
-    <p class="suave" style="margin-top:0">Vista previa: nada se ha aplicado todavía. Primero se escribe en ${esc(app)} y luego, de una vez, en ${esc(integ.backlog)}.</p>
+    <p class="suave" style="margin-top:0">Vista previa: nada se ha aplicado todavía. Primero se escribe en ${esc(app)} y luego, de una vez, en ${esc(integ.backlog)}.</p>${avisoPrimera}
     ${GRUPOS_SYNC.map(([tipo, titulo]) => {
       const as = pv.acciones.filter((a) => a.tipo === tipo);
-      return as.length ? `<fieldset><legend class="rotulo">${esc(titulo.replace('{app}', app).replace('{id}', integ.id))} · ${as.length}</legend>${as.map((a) => filaAccion(a, integ)).join('')}</fieldset>` : '';
+      return as.length ? `<fieldset><legend class="rotulo">${esc(titulo.replace('{app}', app).replace('{id}', integ.id))} · ${as.length}</legend>${as.map((a) => filaAccion(a, integ, pv.primera)).join('')}</fieldset>` : '';
     }).join('')}
     <div class="pie"><button class="boton primario" type="submit">Aplicar</button><button class="boton" type="button" data-cerrar-sync="${esc(integ.id)}">Cancelar</button></div></form>`;
 }
+const filtroInteg = new Map(); // id de integración → 'todas' | 'mias' | 'sin'
+const FILTROS_INTEG = [['todas', 'Todas'], ['mias', 'Mías'], ['sin', 'Sin asignar']];
+const conAsignado = (xs) => xs.some((x) => 'asignado' in x);
+const conMio = (xs) => xs.some((x) => typeof x.mio === 'boolean');
+const pasaFiltro = (x, f) => f === 'mias' ? x.mio === true : f === 'sin' ? !x.asignado : true;
+function filtroItems(integ) {
+  const xs = integ.items || [];
+  if (!xs.length || !conAsignado(xs)) return '';
+  const mio = conMio(xs), act = filtroInteg.get(integ.id) === 'mias' && !mio ? 'todas' : (filtroInteg.get(integ.id) || 'todas');
+  return `<fieldset class="filtro-integ"><legend class="sr">Filtrar ítems</legend>${FILTROS_INTEG.map(([v, t]) => {
+    const off = v === 'mias' && !mio;
+    return `<label${off ? ' title="No se pudo saber cuáles son tuyas"' : ''}><input type="radio" name="filtro-${esc(integ.id)}" data-integ-filtro="${esc(integ.id)}" value="${v}"${act === v ? ' checked' : ''}${off ? ' disabled' : ''}> ${t}</label>`;
+  }).join('')}${mio ? '' : '<span class="suave">«Mías» no disponible: no se pudo saber cuáles son tuyas.</span>'}</fieldset>`;
+}
+function itemExterno(x) {
+  const asig = 'asignado' in x ? (x.asignado ? `<span class="chip-asig" title="${esc(x.asignado.correo || 'Asignado')}">${esc(x.asignado.nombre || x.asignado.correo || String(x.asignado))}</span>` : '<span class="chip-asig sin">Sin asignar</span>') : '';
+  return `<li${x.hecha ? ' class="hecha"' : ''}><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a>${x.tipo ? `<span class="chip-tipo">${esc(x.tipo)}</span>` : ''}${asig}</li>`;
+}
 function tarjetaIntegracion(integ) {
+  if (formInteg?.original === integ.id) return formularioInteg();
+  const lectura = integ.modo === 'lectura', filtro = filtroInteg.get(integ.id) || 'todas';
   const [cls, punto, txt] = ESTADO_INTEG[integ.estado] || ESTADO_INTEG.error;
-  const columnas = [...integ.columnas, ...new Set(integ.items.map((x) => x.columna || 'Sin estado').filter((c) => !integ.columnas.includes(c)))];
-  const porCol = columnas.map((c) => [c, integ.items.filter((x) => (x.columna || 'Sin estado') === c)]).filter(([, xs]) => xs.length);
+  const items = integ.items || [], itemsVis = items.filter((x) => pasaFiltro(x, filtro));
+  const columnas = [...(integ.columnas || []), ...new Set(items.map((x) => x.columna || 'Sin estado').filter((c) => !(integ.columnas || []).includes(c)))];
+  const porCol = columnas.map((c) => [c, itemsVis.filter((x) => (x.columna || 'Sin estado') === c)]).filter(([, xs]) => xs.length);
   const pt = integ.porTipo || {};
   return `<section class="tarjeta" style="margin-bottom:18px" aria-label="${esc(integ.nombre)} ${esc(integ.id)}">
-    <h2><span>${esc(integ.nombre)} · ${esc(integ.id)}</span><small>${esc(integ.backlog || '')}</small></h2>
+    <h2><span>${esc(integ.nombre)} · ${esc(integ.id)}</span><small>${lectura ? 'solo lectura' : esc(integ.backlog || '')}</small></h2>
     <p class="integ-estado"><span class="${cls}"><span class="punto" aria-hidden="true">${punto}</span> ${txt}</span>
       ${integ.titulo ? `<span>«${esc(integ.titulo)}»</span>` : ''}
       ${integ.leidoEn ? `<span class="suave">leído ${hace(integ.leidoEn)}${integ.desdeCache ? ' (caché)' : ''}</span>` : ''}
-      <span class="suave">última sincronía: ${integ.ultimaSincronia ? hace(integ.ultimaSincronia) : 'nunca'}</span>
-      <span class="suave">auto: ${integ.auto ? 'sí' : 'no'}</span></p>
+      ${lectura ? '<span class="suave">solo lectura · no escribe nada afuera ni en backlogs</span>' : `<span class="suave">última sincronía: ${integ.ultimaSincronia ? hace(integ.ultimaSincronia) : 'nunca'}</span>
+      <span class="suave">auto: ${integ.auto ? 'sí' : 'no'}</span>`}</p>
     ${integ.mensaje ? `<div class="integ-paso ${integ.estado === 'error' ? 'mal' : ''}">${esc(integ.mensaje)}${integ.paso ? `<br><span class="suave">${esc(integ.paso)}</span>` : ''}</div>` : ''}
     ${integ.aviso ? `<div class="integ-paso">${esc(integ.aviso)}</div>` : ''}
     ${(integ.avisos || []).map((a) => `<p class="suave" style="margin:4px 0">· ${esc(a)}</p>`).join('')}
-    ${integ.estado === 'conectado' || integ.desdeCache ? `<p class="suave" style="margin:4px 0 8px">${integ.pendientes ? `⇄ ${integ.pendientes} cambio${integ.pendientes === 1 ? '' : 's'} por sincronizar` : '✓ sin cambios por sincronizar'}${Object.entries(pt).length ? ` · ${Object.entries(pt).map(([k, v]) => `${v} ${k}`).join(' · ')}` : ''}</p>` : ''}
+    ${(integ.estado === 'conectado' || integ.desdeCache) && !lectura ? `<p class="suave" style="margin:4px 0 8px">${integ.pendientes ? `⇄ ${integ.pendientes} cambio${integ.pendientes === 1 ? '' : 's'} por sincronizar` : '✓ sin cambios por sincronizar'}${Object.entries(pt).length ? ` · ${Object.entries(pt).map(([k, v]) => `${v} ${k}`).join(' · ')}` : ''}</p>` : ''}
     <p style="margin:0">${integ.url ? `<a class="boton" href="${esc(integ.url)}" target="_blank" rel="noopener">Abrir en ${esc(integ.nombre)} ↗</a>` : ''}
-      ${integ.estado === 'conectado' ? (editable() ? `<button class="boton primario" type="button" data-sincronizar="${esc(integ.id)}">Sincronizar</button>` : '<span class="suave">Sincronizar requiere el servidor local: abre el tablero con Tablero.app o <code>node generar.mjs --abrir</code>. Como archivo suelto es solo lectura.</span>') : ''}</p>
+      ${editable() ? `<button class="boton" type="button" data-integ-editar="${esc(integ.id)}">Editar</button><button class="boton" type="button" data-integ-quitar="${esc(integ.id)}">Quitar</button>` : '<button class="boton" type="button" disabled title="Requiere el servidor local">Editar</button><button class="boton" type="button" disabled title="Requiere el servidor local">Quitar</button>'}
+      ${integ.estado === 'conectado' && !lectura ? (editable() ? `<button class="boton primario" type="button" data-sincronizar="${esc(integ.id)}">Sincronizar</button>` : '<span class="suave">Sincronizar requiere el servidor local: abre el tablero con Tablero.app o <code>node generar.mjs --abrir</code>. Como archivo suelto es solo lectura.</span>') : ''}</p>
+    ${quitandoInteg === integ.id ? `<div class="integ-paso mal" role="group" aria-label="Confirmar quitar ${esc(integ.id)}">Se quita solo el bloque «${esc(integ.id)}» de <code>proyectos.json</code>. No se borra nada afuera (en ${esc(integ.nombre)} todo se queda) ni en el backlog: sus marcas <code>&lt;!-- ${esc(integ.id)}:… --&gt;</code> quedan sin uso.<br>
+      <button class="boton primario" type="button" data-integ-confirmar>Sí, quitar</button><button class="boton" type="button" data-integ-no-quitar>Cancelar</button></div>` : ''}
     ${vistaPrevia(integ)}
-    ${porCol.length ? `<div class="columnas-ext">${porCol.map(([c, xs]) => `<div class="columna-ext"><div class="rotulo">${esc(c)} · ${xs.length}</div><ul>${xs.map((x) => `<li${x.hecha ? ' class="hecha"' : ''}><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a></li>`).join('')}</ul></div>`).join('')}</div>` : integ.estado === 'conectado' ? '<p class="suave">El tablero externo está vacío.</p>' : ''}
+    ${filtroItems(integ)}
+    ${porCol.length ? `<div class="columnas-ext">${porCol.map(([c, xs]) => `<div class="columna-ext"><div class="rotulo">${esc(c)} · ${xs.length}</div><ul>${xs.map(itemExterno).join('')}</ul></div>`).join('')}</div>` : integ.estado === 'conectado' ? `<p class="suave">${items.length ? 'Ningún ítem coincide con el filtro.' : 'El tablero externo está vacío.'}</p>` : ''}
   </section>`;
 }
 async function pedirPrevia(id, boton) {
   boton.disabled = true; boton.textContent = 'Leyendo…';
   try {
     const r = await api('/api/sincronia/previa', { proyecto: P.id, integracion: id });
-    previas.set(id, { acciones: r.acciones, hash: r.hash }); pintar();
+    previas.set(id, { acciones: r.acciones, hash: r.hash, primera: !!r.primera, conteo: r.conteo }); pintar();
     document.querySelector(`.sync-previa[data-integ="${CSS.escape(id)}"] input, [data-cerrar-sync="${CSS.escape(id)}"]`)?.focus();
   } catch (e) { boton.disabled = false; boton.textContent = 'Sincronizar'; avisar(`No se pudo leer: ${e.message}`, true); }
 }
@@ -909,6 +1022,236 @@ async function aplicarPrevia(form) {
   }
 }
 
+// ---------- Integraciones: alta, edición y baja desde la vista ----------
+let formInteg = null; // { original, cfg, op: { destinos, detalle }, cargando, error, prueba, cred, cambiarCred, idTocado, guardando }
+let quitandoInteg = null; // id que espera confirmación
+const TIPOS_INTEG = [['github-projects', 'GitHub Projects'], ['trello', 'Trello'], ['azure-devops', 'Azure DevOps']];
+const ID_BASE = { 'github-projects': 'gh', trello: 'trello', 'azure-devops': 'ado' };
+const CRED_CAMPOS = { trello: [['key', 'API key'], ['token', 'Token']], 'azure-devops': [['pat', 'Personal Access Token']] };
+const DESTINO_OK = { 'github-projects': (c) => c.propietario && c.numero, trello: (c) => c.tablero, 'azure-devops': (c) => c.organizacion && c.proyecto };
+const archivosBacklog = () => [...P.backlogs.filter((b) => !b.esPlan), ...P.backlogs.filter((b) => b.esPlan)].map((b) => b.archivo);
+const idPropuesto = (tipo) => {
+  const usados = new Set((P.integraciones || []).map((x) => x.id).filter((x) => x !== formInteg?.original));
+  const base = ID_BASE[tipo] || 'integracion';
+  let id = base; for (let n = 2; usados.has(id); n++) id = `${base}-${n}`;
+  return id;
+};
+const nuevoForm = (integ) => ({ original: integ?.id || null, cfg: integ ? { ...structuredClone(integ.config || {}), modo: integ.modo || integ.config?.modo || 'sincronizar' } : { tipo: '', backlog: archivosBacklog()[0] || '', auto: false, modo: archivosBacklog().length ? 'sincronizar' : 'lectura' }, op: {}, cargando: '', error: '', prueba: null, cred: {}, cambiarCred: false, idTocado: !!integ });
+function abrirForm(integ) {
+  quitandoInteg = null; formInteg = nuevoForm(integ);
+  pintarF();
+  if (integ && credOk(formInteg.cfg.tipo)) { const f = formInteg; cargarOpciones('destinos').then(() => formInteg === f && cargarOpciones('detalle')); }
+  document.getElementById(integ ? 'fi-id' : 'fi-tipo')?.focus();
+}
+// Repinta conservando el foco (los controles del formulario llevan id).
+const pintarF = () => { const id = document.activeElement?.id; pintar(); if (id) document.getElementById(id)?.focus({ preventScroll: true }); };
+function cerrarForm() { formInteg = null; pintarF(); document.querySelector('[data-integ-nueva]')?.focus(); }
+const credOk = (tipo) => !!tipo && !!DATOS.credenciales?.[tipo]?.guardada;
+const consultaDe = (c, detalle) => c.tipo === 'github-projects' ? (detalle ? { propietario: c.propietario, numero: c.numero } : {})
+  : c.tipo === 'trello' ? (detalle ? { tablero: c.tablero } : {}) : (detalle ? { organizacion: c.organizacion, proyecto: c.proyecto } : { organizacion: c.organizacion });
+// Rellena los desplegables: 'destinos' (Projects, tableros, proyectos) o 'detalle' (campos, listas, estados del destino elegido).
+async function cargarOpciones(que) {
+  const f = formInteg, c = f.cfg;
+  if (c.tipo === 'azure-devops' && !c.organizacion) return;
+  if (que === 'detalle' && !DESTINO_OK[c.tipo](c)) return;
+  f.cargando = que; f.error = ''; pintarF();
+  try {
+    const r = await api('/api/integraciones/descubrir', { tipo: c.tipo, clave: f.original || undefined, consulta: consultaDe(c, que === 'detalle') });
+    if (formInteg !== f) return;
+    if (r.organizacion) c.organizacion = r.organizacion;
+    if (que === 'destinos') f.op.destinos = r.proyectos || r.tableros || []; else f.op.detalle = r;
+  } catch (e) { if (formInteg !== f) return; f.error = e.message; f.op.fallo = que; }
+  finally { if (formInteg === f) { f.cargando = ''; pintarF(); } }
+}
+async function guardarCred(boton) {
+  const f = formInteg, campos = Object.fromEntries((CRED_CAMPOS[f.cfg.tipo] || []).map(([k]) => [k, (f.cred[k] || '').trim()]));
+  if (Object.values(campos).some((v) => !v)) { avisar('Completa todos los campos de la credencial.', true); return; }
+  boton.disabled = true; boton.textContent = 'Guardando…';
+  try {
+    const r = await api('/api/credenciales', { clave: f.cfg.tipo, campos });
+    recargarDatos(r.datos); f.cred = {}; f.cambiarCred = false; f.error = ''; avisar('Credencial guardada.');
+    pintarF(); cargarOpciones('destinos');
+  } catch (e) { boton.disabled = false; boton.textContent = 'Guardar credencial'; avisar(`No se guardó: ${e.message}`, true); }
+}
+// Lo que se manda al servidor: solo campos con valor (el servidor vuelve a validar y filtra).
+function cfgLimpia(c, idFinal) {
+  const lectura = c.modo === 'lectura';
+  const o = { id: idFinal, tipo: c.tipo, modo: lectura ? 'lectura' : 'sincronizar' };
+  if (!lectura) { o.backlog = c.backlog; o.auto = !!c.auto; }
+  for (const k of ['propietario', 'numero', 'campoEstado', 'campoSeccion', 'tablero', 'organizacion', 'proyecto', 'tipoItem']) if (c[k] !== undefined && c[k] !== '') o[k] = c[k];
+  const col = Object.fromEntries(Object.entries(c.columnas || {}).filter(([, v]) => v && v.length));
+  if (Object.keys(col).length) o.columnas = col;
+  return o;
+}
+async function probarForm(boton) {
+  const f = formInteg; f.prueba = null; boton.disabled = true; boton.textContent = 'Probando…';
+  try { f.prueba = { ok: true, ...(await api('/api/integraciones/probar', { proyecto: P.id, integracion: cfgLimpia(f.cfg, f.cfg.id) })) }; if (f.prueba.organizacion) f.cfg.organizacion = f.prueba.organizacion; }
+  catch (e) { f.prueba = { ok: false, error: e.message }; }
+  pintarF(); document.getElementById('fi-prueba')?.focus();
+}
+async function guardarForm(boton) {
+  const f = formInteg;
+  boton.disabled = true; boton.textContent = 'Guardando…';
+  try {
+    const r = await api('/api/integraciones/guardar', { proyecto: P.id, mtime: DATOS.configMtime, idOriginal: f.original || undefined, integracion: cfgLimpia(f.cfg, f.cfg.id) });
+    recargarDatos(r.datos); formInteg = null; pintarF();
+    avisar(r.renombrada ? `Guardada. Las marcas del id anterior («${f.original}») en el backlog quedan huérfanas; renómbralas o vuelve al id anterior.` : 'Integración guardada.', !!r.renombrada);
+  } catch (e) {
+    boton.disabled = false; boton.textContent = 'Guardar';
+    f.prueba = { ok: false, error: e.estado === 409 ? `${e.message} (se cierra el formulario y se recarga)` : e.message };
+    if (e.estado === 409) { const nuevos = await (await fetch('/api/datos', { cache: 'no-store' })).json().catch(() => null); if (nuevos) recargarDatos(nuevos); formInteg = null; avisar(e.message, true); }
+    pintarF();
+  }
+}
+async function quitarInteg(id, boton) {
+  boton.disabled = true; boton.textContent = 'Quitando…';
+  try { const r = await api('/api/integraciones/quitar', { proyecto: P.id, id, mtime: DATOS.configMtime }); recargarDatos(r.datos); quitandoInteg = null; previas.delete(id); pintarF(); avisar(`«${id}» quitada de proyectos.json.`); }
+  catch (e) { boton.disabled = false; boton.textContent = 'Sí, quitar'; avisar(`No se quitó: ${e.message}`, true); }
+}
+const opcion = (v, t, sel) => `<option value="${esc(v)}"${sel ? ' selected' : ''}>${esc(t)}</option>`;
+// Un desplegable con la opción actual siempre presente (aunque el servidor no la liste) y «automático» vacío.
+function selectFi(id, rotulo, clave, valor, opciones, vacio) {
+  const v = Array.isArray(valor) ? valor[0] : valor, lista = [...new Set([...(opciones || []), ...(v ? [v] : [])])];
+  return `<label class="campo-fi" for="${id}"><span>${rotulo}</span><select id="${id}" data-fi="${clave}">${vacio !== undefined ? opcion('', vacio, !v) : ''}${lista.map((o) => opcion(o, o, o === v)).join('')}</select></label>`;
+}
+const textoFi = (id, rotulo, clave, valor, ayuda = '') => `<label class="campo-fi" for="${id}"><span>${rotulo}</span><input id="${id}" data-fi="${clave}" value="${esc(valor ?? '')}" autocomplete="off" spellcheck="false">${ayuda ? `<small class="suave">${ayuda}</small>` : ''}</label>`;
+function pasoCredencial(c) {
+  const f = formInteg, r = DATOS.credenciales?.[c.tipo], campos = CRED_CAMPOS[c.tipo];
+  if (!campos) return `<p class="suave">${r?.guardada ? '● usa la sesión de <code>gh</code> de este equipo' : 'Falta iniciar sesión: ejecuta <code>gh auth login</code>.'}</p>`;
+  if (r?.guardada && !f.cambiarCred) return `<p><span class="ok">●</span> guardada · ${r.fuente === 'entorno' ? 'variable de entorno' : 'archivo'}${r.fin ? ` · <code>${esc(r.fin)}</code>` : ''} ${r.fuente === 'entorno' ? '' : '<button class="boton" type="button" data-fi-accion="cambiar-cred">Cambiar</button>'}</p>`;
+  const ayuda = c.tipo === 'trello' ? 'La key y el token se sacan en <code>trello.com/power-ups/admin</code>.' : 'El PAT necesita permiso de lectura y escritura de Work Items.';
+  return `<div class="cred-fi">${campos.map(([k, t]) => `<label class="campo-fi" for="fi-cred-${k}"><span>${t}</span><input id="fi-cred-${k}" data-fi-cred="${k}" type="password" autocomplete="off" spellcheck="false" value="${esc(f.cred[k] || '')}"></label>`).join('')}
+    <p class="suave" style="margin:0 0 6px">${ayuda} Se guardan en el archivo de credenciales de este equipo (permisos 600) y nunca vuelven a verse en pantalla.</p>
+    <button class="boton primario" type="button" data-fi-accion="guardar-cred">Guardar credencial</button>${r?.guardada ? '<button class="boton" type="button" data-fi-accion="cancelar-cred">Cancelar</button>' : ''}</div>`;
+}
+function pasoDestino(c) {
+  const f = formInteg, op = f.op, cargando = f.cargando === 'destinos', manual = f.op.fallo === 'destinos';
+  const estado = cargando ? '<p class="suave" role="status">Cargando opciones…</p>' : '';
+  const recargar = `<button class="boton" type="button" data-fi-accion="destinos"${cargando ? ' disabled' : ''}>${op.fallo === 'destinos' ? 'Reintentar' : op.destinos ? 'Recargar lista' : 'Cargar opciones'}</button>`;
+  if (c.tipo === 'github-projects') {
+    const lista = (op.destinos || []).map((x) => [`${x.propietario}/${x.numero}`, `${x.propietario}/${x.numero} · ${x.titulo}`]);
+    const actual = c.propietario ? `${c.propietario}/${c.numero}` : '';
+    if (actual && !lista.some(([v]) => v === actual)) lista.unshift([actual, actual]);
+    return `${estado}${op.destinos ? `<label class="campo-fi" for="fi-destino"><span>Project</span><select id="fi-destino" data-fi="destino">${opcion('', '— elige un Project —', !actual)}${lista.map(([v, t]) => opcion(v, t, v === actual)).join('')}</select></label>` : ''}${recargar}
+      ${manual || !op.destinos ? `<div class="manual-fi">${textoFi('fi-propietario', 'Propietario', 'propietario', c.propietario, 'usuario u organización')}${textoFi('fi-numero', 'Número', 'numero', c.numero)}</div>` : ''}`;
+  }
+  if (c.tipo === 'trello') {
+    const lista = (op.destinos || []).map((x) => [x.id, x.nombre]);
+    if (c.tablero && !lista.some(([v]) => v === c.tablero)) lista.unshift([c.tablero, c.tablero]);
+    return `${estado}${op.destinos ? `<label class="campo-fi" for="fi-destino"><span>Tablero</span><select id="fi-destino" data-fi="destino">${opcion('', '— elige un tablero —', !c.tablero)}${lista.map(([v, t]) => opcion(v, t, v === c.tablero)).join('')}</select></label>` : ''}${recargar}
+      ${manual || !op.destinos ? `<div class="manual-fi">${textoFi('fi-tablero', 'Id del tablero', 'tablero', c.tablero, 'el código de la URL trello.com/b/&lt;id&gt;')}</div>` : ''}`;
+  }
+  const lista = (op.destinos || []).slice(); if (c.proyecto && !lista.includes(c.proyecto)) lista.unshift(c.proyecto);
+  return `${textoFi('fi-organizacion', 'Organización', 'organizacion', c.organizacion, 'Nombre o URL: dev.azure.com/&lt;organización&gt;')}<button class="boton" type="button" data-fi-accion="destinos"${cargando || !c.organizacion ? ' disabled' : ''}>Buscar proyectos</button>${estado}
+    ${op.destinos ? selectFi('fi-destino', 'Proyecto', 'destino', c.proyecto, lista, '— elige un proyecto —') : ''}${manual || !op.destinos ? textoFi('fi-proyecto', 'Proyecto (a mano)', 'proyecto', c.proyecto) : ''}`;
+}
+const tiposElegidos = (c) => c.tipoItem === '*' ? '*' : Array.isArray(c.tipoItem) ? c.tipoItem : c.tipoItem ? [c.tipoItem] : [];
+// Casillas de tipo de work item; «Todos» solo en solo lectura (al sincronizar no se sabría qué tipo crear).
+function tiposFi(c, nombres) {
+  const sel = tiposElegidos(c), todos = sel === '*', lista = [...new Set([...nombres, ...(todos ? [] : sel)])];
+  return `<fieldset class="tipos-fi" aria-label="Tipo de work item"><legend class="rotulo">Tipo de work item</legend>
+    ${c.modo === 'lectura' ? `<label><input type="checkbox" data-fi="tipoItem-todos"${todos ? ' checked' : ''}> Todos</label>` : ''}
+    ${lista.map((n) => `<label><input type="checkbox" data-fi="tipoItem-op" value="${esc(n)}"${todos ? ' disabled' : sel.includes(n) ? ' checked' : ''}> ${esc(n)}</label>`).join('')}
+    <small class="suave">${todos ? 'Se leen todos los tipos.' : sel.length ? '' : 'Sin marcar: Task.'}</small></fieldset>`;
+}
+function pasoColumnas(c) {
+  const d = formInteg.op.detalle, cargando = formInteg.cargando === 'detalle', col = c.columnas || {};
+  if (cargando) return '<p class="suave" role="status">Leyendo columnas…</p>';
+  let opciones = null, extra = '';
+  if (c.tipo === 'github-projects') {
+    const campo = c.campoEstado || 'Status', def = d?.camposSeleccion?.find((x) => x.nombre === campo);
+    opciones = def?.opciones;
+    extra = d ? selectFi('fi-campoEstado', 'Campo de estado', 'campoEstado', c.campoEstado, (d.camposSeleccion || []).map((x) => x.nombre), 'Status (por defecto)') + selectFi('fi-campoSeccion', 'Campo de texto para la sección', 'campoSeccion', c.campoSeccion, d.camposTexto || [], 'Sección (por defecto)') : '';
+  } else if (c.tipo === 'trello') opciones = d?.listas;
+  else {
+    const tipos = d?.tipos || [], sel = tiposElegidos(c);
+    opciones = (sel === '*' ? tipos : tipos.filter((t) => sel.includes(t.nombre))).flatMap((t) => (t.estados || []).map((e) => (typeof e === 'string' ? e : e?.nombre ?? e?.name ?? '')));
+    if (!opciones.length) opciones = tipos.find((t) => t.nombre === 'Task')?.estados;
+    extra = d ? tiposFi(c, tipos.map((t) => t.nombre)) : '';
+  }
+  const nombres = (o) => (o || []).map((x) => (typeof x === 'string' ? x : x?.nombre ?? x?.name ?? ''));
+  const lista = nombres(opciones);
+  return `${extra}<div class="manual-fi">${selectFi('fi-col-pendiente', 'Pendiente = ', 'col:pendiente', col.pendiente, lista, 'automático')}${selectFi('fi-col-hecho', 'Hecho = ', 'col:hecho', col.hecho, lista, 'automático')}</div>
+    ${!d ? `<p class="suave">${formInteg.op.fallo === 'detalle' ? 'No se pudieron leer las columnas; se usarán las de por defecto.' : 'Elige el destino para ver sus columnas.'}</p>` : ''}`;
+}
+const avisoRenombra = (f) => f.original && f.cfg.id && f.cfg.id !== f.original ? `<div class="integ-paso">Cambiar el id deja huérfanas las marcas <code>&lt;!-- ${esc(f.original)}:… --&gt;</code> que ya tiene el backlog: no se renombran solas.</div>` : '';
+function formularioInteg() {
+  const f = formInteg, c = f.cfg, editar = !!f.original, pr = f.prueba;
+  const cred = credOk(c.tipo), destino = c.tipo && cred && DESTINO_OK[c.tipo](c), lectura = c.modo === 'lectura';
+  const paso = (n, t, cuerpo) => `<fieldset class="paso-fi"><legend class="rotulo">${n}. ${t}</legend>${cuerpo}</fieldset>`;
+  return `<form class="form-integ tarjeta" id="form-integ" data-form-integ aria-label="${editar ? `Editar ${esc(f.original)}` : 'Nueva integración'}">
+    <h2><span>${editar ? `Editar «${esc(f.original)}»` : 'Nueva integración'}</span></h2>
+    ${paso(1, 'Tipo', editar ? `<p>${esc((TIPOS_INTEG.find(([v]) => v === c.tipo) || [, c.tipo])[1])} <span class="suave">(el tipo no se cambia: quita la integración y crea otra)</span></p>`
+      : `<label class="campo-fi" for="fi-tipo"><span>Conector</span><select id="fi-tipo" data-fi="tipo">${opcion('', '— elige —', !c.tipo)}${TIPOS_INTEG.map(([v, t]) => opcion(v, t, v === c.tipo)).join('')}</select></label>`)}
+    ${c.tipo ? paso(2, 'Credencial', pasoCredencial(c)) : ''}
+    ${c.tipo && cred ? paso(3, 'Destino', pasoDestino(c)) : ''}
+    ${f.error ? `<div class="integ-paso mal" role="alert">${esc(f.error)}</div>` : ''}
+    ${destino ? paso(4, 'Modo y backlog', `<label class="campo-fi" for="fi-modo"><span>Modo</span><select id="fi-modo" data-fi="modo">${opcion('sincronizar', 'Sincronizar con un backlog', !lectura)}${opcion('lectura', 'Solo lectura (solo se muestra lo de afuera)', lectura)}</select></label>
+      ${lectura ? `<div class="integ-paso">${archivosBacklog().length ? 'Solo lectura:' : 'Este proyecto no tiene backlog:'} solo se mostrará lo de ${esc((TIPOS_INTEG.find(([v]) => v === c.tipo) || [, c.tipo])[1])}. No se crea, cambia ni borra nada afuera, y no se toca ningún backlog.</div>` : archivosBacklog().length ? selectFi('fi-backlog', 'Archivo', 'backlog', c.backlog, archivosBacklog()) : `<div class="integ-paso">Este proyecto no tiene backlog para sincronizar. ${editable() ? '<button class="boton" type="button" data-crear="backlog">＋ Crear backlog</button>' : ''}</div>`}`) : ''}
+    ${destino ? paso(5, 'Columnas', pasoColumnas(c)) : ''}
+    ${destino ? paso(6, 'Nombre', `${textoFi('fi-id', 'Id', 'id', c.id ?? idPropuesto(c.tipo), 'minúsculas, números y guiones; es el prefijo de las marcas <code>&lt;!-- id:… --&gt;</code> del backlog')}
+      <div id="fi-aviso-id">${avisoRenombra(f)}</div>
+      ${lectura ? '' : `<label class="campo-fi marca-fi"><input type="checkbox" data-fi="auto"${c.auto ? ' checked' : ''}> <span>Sincronizar solo lo seguro al regenerar (<code>auto</code>), sin vista previa</span></label>`}`) : ''}
+    ${pr ? `<div id="fi-prueba" tabindex="-1" class="integ-paso ${pr.ok ? '' : 'mal'}" role="status">${pr.ok ? `✓ Conectado${pr.titulo ? ` a «${esc(pr.titulo)}»` : ''} · ${pr.items} ítems · columnas: ${esc((pr.columnas || []).join(', ') || '—')} · ${pr.vinculadas} casillas vinculadas${(pr.avisos || []).map((a) => `<br><span class="suave">· ${esc(a)}</span>`).join('')}` : `✕ ${esc(pr.error)}`}</div>` : ''}
+    <div class="pie">${destino ? '<button class="boton" type="button" data-fi-accion="probar">Probar</button><button class="boton primario" type="submit">Guardar</button>' : ''}<button class="boton" type="button" data-fi-accion="cerrar">Cancelar</button></div>
+  </form>`;
+}
+function alCambiarFi(el) {
+  const f = formInteg, c = f.cfg, k = el.dataset.fi, v = el.type === 'checkbox' ? el.checked : el.value.trim();
+  f.prueba = null;
+  if (k === 'tipo') {
+    formInteg = { ...f, cfg: { tipo: v, backlog: c.backlog, auto: false, modo: c.modo }, op: {}, error: '', cred: {}, cambiarCred: false, idTocado: false };
+    formInteg.cfg.id = v ? idPropuesto(v) : undefined; pintarF();
+    if (v && credOk(v)) cargarOpciones('destinos');
+    return;
+  }
+  if (k === 'destino') {
+    const antes = JSON.stringify([c.propietario, c.numero, c.tablero, c.proyecto]);
+    if (c.tipo === 'github-projects') { const [p, n] = v.split('/'); c.propietario = p || undefined; c.numero = n ? Number(n) : undefined; }
+    else if (c.tipo === 'trello') c.tablero = v || undefined; else c.proyecto = v || undefined;
+    if (antes !== JSON.stringify([c.propietario, c.numero, c.tablero, c.proyecto])) { delete c.columnas; delete c.campoEstado; delete c.campoSeccion; delete c.tipoItem; f.op.detalle = null; f.op.fallo = null; }
+    pintarF(); cargarOpciones('detalle'); return;
+  }
+  if (k === 'modo') {
+    c.modo = v;
+    if (v === 'lectura') c.auto = false;
+    else { if (c.tipoItem === '*') delete c.tipoItem; c.backlog = c.backlog || archivosBacklog()[0] || ''; }
+    pintarF(); return;
+  }
+  if (k === 'tipoItem-todos' || k === 'tipoItem-op') {
+    const cont = el.closest('.tipos-fi');
+    if (k === 'tipoItem-todos' && el.checked) c.tipoItem = '*';
+    else { const m = [...cont.querySelectorAll('[data-fi=tipoItem-op]:checked')].map((x) => x.value); c.tipoItem = m.length ? (m.length === 1 ? m[0] : m) : undefined; }
+    delete c.columnas; pintarF(); return;
+  }
+  if (k.startsWith('col:')) { c.columnas = { ...(c.columnas || {}), [k.slice(4)]: v || undefined }; pintarF(); return; }
+  if (k === 'campoEstado' || k === 'tipoItem') { c[k] = v || undefined; delete c.columnas; pintarF(); return; }
+  asignarFi(el);
+  if (['propietario', 'numero', 'tablero', 'organizacion', 'proyecto'].includes(k)) {
+    if (DESTINO_OK[c.tipo](c) && !f.op.detalle && !f.cargando) { pintarF(); cargarOpciones('detalle'); }
+    return;
+  }
+  if (k === 'auto' || k === 'backlog' || k === 'campoSeccion') pintarF();
+}
+// Copia el valor de un control al estado sin repintar (se llama en cada tecla).
+function asignarFi(el) {
+  const c = formInteg.cfg, k = el.dataset.fi, v = el.type === 'checkbox' ? el.checked : el.value.trim();
+  if (k === 'id') { formInteg.idTocado = true; }
+  c[k] = k === 'numero' ? (v === '' ? undefined : /^\d+$/.test(v) ? Number(v) : v) : v;
+  formInteg.prueba = null;
+  if (k === 'organizacion') { const bt = document.querySelector('[data-fi-accion="destinos"]'); if (bt) bt.disabled = !c.organizacion || formInteg.cargando === 'destinos'; }
+  if (k === 'id') { const av = document.getElementById('fi-aviso-id'); if (av) av.innerHTML = avisoRenombra(formInteg); }
+}
+function accionFi(a, boton) {
+  const f = formInteg;
+  if (a === 'cerrar') cerrarForm();
+  else if (a === 'cambiar-cred') { f.cambiarCred = true; pintarF(); document.querySelector('[data-fi-cred]')?.focus(); }
+  else if (a === 'cancelar-cred') { f.cambiarCred = false; f.cred = {}; pintarF(); }
+  else if (a === 'guardar-cred') guardarCred(boton);
+  else if (a === 'destinos') { f.op.fallo = null; cargarOpciones('destinos'); }
+  else if (a === 'probar') probarForm(boton);
+}
+
 // ---------- Bitácora ----------
 const bitPendientes = () => (P?.bitacora?.registro || []).filter((f) => f.pendiente && f.sid && f.proyecto === P.id).length;
 const nf = new Intl.NumberFormat('es', { maximumFractionDigits: 2 });
@@ -916,7 +1259,9 @@ function vistaBitacora() {
   const b = P.bitacora;
   const propias = b.registro.filter((f) => f.proyecto === P.id);
   const base = bitFiltro.todas ? b.registro : propias;
-  const filas = bitFiltro.pendientes ? base.filter((f) => f.pendiente) : base;
+  // Más recientes arriba; las fechas incompletas («2026-10-0?») al final.
+  const clave = (f) => (/^\d{4}-\d\d-\d\d/.test(f.fecha || '') ? f.fecha : '');
+  const filas = (bitFiltro.pendientes ? base.filter((f) => f.pendiente) : base).slice().sort((a, b) => clave(b).localeCompare(clave(a)));
   const costo = base.reduce((a, f) => a + (f.costo || 0), 0), min = base.reduce((a, f) => a + (f.minutos || 0), 0);
   const conCtx = base.filter((f) => f.contexto?.semaforo), rojas = conCtx.filter((f) => f.contexto.semaforo === '🔴').length;
   const horas = min >= 60 ? `${nf.format(min / 60)} h` : `${nf.format(min)} min`;
@@ -933,7 +1278,7 @@ function vistaBitacora() {
     return `<tr${f.pendiente ? ' class="pend"' : ''} data-sid="${esc(f.sid || '')}"><td class="n">${esc(f.fecha)}</td><td>${esc(f.tarea)}${f.proyecto && f.proyecto !== P.id ? ` <span class="suave">(${esc(f.proyecto)})</span>` : ''}</td><td class="n">${esc(f.modelo)}</td><td class="n">${esc(f.duracion)}</td><td class="n">${esc(f.costoTxt)}</td><td class="n">${esc(ctx)}</td>
       ${edit ? celdaEdit(f) : `<td>${f.pendiente ? '<span class="etq DRAFT">pendiente</span>' : esc(f.calidad)}</td><td>${f.pendiente ? '' : esc(f.seguridad)}</td><td>${f.pendiente && f.sid && !f.proyecto ? '<span class="suave">sin proyecto</span> ' : ''}${esc(f.pendiente && f.notas === PENDIENTE_TXT ? '' : f.notas)}${f.pendiente && !f.sid ? ' <span class="suave">sin sid: no editable</span>' : ''}</td>`}</tr>`;
   };
-  return `<section class="tarjeta"><h2><span>${esc(b.ruta.split('/').pop())}</span><small>${hace(b.modificado)}</small></h2>
+  return `${bloqueGastos(base)}<section class="tarjeta"><h2><span>${esc(b.ruta.split('/').pop())}</span><small>${hace(b.modificado)}</small></h2>
     <div class="bit-totales"><span><b>${base.length}</b> sesiones</span><span><b>$${nf.format(costo)}</b> costo</span><span><b>${horas}</b> duración</span><span><b>${conCtx.length ? Math.round(100 * rojas / conCtx.length) : 0}%</b> con contexto 🔴</span></div>
     <div class="bit-filtros"><label><input type="checkbox" data-bit-filtro="todas"${bitFiltro.todas ? ' checked' : ''}> Todas las sesiones (no solo este proyecto)</label><label><input type="checkbox" data-bit-filtro="pendientes"${bitFiltro.pendientes ? ' checked' : ''}> Solo pendientes</label><span>${acciones(b.ruta)}</span></div>
     ${!editable() && bitPendientes() ? '<p class="suave">Para completar filas aquí abre el tablero con Tablero.app (o <code>node generar.mjs --abrir</code>).</p>' : ''}
@@ -942,7 +1287,111 @@ function vistaBitacora() {
     ${b.semanal?.filas?.length ? `<section class="tarjeta" style="margin-top:18px"><h2><span>Resumen semanal</span></h2><div class="bit-tabla" role="region" aria-label="Resumen semanal" tabindex="0"><table><thead><tr>${b.semanal.columnas.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${b.semanal.filas.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>` : ''}
     ${b.lecciones?.length ? `<section class="tarjeta" style="margin-top:18px"><h2><span>Lecciones aprendidas</span><small>${b.lecciones.length}</small></h2>${b.lecciones.map((l) => `<div class="fila"><span>${inline(l.texto)}</span><span class="suave">${esc(l.fecha)}</span></div>`).join('')}</section>` : ''}`;
 }
+// ---- Gráficos de gastos (SVG en línea; la agregación replica `agregar` de bitacora.mjs) ----
+const semanaISO = (fecha) => {
+  const d = new Date(`${fecha}T00:00:00Z`), dia = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dia);
+  return `${d.getUTCFullYear()}-W${String(Math.ceil(((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7)).padStart(2, '0')}`;
+};
+const modeloBase = (m) => String(m ?? '').trim().replace(/[\s-]*v?\d+(?:[.,]\d+)*.*$/, '') || null;
+function agregarBit(registro, por) {
+  const tiempo = { dia: (f) => f, semana: semanaISO, mes: (f) => f.slice(0, 7) }[por];
+  const grupos = new Map();
+  let excluidas = 0;
+  for (const f of registro) {
+    const fecha = (String(f.fecha).match(/^\d{4}-\d{2}-\d{2}/) || [])[0];
+    const clave = tiempo ? (fecha && tiempo(fecha)) : por === 'rama' ? f.rama : modeloBase(f.modelo);
+    if (!clave || f.costo == null) { excluidas++; continue; }
+    const g = grupos.get(clave) || { clave, costo: 0, minutos: 0, sesiones: 0 };
+    g.costo += f.costo; g.minutos += f.minutos ?? 0; g.sesiones++;
+    grupos.set(clave, g);
+  }
+  const lista = [...grupos.values()];
+  lista.sort(tiempo ? (a, b) => a.clave.localeCompare(b.clave) : (a, b) => b.costo - a.costo);
+  return { grupos: lista, excluidas };
+}
+let bitGraf = { por: 'dia' };
+const MODELO_COLOR = { Opus: 'var(--g1)', Sonnet: 'var(--g2)', Haiku: 'var(--g3)' }; // el color sigue a la entidad, no al rango
+const usd = (n) => `$${nf.format(n)}`;
+const dur = (m) => (m >= 60 ? `${nf.format(m / 60)} h` : `${nf.format(m)} min`);
+const marca = (g, extra) => `data-tip="${esc(`${g.clave}\n${usd(g.costo)} · ${dur(g.minutos)} · ${g.sesiones} ses.${extra || ''}`)}" tabindex="0"`;
+function tablaGraf(titulo, grupos, total) {
+  return `<details class="graf-tabla"><summary>Ver como tabla</summary><div class="bit-tabla"><table><caption class="sr">${esc(titulo)}</caption><thead><tr><th>Clave</th><th>Costo</th><th>Duración</th><th>Sesiones</th></tr></thead><tbody>${grupos.map((g) => `<tr><td>${esc(g.clave)}</td><td class="n">${usd(g.costo)}</td><td class="n">${dur(g.minutos)}</td><td class="n">${g.sesiones}</td></tr>`).join('')}</tbody></table></div></details>`;
+}
+const notaExcl = (n) => (n ? `<p class="suave graf-nota">${n} fila${n === 1 ? '' : 's'} sin dato (costo «?», fecha incompleta o sin rama) no se grafica${n === 1 ? '' : 'n'}.</p>` : '');
+function grafTiempo(base) {
+  const por = bitGraf.por, tope = { dia: 30, semana: 16, mes: 12 }[por];
+  const { grupos: todos, excluidas } = agregarBit(base, por), grupos = todos.slice(-tope);
+  const titulo = `Costo por ${por === 'dia' ? 'día' : por}`;
+  const radios = ['dia', 'semana', 'mes'].map((p) => `<label><input type="radio" name="graf-por" data-graf-por="${p}"${p === por ? ' checked' : ''}> ${p === 'dia' ? 'Día' : p === 'semana' ? 'Semana' : 'Mes'}</label>`).join('');
+  if (!grupos.length) return `<div class="graf"><div class="graf-cab"><h3>${titulo}</h3><span class="graf-sel">${radios}</span></div><p class="suave">Sin costos con fecha para graficar.</p>${notaExcl(excluidas)}</div>`;
+  const W = 640, H = 190, mi = 44, md = 8, ms = 10, mb = 26, max = Math.max(...grupos.map((g) => g.costo)) || 1;
+  const paso = (W - mi - md) / grupos.length, ancho = Math.max(3, Math.min(28, paso - 2));
+  const y = (v) => ms + (H - ms - mb) * (1 - v / max);
+  const etq = (c) => (por === 'dia' ? c.slice(5) : por === 'semana' ? c.slice(5) : c);
+  const cada = Math.ceil(grupos.length / 8);
+  const barras = grupos.map((g, i) => {
+    const x = mi + i * paso + (paso - ancho) / 2, top = y(g.costo), h = Math.max(1, H - mb - top), r = Math.min(4, ancho / 2, h);
+    return `<path class="barra" ${marca(g)} d="M${x},${H - mb}V${top + r}Q${x},${top} ${x + r},${top}H${x + ancho - r}Q${x + ancho},${top} ${x + ancho},${top + r}V${H - mb}Z" fill="var(--acento)"/>${i % cada === 0 || i === grupos.length - 1 ? `<text x="${x + ancho / 2}" y="${H - 8}" text-anchor="middle" class="eje">${esc(etq(g.clave))}</text>` : ''}`;
+  }).join('');
+  const marcas = [0, max / 2, max].map((v) => `<line x1="${mi}" x2="${W - md}" y1="${y(v)}" y2="${y(v)}" class="rej"/><text x="${mi - 6}" y="${y(v) + 4}" text-anchor="end" class="eje">${usd(Math.round(v * 100) / 100)}</text>`).join('');
+  const total = grupos.reduce((a, g) => a + g.costo, 0);
+  return `<div class="graf"><div class="graf-cab"><h3>${titulo}</h3><span class="graf-sel" role="radiogroup" aria-label="Agrupar por">${radios}</span></div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${titulo}: ${grupos.length} periodos, total ${usd(total)}, máximo ${usd(max)}`)}">${marcas}${barras}</svg>
+    <p class="suave graf-nota">Últimos ${grupos.length} · ${usd(total)} en total</p>${notaExcl(excluidas)}${tablaGraf(titulo, grupos)}</div>`;
+}
+function grafBarrasH(titulo, grupos, excluidas, color, vacio) {
+  if (!grupos.length) return `<div class="graf"><div class="graf-cab"><h3>${titulo}</h3></div><p class="suave">${vacio}</p>${notaExcl(excluidas)}</div>`;
+  const max = Math.max(...grupos.map((g) => g.costo)) || 1, fila = 22, W = 640, mi = 170, md = 70, H = grupos.length * fila + 4;
+  const barras = grupos.map((g, i) => {
+    const w = Math.max(2, (W - mi - md) * g.costo / max), yy = 2 + i * fila, r = Math.min(4, w / 2);
+    const nombre = g.clave.length > 24 ? `${g.clave.slice(0, 23)}…` : g.clave;
+    return `<text x="${mi - 8}" y="${yy + 14}" text-anchor="end" class="eje">${esc(nombre)}</text><path class="barra" ${marca(g)} d="M${mi},${yy + 2}H${mi + w - r}Q${mi + w},${yy + 2} ${mi + w},${yy + 2 + r}V${yy + 14 - r}Q${mi + w},${yy + 14} ${mi + w - r},${yy + 14}H${mi}Z" fill="${color(g)}"/><text x="${mi + w + 6}" y="${yy + 13}" class="eje val">${usd(g.costo)}</text>`;
+  }).join('');
+  return `<div class="graf"><div class="graf-cab"><h3>${titulo}</h3></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${titulo}: ${grupos.map((g) => `${g.clave} ${usd(g.costo)}`).join(', ')}`)}">${barras}</svg>${notaExcl(excluidas)}${tablaGraf(titulo, grupos)}</div>`;
+}
+function grafRamas(base) {
+  const { grupos, excluidas } = agregarBit(base, 'rama');
+  let lista = grupos;
+  if (grupos.length > 10) {
+    const resto = grupos.slice(10);
+    lista = [...grupos.slice(0, 10), { clave: `otras (${resto.length})`, costo: resto.reduce((a, g) => a + g.costo, 0), minutos: resto.reduce((a, g) => a + g.minutos, 0), sesiones: resto.reduce((a, g) => a + g.sesiones, 0), otras: true }];
+  }
+  return grafBarrasH('Costo por feature (rama)', lista, excluidas, (g) => (g.otras ? 'var(--suave)' : 'var(--acento)'), 'Ninguna sesión con rama conocida.');
+}
+function grafModelos(base) {
+  const { grupos, excluidas } = agregarBit(base, 'modelo');
+  const total = grupos.reduce((a, g) => a + g.costo, 0);
+  const col = (g) => MODELO_COLOR[g.clave] || 'var(--suave)';
+  if (!grupos.length || !total) return `<div class="graf"><div class="graf-cab"><h3>Reparto por modelo</h3></div><p class="suave">Sin costos por modelo.</p>${notaExcl(excluidas)}</div>`;
+  const W = 640, H = 22;
+  let x = 0;
+  const segs = grupos.map((g) => {
+    const w = W * g.costo / total, s = `<rect class="barra" ${marca(g, ` · ${Math.round(100 * g.costo / total)} %`)} x="${x + 1}" y="0" width="${Math.max(1, w - 2)}" height="${H}" rx="3" fill="${col(g)}"/>`;
+    x += w; return s;
+  }).join('');
+  const leyenda = grupos.map((g) => `<li><i style="background:${col(g)}"></i>${esc(g.clave)} <b>${usd(g.costo)}</b> <span class="suave">${Math.round(100 * g.costo / total)} % · ${g.sesiones} ses.</span></li>`).join('');
+  return `<div class="graf"><div class="graf-cab"><h3>Reparto por modelo</h3></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`Reparto por modelo: ${grupos.map((g) => `${g.clave} ${Math.round(100 * g.costo / total)} %`).join(', ')}`)}">${segs}</svg><ul class="graf-ley">${leyenda}</ul>${notaExcl(excluidas)}${tablaGraf('Reparto por modelo', grupos)}</div>`;
+}
+const bloqueGastos = (base) => `<section class="tarjeta graficos" style="margin-bottom:18px"><h2><span>Gastos</span><small>${bitFiltro.todas ? 'todas las sesiones' : 'este proyecto'}</small></h2><div class="graf-rej">${grafTiempo(base)}${grafRamas(base)}${grafModelos(base)}</div></section>`;
+// Tooltip único: sigue al ratón y al foco de teclado.
+const tip = document.createElement('div'); tip.id = 'graf-tip'; tip.hidden = true; document.body.appendChild(tip);
+const verTip = (el, ev) => {
+  const t = el.dataset.tip; if (!t) return;
+  tip.textContent = t; tip.hidden = false;
+  const r = el.getBoundingClientRect(), x = ev?.clientX ?? r.left + r.width / 2, y = ev?.clientY ?? r.top;
+  tip.style.left = `${Math.min(innerWidth - tip.offsetWidth - 8, Math.max(8, x + 12))}px`; tip.style.top = `${Math.max(8, y - tip.offsetHeight - 10)}px`;
+};
+document.addEventListener('mousemove', (e) => { const el = e.target.closest?.('[data-tip]'); if (el) verTip(el, e); else tip.hidden = true; });
+document.addEventListener('focusin', (e) => { if (e.target.dataset?.tip) verTip(e.target); });
+document.addEventListener('focusout', () => { tip.hidden = true; });
 const PENDIENTE_TXT = '_pendiente_';
+async function alternarFav(titulo, boton) {
+  const poner = !favoritos().has(titulo);
+  boton.disabled = true;
+  try { recargarDatos((await api('/api/favoritos', { titulo, favorito: poner })).datos); pintar(); document.querySelector(`[data-fav="${CSS.escape(titulo)}"]`)?.focus({ preventScroll: true }); }
+  catch (e) { boton.disabled = false; avisar(`No se pudo guardar el favorito: ${e.message}`, true); }
+}
 async function guardarBitacora(sid, boton) {
   const tr = boton.closest('tr'), campo = (k) => tr.querySelector(`[data-bit=${k}]`).value.trim();
   const cuerpo = { ruta: P.bitacora.ruta, sid, calidad: campo('calidad'), seguridad: campo('seguridad'), notas: campo('notas'), hash: P.bitacora.hash };
@@ -967,8 +1416,10 @@ const VISTAS = {
     const g = P.git;
     const abiertosPR = (g?.prs || []).filter((p) => p.state === 'OPEN');
     const ult = P.planes[0];
+    const favs = P.backlogs.flatMap((b) => aplanar(b.estructura || []).filter(esFavorita).map((s) => ({ b, s })));
     const sesActual = g?.rama ? sesionesDeRama(g.rama) : [];
-    return `<div class="rejilla">
+    const ec = enCurso(P);
+    return `${tarjetaEnCurso(P)}<div class="rejilla"${ec ? ' style="margin-top:14px"' : ''}>
       ${bl.map((b) => `<section class="tarjeta">
         <h2><span>${esc(b.archivo)}</span><small>${hace(b.modificado)}</small></h2>
         <div>${barra(b.hechas, b.total, 20)}</div><div class="suave">${b.hechas} de ${b.total} tareas (${pct(b.hechas, b.total)} %)</div>
@@ -991,22 +1442,24 @@ const VISTAS = {
         ${P.notas?.abiertas.length ? P.notas.abiertas.map((a) => `<div class="fila"><span>${CASILLA()[0]} ${inline(a)}</span></div>`).join('') : '<div class="suave">Sin notas abiertas.</div>'}
         <p>${P.notas ? `<button class="boton" data-p="notas">${editable() ? 'Añadir nota' : 'Ver notas'}</button>` : ''}</p>
       </section>
-      ${ult ? `<section class="tarjeta"><h2><span>Último plan</span><small>${hace(ult.modificado)}</small></h2>
+      ${favs.length ? `<section class="tarjeta"><h2><span>★ Sesiones favoritas</span><small>${favs.length}</small></h2><div class="sesiones">${favs.map(botonSesion).join('')}</div></section>` : ''}
+      ${ult && ec?.plan?.nombre !== ult.nombre ? `<section class="tarjeta"><h2><span>Último plan</span><small>${hace(ult.modificado)}</small></h2>
         <div>${esc(ult.titulo)}</div><p><button class="boton" data-ir="planes" data-sel="${esc(ult.nombre)}">Abrir plan</button></p></section>` : ''}
     </div>`;
   },
   backlogs() {
-    if (!P.backlogs.length) return '<div class="vacio">No hay backlogs en las carpetas configuradas.</div>';
+    if (!P.backlogs.length) return `<div class="vacio">No hay backlogs en las carpetas configuradas.</div>${botonCrearBacklog()}`;
     const actual = P.backlogs.find((b) => b.archivo === sel.backlogs) || P.backlogs[0];
     return `<div class="archivos" aria-label="Archivos">${P.backlogs.map((b) => `<button data-sel="${esc(b.archivo)}" aria-current="${b === actual}">${esc(b.archivo)}${b.total ? `<span class="n">${b.hechas}/${b.total}</span>` : ''}</button>`).join('')}</div>
+      ${modo.backlogs !== 'documento' && editando !== actual.ruta ? barraBusqueda('backlogs', true) : ''}
       ${editando === actual.ruta ? vistaEditor(actual.ruta) : `${barraVista(actual, 'backlogs')}
       ${modo.backlogs === 'documento' ? `<div class="tarjeta">${md(actual.contenido)}</div>` : vistaMapa(actual)}`}`;
   },
   planes() {
     if (!P.planes.length) return '<div class="vacio">Aún no hay planes de Claude asociados a este proyecto.</div>';
     const actual = P.planes.find((p) => p.nombre === sel.planes) || P.planes[0];
-    return `<div class="lateral">
-      <div class="tarjeta lista">${P.planes.map((p) => `<button data-sel="${esc(p.nombre)}" aria-current="${p === actual}">
+    return `${barraBusqueda('planes', false)}<div class="lateral">
+      <div class="tarjeta lista">${P.planes.map((p) => `<button data-sel="${esc(p.nombre)}" data-busca="${esc((p.titulo + ' ' + p.nombre + ' ' + p.contenido).toLowerCase())}" aria-current="${p === actual}">
         <strong>${esc(p.titulo)}</strong><br><span class="suave">${fecha(p.modificado)} · ${esc(p.carpetas.join(', '))}</span></button>`).join('')}</div>
       <div style="min-width:0">${editando === actual.ruta ? vistaEditor(actual.ruta) : `<p class="suave hash" style="margin-top:0;overflow-wrap:anywhere">${esc(actual.ruta)}</p>${barraVista(actual, 'planes')}
         ${modo.planes === 'documento' ? `<div class="tarjeta">${md(actual.contenido)}</div>` : vistaMapa(actual)}`}</div></div>`;
@@ -1070,8 +1523,11 @@ const VISTAS = {
   },
   integraciones() {
     const xs = P.integraciones || [];
-    if (!xs.length) return `<div class="tarjeta"><h2><span>Integraciones</span></h2><p>Este proyecto no tiene integraciones. Añade un arreglo <code>integraciones</code> al proyecto en <code>proyectos.json</code> (hay ejemplos de GitHub Projects, Trello y Azure DevOps en <code>proyectos.ejemplo.json</code>) y la sección «Conectores y credenciales» del README.</p></div>`;
-    return `<p class="suave">Cada casilla de primer nivel del backlog se vincula con una tarjeta mediante un comentario oculto <code>&lt;!-- id:… --&gt;</code>. Sincronizar muestra primero una vista previa; nunca se borra nada en ningún lado.</p>${xs.map(tarjetaIntegracion).join('')}`;
+    if (!xs.length && !editable()) return `<div class="tarjeta"><h2><span>Integraciones</span></h2><p>Este proyecto no tiene integraciones. Configurarlas desde aquí requiere el servidor local: abre el tablero con <strong>Tablero.app</strong> o <code>node generar.mjs --abrir</code>. A mano: añade un arreglo <code>integraciones</code> al proyecto en <code>proyectos.json</code> (ejemplos en <code>proyectos.ejemplo.json</code> y la sección «Conectores y credenciales» del README).</p></div>`;
+    if (!xs.length && !formInteg) formInteg = nuevoForm();
+    const nueva = formInteg && !formInteg.original ? formularioInteg().replace(/<button class="boton" type="button" data-fi-accion="cerrar">Cancelar<\/button>/, xs.length ? '$&' : '') : '';
+    const boton = editable() && xs.length && !formInteg ? '<p><button class="boton primario" type="button" data-integ-nueva>+ Añadir integración</button></p>' : '';
+    return `${xs.length ? '<p class="suave">Cada casilla de primer nivel del backlog se vincula con una tarjeta mediante un comentario oculto <code>&lt;!-- id:… --&gt;</code>. Sincronizar muestra primero una vista previa; nunca se borra nada en ningún lado.</p>' : ''}${boton}${nueva}${xs.map(tarjetaIntegracion).join('')}`;
   },
 };
 
@@ -1081,10 +1537,119 @@ function filaPR(pr, sinFila) {
   return sinFila ? `<span style="display:inline-flex;gap:8px;justify-content:space-between;width:calc(100% - 20px)">${dentro}</span>` : `<div class="fila">${dentro}</div>`;
 }
 
+// ---------- Plan en curso ----------
+// Puro: recibe un proyecto y devuelve el hito/plan en que se trabaja (o null si no hay backlog con «estás aquí»).
+// Si el backlog trae «activo» (frente sacado del historial de ediciones), manda sobre el «estás aquí» del Estado.
+function enCurso(p) {
+  const b = resumenProyecto(p).principal;
+  const act = b?.activo || null;
+  const aqui = b && aplanar(b.estructura || []).find((x) => x.id === (act?.seccion || b.aqui));
+  if (!aqui) return null;
+  const hito = (b.estructura || []).find((x) => aplanar([x]).some((y) => y.id === aqui.id)) || aqui;
+  const subs = act?.subsesiones || [];
+  const siguiente = subs.find((x) => x.estado === 'siguiente') || null;
+  // Sub-sesiones como segmentos: todas llevan a la sección; la siguiente se marca como actual.
+  const sesiones = subs.length
+    ? subs.map((x) => ({ id: aqui.id, clave: x.clave, titulo: `${x.clave} — ${x.titulo}`, estado: x.estado === 'hecho' ? 'hecho' : x.estado === 'siguiente' || x.hechas ? 'en-curso' : 'pendiente', hechas: x.hechas, total: x.total, actual: x === siguiente }))
+    : (hito.hijas.length ? hito.hijas : [hito]).filter((x) => x.estado !== 'doc');
+  const nombre = act ? act.plan : hito.plan || aqui.plan;
+  const plan = nombre ? p.planes.find((x) => x.nombre === nombre) : null;
+  const delPlan = plan ? aplanar(plan.estructura).flatMap((x) => x.prompts) : [];
+  const prompts = [...delPlan, ...aplanar(b.estructura).flatMap((x) => x.prompts)];
+  const destacado = hito.estado.startsWith('hecho') ? null
+    : siguiente ? delPlan.find((x) => x.clave === siguiente.clave) || { etiqueta: `${siguiente.clave} — ${siguiente.titulo}`, texto: siguiente.texto, clave: siguiente.clave }
+    : aqui.clave ? prompts.find((x) => x.clave === aqui.clave) || null : null;
+  const rama = aqui.meta?.rama || hito.meta?.rama || (act ? p.git?.rama : null) || null;
+  const tarea = act?.tarea || null;
+  const falta = hito.estado === 'hecho' ? []
+    : tarea ? (tarea.abiertas.length ? tarea.abiertas : siguiente ? [siguiente.texto] : [])
+    : aplanar([aqui]).flatMap((x) => x.tareas.filter((t) => !t.hecha).map((t) => t.texto));
+  const filas = rama ? (p.bitacora?.registro || []).filter((f) => f.rama === rama) : [];
+  const gasto = filas.length ? { ...(agregarBit(filas, 'rama').grupos[0] || { costo: 0, minutos: 0, sesiones: 0 }), sesionesTotal: filas.length } : null;
+  const planDe = plan && act?.planDe || null;
+  return { backlog: b, hito, sesiones, aqui, tarea, siguiente, falta, plan, planDe, prompts, destacado, rama, gasto, completo: hito.estado === 'hecho' };
+}
+function tarjetaEnCurso(p, compacta = false) {
+  const c = enCurso(p);
+  if (!c) return '';
+  const { backlog: b, hito, sesiones, aqui, tarea, siguiente, plan, destacado, gasto } = c;
+  const resto = c.prompts.filter((x) => x !== destacado);
+  const hechas = sesiones.filter((x) => x.estado === 'hecho').length;
+  const falta = c.falta.slice(0, siguiente ? 6 : 3);
+  const titulo = `${corto(plano(hito.titulo), 70)}${tarea ? ` › ${corto(tarea.titulo, 60)}` : ''}`;
+  const botones = compacta
+    ? `<button class="boton" data-proy="${esc(p.id)}" data-pest="resumen">Abrir proyecto</button>`
+    : `${plan ? `<button class="boton" data-ir="planes" data-sel="${esc(plan.nombre)}">Abrir plan</button> ` : ''}<button class="boton" data-ir="backlogs" data-sel="${esc(b.archivo)}" data-sec="${aqui.id}">Ver en backlog</button>`;
+  return `<section class="tarjeta en-curso" aria-label="Plan en curso">
+    <h2><span>${c.completo ? `✓ ${esc(titulo)} completo` : `▶ En curso · ${esc(titulo)}`}</span><small>${plan ? hace(plan.modificado) : hace(b.modificado)}</small></h2>
+    <div class="chips-proy">${compacta ? `<span class="etq">${esc(p.nombre)}</span>` : ''}${c.rama ? `<span class="etq" title="Rama">⎇ ${esc(c.rama)}</span>` : ''}${plan ? `<span class="etq" title="${esc(plan.nombre)}">Plan${c.planDe ? ` (de ${esc(c.planDe)})` : ''}: ${esc(corto(plan.titulo.replace(/^Plan\s*[:—–-]\s*/i, ''), 60))}</span>` : ''}${chips({ modelo: aqui.meta?.modelo || destacado?.modelo })}</div>
+    ${segmentos(b, sesiones, c.completo || siguiente ? null : aqui.id)}
+    <div>${barra(hito.hechas, hito.total, 20)}</div>
+    <div class="suave">${hechas}/${sesiones.length} sesiones${siguiente?.total ? ` · ${esc(siguiente.clave)} ${siguiente.hechas}/${siguiente.total}` : ''}${tarea ? ` · ${tarea.hechas}/${tarea.total} casillas de la tarea` : ''} · ${hito.hechas}/${hito.total} tareas${gasto ? ` · ${usd(gasto.costo)} en la rama (${gasto.sesionesTotal} ses.)` : ''}</div>
+    ${!compacta && falta.length ? `<div class="rotulo">Falta${siguiente && tarea?.abiertas.length ? ` · ${esc(siguiente.clave)} — ${esc(corto(siguiente.titulo.replace(/\s*\([^()]*\)\s*$/, ''), 60))}` : ''}</div><ul class="tareas falta">${falta.map((t) => `<li>${CASILLA()[0]} ${esc(corto(plano(t), 240))}</li>`).join('')}</ul>${c.falta.length > falta.length ? `<div class="suave">… y ${c.falta.length - falta.length} más</div>` : ''}` : ''}
+    ${destacado ? `<div class="rotulo">${siguiente ? 'Siguiente sesión' : 'Siguiente prompt'} · ${esc(destacado.clave)}</div>${promptsHtml([destacado])}` : ''}
+    ${resto.length ? `<details class="grupo"><summary class="rotulo">Otros prompts (${resto.length})</summary>${promptsHtml(resto)}</details>` : ''}
+    <p>${botones}</p></section>`;
+}
+
+// ---------- Vista «Todos los proyectos» ----------
+const hoyMenos = (d) => new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
+function resumenProyecto(p) {
+  const bl = p.backlogs.filter((b) => !b.esPlan);
+  const hechas = bl.reduce((a, b) => a + b.hechas, 0), total = bl.reduce((a, b) => a + b.total, 0);
+  const principal = bl.find((b) => b.aqui) || bl[0];
+  const aqui = principal && aplanar(principal.estructura || []).find((s) => s.id === (principal.activo?.seccion || principal.aqui));
+  const hijo = aqui?.vinculo && p.backlogs.find((b) => b.archivo === aqui.vinculo);
+  const sub = hijo && aplanar(hijo.estructura || []).find((s) => s.id === hijo.aqui);
+  const g = p.git;
+  const propias = (p.bitacora?.registro || []).filter((f) => f.proyecto === p.id);
+  const desde = hoyMenos(7);
+  const costo7 = propias.filter((f) => typeof f.costo === 'number' && /^\d{4}-\d\d-\d\d/.test(f.fecha || '') && f.fecha >= desde).reduce((a, f) => a + f.costo, 0);
+  const fechas = [...p.backlogs.map((b) => b.modificado), p.notas?.modificado, g?.commits?.[0]?.fecha, ...propias.map((f) => /^\d{4}-\d\d-\d\d$/.test(f.fecha || '') ? f.fecha : null)].filter(Boolean);
+  const ultima = fechas.sort((a, b) => new Date(b) - new Date(a))[0];
+  return { p, hechas, total, principal, aqui, sub, g, prs: (g?.prs || []).filter((x) => x.state === 'OPEN').length, sinPush: g?.sinPush?.length || 0,
+    notas: p.notas?.abiertas.length || 0, bit: propias.filter((f) => f.pendiente && f.sid).length, costo7, ultima };
+}
+function vistaTodos() {
+  const rs = DATOS.proyectos.map(resumenProyecto);
+  const suma = (k) => rs.reduce((a, r) => a + r[k], 0);
+  const ir = (r, pest, txt, cls = 'enlace') => `<button class="${cls}" data-proy="${esc(r.p.id)}" data-pest="${pest}">${txt}</button>`;
+  const tarjeta = (r) => `<section class="tarjeta tarjeta-proy" data-proy="${esc(r.p.id)}" aria-label="${esc(r.p.nombre)}">
+      <h2><button class="enlace" data-proy="${esc(r.p.id)}" data-pest="resumen">${esc(r.p.nombre)}</button><small>${r.ultima ? hace(r.ultima) : 'sin actividad'}</small></h2>
+      ${r.total ? `<div>${barra(r.hechas, r.total, 20)}</div><div class="suave">${r.hechas} de ${r.total} tareas</div>` : '<div class="suave">Sin backlog</div>'}
+      ${r.aqui ? `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> ${esc(corto(plano(r.aqui.titulo), 70))}${r.sub ? ` <span class="suave">→</span> ${esc(corto(plano(r.sub.titulo), 50))}` : ''}</p>` : ''}
+      <div class="chips-proy">
+        ${r.g?.rama ? `<span class="etq" title="Rama actual">⎇ ${esc(r.g.rama)}</span>` : ''}
+        ${r.sinPush ? `<span class="etq DRAFT">↑ ${r.sinPush} sin subir</span>` : ''}
+        ${r.g ? ir(r, 'github', `⊙ ${r.prs} PR abiertos`) : ''}
+        ${ir(r, 'notas', `✉ ${r.notas} nota${r.notas === 1 ? '' : 's'}`)}
+        ${r.p.bitacora ? ir(r, 'bitacora', `✎ ${r.bit} pendiente${r.bit === 1 ? '' : 's'}`) : ''}
+        <span class="suave" title="Costo de los últimos 7 días (bitácora)">${usd(r.costo7)} · 7 d</span>
+      </div></section>`;
+  const reciente = rs.filter((r) => enCurso(r.p)).sort((a, b) => new Date(b.ultima || 0) - new Date(a.ultima || 0))[0];
+  return `<div class="bit-totales" aria-label="Totales globales"><span><b>${rs.length}</b> proyectos</span><span><b>${suma('hechas')}/${suma('total')}</b> tareas</span><span><b>${suma('prs')}</b> PR abiertos</span><span><b>${suma('notas')}</b> notas abiertas</span><span><b>${suma('bit')}</b> bitácora pendiente</span><span><b>${usd(suma('costo7'))}</b> costo 7 d</span></div>
+    ${reciente ? tarjetaEnCurso(reciente.p, true) : ''}
+    <div class="rejilla" style="margin-top:14px">${rs.map(tarjeta).join('')}</div>`;
+}
+function abrirProyecto(id, pest) {
+  const p = buscarProyecto(id);
+  if (!p) return;
+  soltarEditor(); todos = false; P = p; sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null;
+  pestana = pest || 'resumen'; guardar('tablero.pestana', pestana);
+  recordarProyecto(); pintar(); alInicio();
+}
+
 function pintar() {
+  if (todos) {
+    $('#pestanas').innerHTML = ''; $('#rama-cab').innerHTML = '';
+    $('#barra-estado').innerHTML = `<span class="${enVivo ? 'vivo' : 'manual'}">${enVivo ? '● en vivo' : '◌ manual'}</span><span class="derecha opcional">Actualizado ${esc(fecha(DATOS.generado))}</span>`;
+    $('#contenido').innerHTML = '<div class="prompt" aria-hidden="true"><b>❯</b> tablero --todos</div>' + vistaTodos();
+    return;
+  }
   pintarNavegacion();
   if (pestana === 'bitacora' && !P.bitacora) pestana = 'resumen';
   $('#contenido').innerHTML = promptLinea() + (VISTAS[pestana] || VISTAS.resumen)();
+  aplicarBusqueda();
 }
 
 const desplazar = (el) => el.scrollIntoView({ block: 'start', behavior: movimientoReducido() ? 'auto' : 'smooth' });
@@ -1132,7 +1697,7 @@ function irRama(nombre) {
 // Actualización en vivo (solo con el servidor local): sondea la huella barata y repinta si cambió.
 if (editable()) {
   let version = null, ocupado = false;
-  const hayEdicion = () => editando || document.querySelector('#contenido textarea:focus, #contenido input:focus, #contenido select:focus');
+  const hayEdicion = () => editando || formInteg || quitandoInteg || document.querySelector('#contenido textarea:focus, #contenido input:focus, #contenido select:focus');
   const marcar = (v) => { if (enVivo !== v) { enVivo = v; pintarNavegacion(); } };
   const sondear = async () => {
     if (ocupado || document.hidden) return;
@@ -1166,8 +1731,16 @@ document.addEventListener('click', (e) => {
     });
     return;
   }
+  if (b.dataset.proy) { abrirProyecto(b.dataset.proy, b.dataset.pest); return; }
+  if (b.dataset.fav) { alternarFav(b.dataset.fav, b); return; }
   if (b.dataset.guardarBit) { guardarBitacora(b.dataset.guardarBit, b); return; }
   if (b.dataset.rama) { e.preventDefault(); irRama(b.dataset.rama); return; }
+  if ('integNueva' in b.dataset) { abrirForm(); return; }
+  if (b.dataset.integEditar) { abrirForm((P.integraciones || []).find((x) => x.id === b.dataset.integEditar)); return; }
+  if (b.dataset.integQuitar) { quitandoInteg = b.dataset.integQuitar; pintar(); document.querySelector('[data-integ-confirmar]')?.focus(); return; }
+  if ('integConfirmar' in b.dataset) { quitarInteg(quitandoInteg, b); return; }
+  if ('integNoQuitar' in b.dataset) { const id = quitandoInteg; quitandoInteg = null; pintar(); document.querySelector(`[data-integ-quitar="${CSS.escape(id)}"]`)?.focus(); return; }
+  if (b.dataset.fiAccion) { accionFi(b.dataset.fiAccion, b); return; }
   if (b.dataset.sincronizar) { pedirPrevia(b.dataset.sincronizar, b); return; }
   if (b.dataset.cerrarSync) { const id = b.dataset.cerrarSync; previas.delete(id); pintar(); document.querySelector(`[data-sincronizar="${CSS.escape(id)}"]`)?.focus(); return; }
   if (b.dataset.editar) { editando = b.dataset.editar; pintar(); const t = $('#texto-md'); t?.focus(); t?.setSelectionRange(0, 0); t?.scrollTo(0, 0); return; }
@@ -1189,11 +1762,16 @@ document.addEventListener('click', (e) => {
     else alInicio();
   }
 });
+document.addEventListener('click', (e) => {
+  const t = todos && e.target.closest('.tarjeta-proy');
+  if (t && !e.target.closest('button, a')) abrirProyecto(t.dataset.proy);
+});
 document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target;
   if (f.classList.contains('editor-md')) return guardarEdicion(f);
   if (f.classList.contains('sync-previa')) return aplicarPrevia(f);
+  if (f.id === 'form-integ') return guardarForm(f.querySelector('[type=submit]'));
   if (f.id === 'form-nota') {
     const t = f.querySelector('textarea'), boton = f.querySelector('[type=submit]');
     if (!t.value.trim()) { t.focus(); return; }
@@ -1216,17 +1794,89 @@ window.addEventListener('beforeunload', (e) => {
 });
 // En un conflicto, elegir un lado marca su casilla.
 document.addEventListener('input', (e) => {
+  if (formInteg && e.target.dataset?.fiCred) { formInteg.cred[e.target.dataset.fiCred] = e.target.value; return; }
+  if (formInteg && e.target.dataset?.fi && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') { asignarFi(e.target); return; }
+  if (e.target.dataset?.buscar) { busqueda[e.target.dataset.buscar] = e.target.value; aplicarBusqueda(); return; }
   const c = e.target, k = c.dataset?.bit, sid = c.closest?.('tr')?.dataset.sid;
   if (k && sid) bitBorrador.set(sid, { ...bitBorrador.get(sid), [k]: c.value });
 });
 document.addEventListener('change', (e) => {
   const r = e.target;
+  if (formInteg && r.dataset?.fi) { alCambiarFi(r); return; }
+  if (r.dataset?.integFiltro) { const id = r.dataset.integFiltro; filtroInteg.set(id, r.value); pintar(); document.querySelector(`[data-integ-filtro="${CSS.escape(id)}"][value="${r.value}"]`)?.focus(); return; }
+  if ('soloFav' in (r.dataset || {})) { soloFav = r.checked; pintar(); $('[data-solo-fav]')?.focus(); return; }
+  if (r.dataset?.grafPor) { bitGraf.por = r.dataset.grafPor; pintar(); $(`[data-graf-por=${r.dataset.grafPor}]`)?.focus(); return; }
   if (r.dataset?.bitFiltro) { bitFiltro[r.dataset.bitFiltro] = r.checked; pintar(); $(`[data-bit-filtro=${r.dataset.bitFiltro}]`)?.focus(); return; }
   if (r.dataset?.bit && r.closest('tr')?.dataset.sid) bitBorrador.set(r.closest('tr').dataset.sid, { ...bitBorrador.get(r.closest('tr').dataset.sid), [r.dataset.bit]: r.value });
   if (r.type === 'radio' && r.name.startsWith('lado:')) { const c = r.closest('.accion')?.querySelector('input[name=accion]'); if (c) c.checked = true; }
 });
 // Recuerda qué secciones abrió/cerró el usuario.
-document.addEventListener('toggle', (e) => { const k = e.target.dataset?.k; if (k) abiertos.set(k, e.target.open); }, true);
+document.addEventListener('toggle', (e) => { const k = e.target.dataset?.k; if (k && !filtrando) abiertos.set(k, e.target.open); }, true);
+
+// ---------- Crear proyecto y backlog (con vista previa; el servidor nunca sobrescribe) ----------
+let crear = null; // { tipo: 'proyecto'|'backlog', campos, previa, error, ocupado }
+const CAMPOS_PROY = [['id', 'Id', 'minúsculas, números y guiones'], ['nombre', 'Nombre', ''], ['repo', 'Carpeta del repo (opcional)', 'ruta absoluta o con ~'], ['docs', 'Carpeta de documentos (opcional)', 'donde vivirá el backlog; ruta absoluta o con ~']];
+function abrirCrear(tipo) {
+  crear = { tipo, campos: tipo === 'proyecto' ? { id: '', nombre: '', repo: '', docs: '' } : {}, previa: null, error: '', ocupado: false };
+  pintarCrear(); $('#panel-crear [data-crear-campo], #panel-crear button')?.focus();
+}
+function cerrarCrear() { const t = crear?.tipo; crear = null; pintarCrear(); document.querySelector(`[data-crear="${t}"]`)?.focus(); }
+function cuerpoCrear(previa) {
+  const c = crear.campos;
+  if (crear.tipo === 'backlog') return { proyecto: P.id, previa };
+  const lista = (t) => String(t || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return { id: c.id.trim(), nombre: c.nombre.trim(), repo: c.repo.trim() || undefined, docs: lista(c.docs).length ? lista(c.docs) : undefined, mtime: DATOS.configMtime ?? undefined, previa };
+}
+function pintarCrear() {
+  const el = $('#panel-crear'); if (!el) return;
+  if (!crear) { el.innerHTML = ''; return; }
+  const pr = crear.previa, proy = crear.tipo === 'proyecto';
+  el.innerHTML = `<form id="form-crear" class="tarjeta" aria-label="${proy ? 'Nuevo proyecto' : 'Crear backlog'}">
+    <h2><span>${proy ? 'Nuevo proyecto' : `Crear backlog de «${esc(P.nombre)}»`}</span></h2>
+    ${proy ? CAMPOS_PROY.map(([k, t, ayuda]) => `<label class="campo-fi" for="cr-${k}"><span>${t}</span><input id="cr-${k}" data-crear-campo="${k}" value="${esc(crear.campos[k])}" autocomplete="off" spellcheck="false"${k === 'id' ? ' required' : ''}>${ayuda ? `<small class="suave">${ayuda}</small>` : ''}</label>`).join('')
+      : '<p class="suave">Se crea <code>BACKLOG.md</code> con una plantilla mínima en la primera carpeta de documentos del proyecto. Nunca sobrescribe un archivo que ya exista.</p>'}
+    ${crear.error ? `<div class="integ-paso mal" role="alert">${esc(crear.error)}</div>` : ''}
+    ${pr ? (proy ? `<div class="integ-paso" role="status">Se añadirá a <code>${esc(pr.archivo)}</code>:<pre>${esc(JSON.stringify(pr.proyecto, null, 2))}</pre></div>`
+      : `<div class="integ-paso" role="status">Se creará <code>${esc(pr.ruta)}</code>:<pre>${esc(pr.contenido)}</pre></div>`) : ''}
+    <div class="pie">${pr ? `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>${proy ? 'Crear proyecto' : 'Crear backlog'}</button>` : `<button class="boton primario" type="submit"${crear.ocupado ? ' disabled' : ''}>Vista previa</button>`}<button class="boton" type="button" data-crear-cerrar>Cancelar</button></div>
+  </form>`;
+}
+async function enviarCrear() {
+  const c = crear; if (!c || c.ocupado) return;
+  const ruta = c.tipo === 'proyecto' ? '/api/proyectos/crear' : '/api/backlog/crear', previa = !c.previa;
+  c.ocupado = true; c.error = ''; pintarCrear();
+  try {
+    const r = await api(ruta, cuerpoCrear(previa));
+    if (previa) { c.previa = r; c.ocupado = false; pintarCrear(); $('#form-crear [type=submit]')?.focus(); return; }
+    crear = null; recargarDatos(r.datos); refrescarSelectorProyectos();
+    if (c.tipo === 'proyecto') { abrirProyecto(r.proyecto.id, 'backlogs'); avisar(`Proyecto «${r.proyecto.nombre}» creado.`); }
+    else {
+      sel.backlogs = r.archivo;
+      if (formInteg) { formInteg.cfg.backlog = r.archivo; formInteg.prueba = null; pintarF(); } // sigue el formulario de integración, con el archivo ya elegido
+      else { pestana = 'backlogs'; guardar('tablero.pestana', pestana); pintar(); }
+      avisar(`${r.archivo} creado.`);
+    }
+    pintarCrear();
+  } catch (e) {
+    c.ocupado = false; c.error = e.estado === 409 && c.tipo === 'proyecto' ? `${e.message} Recarga la página: proyectos.json cambió.` : e.message; c.previa = null; pintarCrear();
+  }
+}
+function refrescarSelectorProyectos() {
+  $('#proyecto').innerHTML = `<option value="todos">Todos los proyectos</option>` + DATOS.proyectos.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');
+  $('#proyecto').value = todos ? 'todos' : P.id;
+}
+const botonCrearBacklog = () => editable() ? '<p><button class="boton primario" type="button" data-crear="backlog">＋ Crear backlog</button></p>' : '';
+$('#nuevo-proyecto').hidden = !editable();
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-crear], [data-crear-cerrar]');
+  if (!b) return;
+  if ('crearCerrar' in b.dataset) cerrarCrear(); else abrirCrear(b.dataset.crear);
+});
+document.addEventListener('input', (e) => {
+  if (crear && e.target.dataset?.crearCampo) { crear.campos[e.target.dataset.crearCampo] = e.target.value; if (crear.previa) { crear.previa = null; pintarCrear(); const el = document.getElementById(e.target.id); el?.focus(); el?.setSelectionRange(el.value.length, el.value.length); } }
+});
+document.addEventListener('submit', (e) => { if (e.target.id === 'form-crear') { e.preventDefault(); enviarCrear(); } });
+document.addEventListener('keydown', (e) => { if (crear && e.key === 'Escape' && e.target.closest?.('#form-crear')) cerrarCrear(); });
 
 // ---------- Controles de cabecera ----------
 const TEMAS = [['auto', 'Auto'], ['light', 'Claro'], ['dark', 'Oscuro']];
@@ -1236,9 +1886,26 @@ $('#tema').addEventListener('change', (e) => {
   guardar('tablero.tema', e.target.value);
 });
 
-$('#proyecto').innerHTML = DATOS.proyectos.map((p, i) => `<option value="${i}">${esc(p.nombre)}</option>`).join('');
-$('#proyecto').addEventListener('change', (e) => { soltarEditor(); P = DATOS.proyectos[e.target.value]; sel = {}; ramaFoco = null; previas.clear(); pintar(); });
-P = DATOS.proyectos[0];
+// El proyecto activo se recuerda por id: #p=<id> en la URL manda sobre localStorage.
+const idEnHash = () => decodeURIComponent((location.hash.match(/[#&]p=([^&]*)/) || [])[1] || '');
+const buscarProyecto = (id) => DATOS.proyectos.find((p) => p.id === id);
+function recordarProyecto() {
+  const id = todos ? 'todos' : P.id;
+  guardar('tablero.proyecto', id);
+  try { history.replaceState(null, '', `#p=${encodeURIComponent(id)}`); } catch {}
+  $('#proyecto').value = id;
+}
+$('#proyecto').innerHTML = `<option value="todos">Todos los proyectos</option>` + DATOS.proyectos.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('');
+$('#proyecto').addEventListener('change', (e) => { soltarEditor(); todos = e.target.value === 'todos'; if (!todos) P = buscarProyecto(e.target.value); sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null; recordarProyecto(); pintar(); });
+window.addEventListener('hashchange', () => {
+  if (idEnHash() === 'todos') { if (!todos) { soltarEditor(); todos = true; recordarProyecto(); pintar(); } return; }
+  const p = buscarProyecto(idEnHash());
+  if (p && (p !== P || todos)) { soltarEditor(); todos = false; P = p; sel = {}; ramaFoco = null; previas.clear(); formInteg = null; quitandoInteg = null; recordarProyecto(); pintar(); }
+});
+const idInicial = idEnHash() || leer('tablero.proyecto') || 'todos';
+todos = idInicial === 'todos' || !buscarProyecto(idInicial);
+P = buscarProyecto(idInicial) || DATOS.proyectos[0];
+if (P) recordarProyecto();
 if (P) pintar(); else $('#contenido').innerHTML = '<div class="vacio">No hay proyectos en proyectos.json.</div>';
 </script>
 </body>

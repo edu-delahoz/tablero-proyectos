@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { leer, crear, actualizar, traducirError } from './trello.mjs'
+import { leer, crear, actualizar, listar, traducirError } from './trello.mjs'
 
 const R = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'integraciones', 'trello.json'), 'utf8'))
 const CFG = { id: 'trello', tipo: 'trello', tablero: 'AbCdEfGh' }
@@ -98,4 +98,20 @@ test('errores en español: 401, 404, timeout, red; ningún mensaje contiene key 
   assert.equal(mRed, 'Sin conexión con Trello.')
   for (const m of [m401, m404, mTime, mRed]) assert.ok(!/KEY-secreta|TOKEN-secreto|https?:/.test(m), m)
   assert.match(traducirError({ status: 500, cuerpo: 'boom' }), /respondió 500/)
+})
+
+test('listar: tableros abiertos del usuario y listas abiertas de un tablero', async () => {
+  const d = trello({
+    'GET members/me/boards': [{ id: 'id1', shortLink: 'AbCd', name: 'Uno', url: 'https://trello.com/b/AbCd' }, { id: 'id2', name: 'Dos', url: 'https://trello.com/b/id2' }],
+    'GET boards/B': { id: 'id1', name: 'Uno' }, 'GET boards/B/lists': [{ id: 'l1', name: 'Por hacer' }, { id: 'l2', name: 'Hecho' }],
+  })
+  const t = await listar({}, CRED, d)
+  assert.deepEqual(t.tableros.map((x) => [x.id, x.nombre]), [['AbCd', 'Uno'], ['id2', 'Dos']])
+  assert.equal(d.llamadas[0].query.filter, 'open')
+  const l = await listar({ tablero: 'AbCd' }, CRED, d)
+  assert.deepEqual([l.titulo, l.listas], ['Uno', ['Por hacer', 'Hecho']])
+})
+
+test('listar: 401 traducido sin filtrar key ni token', async () => {
+  await assert.rejects(listar({}, CRED, trello({ 'GET members/me/boards': res('no', 401) })), (e) => /Credencial inválida/.test(e.message) && !/KEY-secreta|TOKEN-secreto/.test(e.message))
 })

@@ -8,13 +8,18 @@ para Claude. Sin dependencias: solo Node.js.
 
 Cada proyecto tiene estas pestañas:
 
-- **Resumen**: avance global, «estás aquí» y pendientes más cercanos.
+- **Todos los proyectos** (primera opción del selector y vista por defecto; `#p=todos`): una tarjeta por proyecto con avance y «estás aquí», rama, PRs abiertos, notas y bitácora pendiente (enlazan a su pestaña) y costo de 7 días; totales globales arriba. Clic en la tarjeta abre su Resumen.
+- **Resumen**: arriba, la tarjeta **▶ En curso** (hito donde estás: mini gráfico de sesiones, avance, gasto de su rama, qué falta y el **prompt de la siguiente sesión** con «Copiar»; si el hito está completo sale «✓ completo»; con sub-sesiones `- **S3c — …**` en la tarea activa, «Falta · S3c — …» lista solo las casillas de la sub-sesión siguiente y el plan es el que mencione esa sub-sesión, la última hecha, o el de `~/.claude/plans` cuyo nombre lleve su clave y el backlog — «Plan (de S3)» si es de una anterior); debajo, avance global, «estás aquí» y pendientes más cercanos. «Todos los proyectos» muestra la misma tarjeta (compacta) del proyecto con actividad más reciente. Para enlazar el plan, pon en el hito una línea `Plan: ~/.claude/plans/x.md`; sus prompts de «Cómo ejecutarlo» (etiqueta «**S7 — Sonnet.** Prompt:») salen en la tarjeta.
 - **Backlogs**: mapa de hitos y sesiones con casillas `[ ]`/`[x]`, avance por sección y subtareas anidadas.
-- **Planes**: los planes de `~/.claude/plans` relacionados con el proyecto, con su esquema.
+  Un campo de búsqueda filtra sesiones y tareas (abre las que coinciden y cuenta las coincidencias); la
+  estrella ☆/★ de cada sesión `S…` la marca como favorita y «★ Solo favoritas» filtra por ellas. El Resumen
+  lista las favoritas.
+- **Planes**: los planes de `~/.claude/plans` relacionados con el proyecto, con su esquema; el campo de
+  búsqueda filtra la lista (título y contenido) y las secciones del plan abierto.
 - **Historial**: qué casillas cambiaron entre una generación y la siguiente.
 - **GitHub**: ramas, grafo de ramas y pull requests (requiere `gh`).
 - **Notas**: notas abiertas para Claude, que ve al iniciar cada sesión.
-- **Bitácora** (solo con el campo `bitacora`): totales (sesiones, costo, duración, % con contexto 🔴),
+- **Bitácora** (solo con el campo `bitacora`): bloque «Gastos» (SVG en línea: costo por día/semana/mes, por feature/rama y por modelo; sigue el filtro «todas», con tabla y tooltip), totales (sesiones, costo, duración, % con contexto 🔴),
   la tabla de sesiones del proyecto (casilla para ver todas y para «solo pendientes»), resumen semanal y
   lecciones. Con el servidor local, las filas `_pendiente_` se completan ahí mismo (Calidad, Seguridad,
   Notas → Guardar; Enter también guarda) y la barra de estado avisa «✎ N filas de bitácora pendientes».
@@ -71,15 +76,41 @@ En `~/.claude/settings.json` (ajusta la ruta):
 `Stop` regenera el tablero al terminar cada respuesta; `SessionStart` entrega a
 Claude el estado del backlog y las notas abiertas, y regenera en segundo plano.
 
+### Backlog obligatoriamente al día (`coherencia.mjs` + `verificar_backlog.mjs`)
+
+Casillas: `[x]` hecho · `[ ]` pendiente · `[~]` a medias (cuenta como pendiente) · `[-]` movido o
+descartado, con nota («→ S5b»). Se detectan dos desajustes: **sesión con PR mergeado y casillas
+abiertas**, y **sub-backlog `BACKLOG_Hn` ↔ hito «## Hn» del padre** (hijo completo con padre abierto,
+o padre cerrado con hijo abierto).
+
+- `SessionStart` (`--hook-inicio`) los muestra como «⚠️ BACKLOG DESACTUALIZADO» para que la sesión
+  los corrija antes de empezar (también cubre los merges hechos desde la web de GitHub).
+- `PreToolUse` sobre Bash bloquea `gh pr create` (casillas de trabajo abiertas o «Resultado» vacío en las
+  secciones de esa rama; tolera las de PR/commit/CI) y `gh pr merge` (cualquier casilla abierta):
+
+```json
+"PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "node \"$HOME/ruta/tablero/verificar_backlog.mjs\" --hook", "timeout": 15 }] }]
+```
+
+- A mano: `node verificar_backlog.mjs <carpeta del repo>` (exit 1 si hay desajustes).
+
 ## Servidor local
 
 ```sh
 node generar.mjs --servir   # http://127.0.0.1:47321
 node generar.mjs --abrir    # regenera y abre el navegador (arranca el servidor si hace falta)
+node generar.mjs --asegurar-servidor   # regenera; arranca el servidor si no corre o lo recicla si su código es viejo (hook SessionStart)
 ```
 
 Con servidor se pueden marcar casillas y añadir notas desde el navegador; abierto
 como `file://` el tablero es de solo lectura.
+
+El servidor registra arranques, salidas y errores en `datos/servidor.log` (se recorta a ~200 KB); un error
+en una petición no lo tumba, y se cierra solo tras 6 h sin uso (queda anotado en el log). Cada sesión de Claude
+lo revive vía `--asegurar-servidor`. El servidor guarda al arrancar la huella de su código (mtimes de `generar.mjs`,
+`plantilla.html`, `bitacora.mjs`, `coherencia.mjs`, visible en `/api/version`): cada ~30 s la compara con el disco y,
+si cambió, se relanza solo («reinicio por código nuevo» en el log). `--asegurar-servidor` hace lo mismo al momento
+(`POST /api/salir`, solo desde 127.0.0.1; si un servidor viejo no lo entiende, SIGTERM al pid que escucha).
 
 **Actualización en vivo.** Con servidor, el tablero sondea `GET /api/version` cada ~3 s (una huella
 de mtimes de backlogs, planes de `~/.claude/plans`, notas, `.git/HEAD` y `.git/refs`; no lee contenido)
@@ -97,7 +128,33 @@ línea; notas vacías conservan las que puso el hook; `|` se escapa como `\|`). 
 cargada (`datos.proyectos[i].bitacora.hash`): si el archivo cambió —p. ej. cerró otra sesión y el hook
 añadió su fila— responde 409. Solo acepta la ruta declarada en `bitacora`.
 
+**Favoritos.** `POST /api/favoritos` `{ titulo, favorito }` (booleano) añade o quita una sesión de
+`datos/favoritos.json` (`{ "favoritos": ["S1 — Título", …] }`, ignorado por git). La clave es el **título**
+de la sesión sin marcas de markdown, no su id posicional, así que sobrevive a reordenar el backlog; si se
+renombra la sesión, deja de ser favorita. Solo escribe ese archivo (nunca un `.md`) y los títulos se
+comparan en todos los proyectos. Sin servidor las estrellas se ven pero no se pueden cambiar.
+
+**Crear proyecto.** `POST /api/proyectos/crear` `{ id, nombre, repo?, docs?, mtime }` añade una entrada al
+final de `proyectos.json` (el resto queda igual). `id` en `[a-z0-9-]` y único; `repo` y `docs` (texto o
+lista) deben ser carpetas que existan, absolutas o con `~`. `mtime` es `datos.configMtime`: si el archivo
+cambió responde 409. Con `previa: true` devuelve la entrada sin escribir. Solo desde esta máquina.
+
+**Crear backlog.** `POST /api/backlog/crear` `{ proyecto, archivo?, carpeta? }` crea `archivo`
+(por defecto `BACKLOG.md`) con una plantilla mínima (título, `## Estado`, `## S1` con una casilla) en la
+primera carpeta `docs` del proyecto, o en `carpeta` si es una de ellas. Nunca sobrescribe (existe → 409);
+el nombre es simple (sin `/` ni `..`), termina en `.md` y debe cumplir `patronBacklogs`. Sin `docs` → 400.
+Con `previa: true` devuelve el contenido sin escribir.
+
 ## Conectores y credenciales
+
+**Lo normal es hacerlo desde la vista.** Con el tablero abierto con el servidor local (Tablero.app o
+`node generar.mjs --abrir`), la pestaña **Integraciones** tiene «+ Añadir integración»: eliges el conector,
+pegas la credencial (se guarda con permisos 600 y nunca vuelve a mostrarse; solo «guardada · …ab12»),
+eliges el Project/tablero/proyecto y las columnas en desplegables, pruebas la conexión y guardas. Cada
+tarjeta tiene «Editar» y «Quitar» (solo modifican el bloque de la integración en `proyectos.json`; no se
+borra nada en el backlog ni en la herramienta externa, y cambiar el id deja huérfanas las marcas antiguas).
+Como archivo suelto, sin servidor, esos botones están deshabilitados. **A mano** sigue valiendo: es lo
+que la vista escribe.
 
 Cada proyecto puede declarar `integraciones` en `proyectos.json`. Se sincronizan las casillas **de
 primer nivel** del backlog indicado: el título afuera es el texto plano de la casilla, la sección
@@ -115,15 +172,25 @@ afuera).
 |---|---|
 | `id` | Nombre corto; es el prefijo de la marca en el `.md` (`<!-- gh:… -->`) y de `## Entrante (gh)` |
 | `tipo` | `github-projects`, `trello` o `azure-devops` |
-| `backlog` | Archivo (dentro de `docs`) cuyas casillas se sincronizan |
-| `auto` | `true`: al regenerar se aplica todo lo que no sea conflicto, sin vista previa |
+| `modo` | `sincronizar` (por defecto) o `lectura`: solo muestra lo de afuera; nunca escribe ni afuera ni en un `.md`, `backlog` es opcional y `auto` no se admite |
+| `backlog` | Archivo (dentro de `docs`) cuyas casillas se sincronizan (obligatorio salvo en `modo: "lectura"`) |
+| `auto` | `true`: al regenerar se aplica todo lo que no sea conflicto, sin vista previa. La **primera** sincronía (sin `datos/sync-…`) nunca es automática: hay que hacerla desde la vista previa |
 | `propietario`, `numero` | GitHub Projects: usuario u organización y número del Project (`github.com/users/<propietario>/projects/<numero>`) |
 | `campoEstado`, `columnas` | GitHub Projects, opcionales: campo de selección (por defecto `Status`) y opciones `{ "pendiente": "Todo", "hecho": "Done" }` |
 | `campoSeccion` | GitHub Projects, opcional: campo de **texto** donde va la sección (por defecto `Sección`; si no existe, no se envía) |
 | `tablero` | Trello: id del tablero (el código de la URL `trello.com/b/<id>/…`, o el `id` que devuelve añadir `.json` a esa URL) |
-| `organizacion`, `proyecto`, `tipoItem` | Azure DevOps: `dev.azure.com/<organizacion>/<proyecto>`; `tipoItem` es el tipo de work item (por defecto `Task`) |
+| `organizacion`, `proyecto`, `tipoItem` | Azure DevOps: `dev.azure.com/<organizacion>/<proyecto>`; en `organizacion` vale el nombre o la URL pegada (`https://dev.azure.com/Org/Proyecto/…`, `Org.visualstudio.com`), y se guarda solo el nombre. `tipoItem` es el tipo de work item: texto (por defecto `Task`), lista (`["Task", "Bug"]`, hasta 10; al crear se usa el primero) o `"*"` (todos, solo en `modo: "lectura"`). Cada ítem trae `tipo`, `asignado` y `mio` (asignado a quien es dueño del PAT) |
 | `columnas` (Trello) | Nombres de lista: `hecho` (por defecto «Hecho» o «Done») y `pendiente` (por defecto «Por hacer», «To Do» o la primera lista distinta de hecho). La sección se envía como etiqueta de la tarjeta |
 | `columnas` (Azure DevOps) | Estados: `hecho` (por defecto `Done`, `Closed`, `Completed`) y `pendiente` (por defecto `To Do`, `New`); admiten texto o lista. La sección se envía como tag |
+
+**Solo lectura (proyecto sin backlog).** Para ver el backlog de un equipo ajeno sin tocarlo, sin
+carpeta `docs` ni `repo` (si «sincronizara», crearía un work item por cada casilla de un backlog ajeno):
+
+```json
+{ "id": "eap10", "nombre": "EAP10",
+  "integraciones": [{ "id": "ado", "tipo": "azure-devops", "modo": "lectura",
+    "organizacion": "CodeFactory2026-2", "proyecto": "EAP10", "tipoItem": "*" }] }
+```
 
 **Cómo funciona la sincronía.** El vínculo casilla ↔ tarjeta es un comentario al final de la línea,
 invisible en el Markdown renderizado: `- [ ] Probar el login <!-- gh:PVTI_… -->` (puede haber varias

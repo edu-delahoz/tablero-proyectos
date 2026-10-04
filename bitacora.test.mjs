@@ -5,7 +5,7 @@ import { readFileSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parsearBitacora, editarFila, sidsPorProyecto, asociar, escaparCelda, desescaparCelda, celdas, analizarContexto, ErrorBitacora } from './bitacora.mjs'
+import { parsearBitacora, editarFila, sidsPorProyecto, asociar, escaparCelda, desescaparCelda, celdas, analizarContexto, agregar, semanaISO, normalizarModelo, ramaDeTranscripcion, ErrorBitacora } from './bitacora.mjs'
 
 const BIT = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'BITACORA.md'), 'utf8')
 const lineasDistintas = (a, b) => { const x = a.split('\n'), y = b.split('\n'); assert.equal(x.length, y.length); return x.flatMap((l, i) => l === y[i] ? [] : [i]) }
@@ -101,4 +101,48 @@ test('editarFila: valida valores y sesiones', () => {
   mal({ ...ok, sid: 'eeee5555' }, 404, /No hay una fila/)
   const doble = BIT.replace('| | | | | | | | | | |', '| 2026-10-05 | Repetida (aaaa1111) | auto | Opus | ~1 min | $0.1 | ctx 1k→2k 🟢 | _pendiente_ | _pendiente_ | clear |\n| | | | | | | | | | |')
   assert.throws(() => editarFila(doble, ok), (x) => x.estado === 409)
+})
+
+test('rama por sesión: primer gitBranch no vacío en las primeras líneas; sin rama → null', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tablero-tr-'))
+  const crear = (carpeta, sid, lineas) => { mkdirSync(join(dir, carpeta), { recursive: true }); writeFileSync(join(dir, carpeta, `${sid}-0000.jsonl`), lineas.join('\n')) }
+  crear('-Users-x-t', 'bbbb2222', ['{"type":"summary"}', '{"gitBranch":"","type":"user"}', '{"type":"user","gitBranch":"notas-tablero"}', '{"gitBranch":"otra"}'])
+  crear('-Users-x-t', 'cccc3333', ['{"type":"user"}'])
+  crear('-Users-x-t', 'dddd4444', ['{"gitBranch":"main"}'])
+  const rutas = new Map()
+  const mapa = sidsPorProyecto([{ id: 't', transcripciones: '-Users-x-t' }], dir, rutas)
+  const b = asociar(parsearBitacora(BIT), mapa, rutas)
+  assert.deepEqual(b.registro.map((f) => f.rama), [null, null, null, 'notas-tablero', null, 'main'])
+  assert.equal(ramaDeTranscripcion(join(dir, 'no-existe.jsonl')), null)
+  assert.equal(ramaDeTranscripcion(rutas.get('bbbb2222')), 'notas-tablero')
+})
+
+test('semanaISO y normalizarModelo', () => {
+  assert.equal(semanaISO('2026-10-04'), '2026-W40')
+  assert.equal(semanaISO('2026-01-01'), '2026-W01')
+  assert.equal(semanaISO('2027-01-01'), '2026-W53')
+  assert.equal(semanaISO('2024-12-30'), '2025-W01')
+  assert.equal(normalizarModelo('Opus 5.5'), 'Opus')
+  assert.equal(normalizarModelo('Sonnet 5.5'), 'Sonnet')
+  assert.equal(normalizarModelo('Haiku 4.5'), 'Haiku')
+  assert.equal(normalizarModelo('Opus'), 'Opus')
+  assert.equal(normalizarModelo('?'), '?')
+  assert.equal(normalizarModelo(''), null)
+})
+
+test('agregar: por día/semana/mes/rama/modelo; excluye costos «?» y fechas incompletas y los cuenta', () => {
+  const reg = parsearBitacora(BIT).registro.map((f, i) => ({ ...f, rama: [null, null, 'a', 'b', 'a', null][i] }))
+  const dia = agregar(reg, { por: 'dia' })
+  assert.deepEqual(dia.grupos, [
+    { clave: '2026-10-02', costo: 0.9, minutos: 70, sesiones: 1 },
+    { clave: '2026-10-04', costo: 5.43, minutos: 41, sesiones: 4 },
+  ])
+  assert.equal(dia.excluidas, 1) // «2026-10-0?» y costo «?»
+  assert.deepEqual(agregar(reg, { por: 'semana' }).grupos.map((g) => [g.clave, g.costo, g.sesiones]), [['2026-W40', 6.33, 5]])
+  assert.deepEqual(agregar(reg, { por: 'mes' }).grupos.map((g) => [g.clave, g.sesiones]), [['2026-10', 5]])
+  const rama = agregar(reg, { por: 'rama' })
+  assert.deepEqual(rama.grupos.map((g) => [g.clave, g.costo, g.sesiones]), [['a', 2.1, 2], ['b', 2.05, 1]])
+  assert.equal(rama.excluidas, 3)
+  assert.deepEqual(agregar(reg, { por: 'modelo' }).grupos.map((g) => [g.clave, g.costo, g.sesiones]), [['Opus', 4.23, 3], ['Sonnet', 2.1, 2]])
+  assert.throws(() => agregar(reg, { por: 'x' }))
 })
