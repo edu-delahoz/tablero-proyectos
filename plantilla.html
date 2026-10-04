@@ -397,6 +397,27 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
 .boton::before { content: "› "; color: var(--acento); }
 .seg .bloque { font-size: 1.15em; letter-spacing: -1px; }
 
+/* ---------- Tablero (kanban) ---------- */
+.k-franja { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--borde); background: var(--panel); overflow-wrap: anywhere; }
+.k-franja.viva { border-color: var(--ok); }
+.k-franja .punto { color: var(--ok); }
+.k-filtros { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 12px; }
+.k-cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.k-col { border: 1px solid var(--borde); background: var(--panel); min-height: 120px; padding: 8px; }
+.k-col.sobre { outline: 2px dashed var(--acento); }
+.k-col > h3 { margin: 0 0 8px; font-size: 1em; display: flex; justify-content: space-between; gap: 8px; }
+.k-tarjeta { border: 1px solid var(--borde); background: var(--fondo); padding: 6px 8px; margin: 0 0 8px; cursor: grab; overflow-wrap: anywhere; }
+.k-tarjeta.externa { border-left: 3px solid var(--azul); cursor: default; }
+.k-tarjeta.hecha .k-texto { color: var(--suave); }
+.k-tarjeta.guardando { opacity: .55; }
+.k-pie { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-top: 4px; font-size: .85em; }
+.k-pie select { font: inherit; max-width: 100%; }
+.k-etq { padding: 0 5px; border: 1px solid var(--borde); font: .8em/1.5 var(--mono); color: var(--suave); }
+@media (max-width: 700px) {
+  .k-cols { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; padding-bottom: 6px; }
+  .k-col { flex: 0 0 86%; scroll-snap-align: start; }
+  .k-tarjeta:not(.abierta) .k-texto { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+}
 @media (max-width: 600px) {
   header, main, nav#pestanas { padding-left: 16px; padding-right: 16px; }
   .avance .progreso { width: 60px; }
@@ -503,7 +524,7 @@ const botonEditar = (ruta) => editable()
 const acciones = (ruta) => `${botonEditar(ruta)}${enVSCode(ruta)}`;
 
 const PESTANAS = [
-  ['resumen', 'Resumen'], ['backlogs', 'Backlogs'], ['planes', 'Planes'],
+  ['resumen', 'Resumen'], ['tablero', 'Tablero'], ['backlogs', 'Backlogs'], ['planes', 'Planes'],
   ['historial', 'Historial'], ['github', 'GitHub'], ['notas', 'Notas'], ['bitacora', 'Bitácora'], ['integraciones', 'Integraciones'],
 ];
 const porSincronizar = () => (P.integraciones || []).reduce((a, x) => a + (x.pendientes || 0), 0);
@@ -1472,7 +1493,127 @@ function tarjetaGuia(p) {
 }
 const botonEditarProyecto = () => editable() ? '<p><button class="boton" type="button" data-crear="editar">Editar proyecto</button></p>' : '';
 
+// ---------- Pestaña «Tablero» (kanban) ----------
+const KCOLS = [['por-hacer', 'Por hacer'], ['en-curso', 'En curso'], ['en-prueba', 'En prueba'], ['hecho', 'Hecho']];
+const KMARCA = { 'por-hacer': ' ', 'en-curso': '~', hecho: 'x' };
+const kf = { hito: '', backlog: '', movidas: false };
+const kLocal = new Map(); // «archivo:linea» → estado puesto por el usuario mientras se guarda
+let kSesiones = null, kColumnas = null, kArrastre = null;
+const kClave = (c) => `${c.archivo}:${c.linea}`;
+const haceSeg = (iso) => { const s = Math.max(1, Math.round((Date.now() - new Date(iso)) / 1000)); return s < 60 ? `hace ${s} s` : hace(iso); };
+const kSesionesP = () => (kSesiones || DATOS.sesiones || {})[P.id] || [];
+function estadoItemExterno(x) {
+  if (x.hecha) return 'hecho';
+  const c = String(x.columna || '');
+  return /prueba|test|review|revisi|resolved|qa/i.test(c) ? 'en-prueba' : /progress|active|doing|curso|desarrollo/i.test(c) ? 'en-curso' : 'por-hacer';
+}
+function tarjetasKanban() {
+  const cols = new Map();
+  for (const c of kColumnas?.[P.id] || []) cols.set(kClave(c), c.estado);
+  const usadas = new Set();
+  const locales = (P.kanban || []).map((c) => {
+    for (const [k, id] of Object.entries(c.marcas || {})) usadas.add(`${k}:${id}`);
+    const b = P.backlogs.find((x) => x.archivo === c.archivo);
+    const sec = b && aplanar(b.estructura || []).find((x) => x.id === c.seccion);
+    return { ...c, estado: kLocal.get(kClave(c)) || cols.get(kClave(c)) || c.estado, sec };
+  });
+  const ext = (P.integraciones || []).filter((i) => i.estado === 'conectado').flatMap((i) => {
+    const xs = (i.items || []).filter((x) => !usadas.has(`${i.id}:${x.id}`));
+    const hechos = xs.filter((x) => x.hecha).sort((a, b) => String(b.actualizado).localeCompare(String(a.actualizado))).slice(0, 15);
+    return [...xs.filter((x) => !x.hecha), ...hechos].map((x) => ({ externa: true, texto: x.titulo, hecha: x.hecha, estado: estadoItemExterno(x), integ: i, item: x }));
+  });
+  return [...locales, ...ext];
+}
+function franjaKanban() {
+  const ses = kSesionesP(), viva = ses.find((s) => s.activa);
+  if (viva) return `<div class="k-franja viva" id="k-franja" role="status"><span class="punto">●</span> Claude está trabajando en “${esc(corto(viva.titulo || 'sin título', 70))}”${viva.rama ? ` · rama ${esc(viva.rama)}` : ''}${viva.archivos?.[0] ? ` · tocando <code>${esc(viva.archivos[0].split('/').pop())}</code>` : ''} · ${haceSeg(viva.ultimo)}</div>`;
+  const ult = ses[0];
+  return `<div class="k-franja" id="k-franja" role="status"><span class="suave">◌ sin sesión activa${ult ? `; última: ${hace(ult.ultimo)}` : ''}</span></div>`;
+}
+function tarjetaKanban(c) {
+  if (c.externa) {
+    const pie = `${c.item.tipo ? `<span class="k-etq">${esc(c.item.tipo)}</span>` : ''}<span class="k-etq">${esc(c.integ.nombre || c.integ.id)}</span>${c.item.asignado ? `<span class="k-etq">${esc(c.item.asignado)}</span>` : ''}`;
+    return `<div class="k-tarjeta externa${c.hecha ? ' hecha' : ''}" title="Solo lectura: cambiar el estado desde aquí llega con el modo «participar»"><span class="k-texto">${c.item.url ? `<a href="${esc(c.item.url)}" target="_blank" rel="noopener">${esc(c.texto)} ↗</a>` : esc(c.texto)}</span><div class="k-pie">${pie}</div></div>`;
+  }
+  const clave = [c.hito, c.clave].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' › ');
+  const k = esc(kClave(c)), ed = editable() && c.estado !== 'movida';
+  const destinos = ed ? `<select data-mover="${k}" aria-label="Mover a…"><option value="">Mover a…</option>${KCOLS.filter(([e]) => e !== 'en-prueba' && e !== c.estado).map(([e, t]) => `<option value="${e}">${t}</option>`).join('')}</select>` : '';
+  return `<div class="k-tarjeta${c.hecha ? ' hecha' : ''}${kLocal.has(kClave(c)) ? ' guardando' : ''}" data-k-tarjeta="${k}"${ed ? ' draggable="true"' : ''}${c.estado === 'en-prueba' ? ' title="En prueba es derivada: la tarjeta está hecha y su rama tiene un PR abierto o commits sin fusionar"' : ''}>
+    <span class="k-texto"${c.texto.length > 160 ? ` title="${esc(plano(c.texto))}"` : ''}>${inline(corto(c.texto, 160))}${chipsExternos(c.marcas)}</span>
+    <div class="k-pie">${clave ? `<span class="k-etq">${esc(clave)}</span>` : ''}${c.sub ? `<span class="k-etq">${c.sub.hechas}/${c.sub.total}</span>` : ''}${c.sec ? estrella(c.sec) : ''}${destinos}</div></div>`;
+}
+function vistaKanban() {
+  const todas = tarjetasKanban();
+  if (!todas.length) return '<div class="vacio">Este proyecto aún no tiene tareas para mostrar como tablero.</div>';
+  const hitos = [...new Set(todas.map((c) => c.hito).filter(Boolean))], backs = [...new Set(todas.map((c) => c.archivo).filter(Boolean))];
+  const visibles = todas.filter((c) => (!kf.hito || c.hito === kf.hito) && (!kf.backlog || c.archivo === kf.backlog) && (kf.movidas || c.estado !== 'movida'));
+  const nMov = todas.filter((c) => c.estado === 'movida').length;
+  const col = ([e, t]) => { const xs = visibles.filter((c) => c.estado === e); return `<section class="k-col" data-kanban-col="${e}" aria-label="${t}"><h3><span>${t}</span><span class="suave">${xs.length}</span></h3>${xs.map(tarjetaKanban).join('') || '<div class="suave">—</div>'}</section>`; };
+  const movidas = visibles.filter((c) => c.estado === 'movida');
+  return `${franjaKanban()}<div class="k-filtros">
+    ${hitos.length > 1 ? `<label>Hito <select data-k-filtro="hito"><option value="">Todos</option>${hitos.map((h) => `<option${kf.hito === h ? ' selected' : ''}>${esc(h)}</option>`).join('')}</select></label>` : ''}
+    ${backs.length > 1 ? `<label>Backlog <select data-k-filtro="backlog"><option value="">Todos</option>${backs.map((h) => `<option${kf.backlog === h ? ' selected' : ''}>${esc(h)}</option>`).join('')}</select></label>` : ''}
+    ${nMov ? `<label><input type="checkbox" data-k-filtro="movidas"${kf.movidas ? ' checked' : ''}> ver movidas (${nMov})</label>` : ''}
+    <span class="suave">${editable() ? 'Arrastra una tarjeta o usa «Mover a…».' : 'Abre el tablero con el servidor para mover tarjetas.'}</span></div>
+  <div class="k-cols">${KCOLS.map(col).join('')}</div>
+  ${kf.movidas && movidas.length ? `<h3>Movidas</h3>${movidas.map(tarjetaKanban).join('')}` : ''}`;
+}
+async function moverTarjeta(clave, destino) {
+  const c = tarjetasKanban().find((x) => !x.externa && kClave(x) === clave);
+  if (!c || c.estado === destino) return;
+  if (destino === 'en-prueba') return avisar('«En prueba» es derivada: sale de que la tarjeta esté hecha y su rama tenga un PR abierto o commits sin fusionar.', true);
+  if (!(destino in KMARCA)) return;
+  const b = P.backlogs.find((x) => x.archivo === c.archivo);
+  const lineas = (b?.contenido ?? '').split('\n');
+  if (!b || !/\[[ xX~-]\]/.test(lineas[c.linea] ?? '')) return avisar('No encontré esa casilla en el archivo; recarga el tablero.', true);
+  lineas[c.linea] = lineas[c.linea].replace(/\[[ xX~-]\]/, `[${KMARCA[destino]}]`);
+  kLocal.set(clave, destino); pintar();
+  try {
+    const r = await api('/api/guardar', { ruta: b.ruta, contenido: lineas.join('\n'), previo: b.contenido });
+    kLocal.delete(clave); recargarDatos(r.datos); pintar(); avisar('Tarjeta movida.');
+  } catch (e) {
+    kLocal.delete(clave); pintar();
+    avisar(e.estado === 409 ? `${e.message} Recarga el tablero y vuelve a intentarlo.` : `No se pudo mover: ${e.message}`, true);
+  }
+}
+document.addEventListener('dragstart', (e) => { const t = e.target.closest?.('[data-k-tarjeta]'); if (t) { kArrastre = t.dataset.kTarjeta; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', kArrastre); } });
+document.addEventListener('dragend', () => { kArrastre = null; document.querySelectorAll('.k-col.sobre').forEach((x) => x.classList.remove('sobre')); });
+document.addEventListener('dragover', (e) => { const c = e.target.closest?.('[data-kanban-col]'); if (c && kArrastre) { e.preventDefault(); c.classList.add('sobre'); } });
+document.addEventListener('dragleave', (e) => e.target.closest?.('[data-kanban-col]')?.classList.remove('sobre'));
+document.addEventListener('drop', (e) => { const c = e.target.closest?.('[data-kanban-col]'); if (c && kArrastre) { e.preventDefault(); const k = kArrastre; kArrastre = null; moverTarjeta(k, c.dataset.kanbanCol); } });
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.dataset?.mover) { const d = t.value; t.value = ''; if (d) moverTarjeta(t.dataset.mover, d); return; }
+  const f = t.dataset?.kFiltro;
+  if (f) { kf[f] = f === 'movidas' ? t.checked : t.value; if (f === 'hito') sel.tablero = t.value; pintar(); }
+});
+document.addEventListener('click', (e) => {
+  const t = e.target.closest?.('.k-tarjeta');
+  if (t && !e.target.closest('a, button, select')) t.classList.toggle('abierta');
+});
+// Sondeo propio (5 s, solo en esta pestaña y con la página visible): no entra en la huella de /api/version.
+if (editable()) {
+  let ocupado = false;
+  const sondearSesiones = async () => {
+    if (ocupado || document.hidden || todos || pestana !== 'tablero' || kArrastre || kLocal.size) return;
+    ocupado = true;
+    try {
+      const r = await (await fetch('/api/sesiones', { cache: 'no-store' })).json();
+      const antes = JSON.stringify(kColumnas?.[P.id] || null), antesF = $('#k-franja')?.outerHTML;
+      kSesiones = r.sesiones; kColumnas = r.columnas;
+      const hay = document.querySelector('#contenido select:focus, #contenido input:focus');
+      if (!hay && pestana === 'tablero') {
+        if (antes !== JSON.stringify(kColumnas[P.id] || null) && kColumnas[P.id]) pintar();
+        else if (antesF && $('#k-franja')) $('#k-franja').outerHTML = franjaKanban();
+      }
+    } catch {} finally { ocupado = false; }
+  };
+  setInterval(sondearSesiones, 5000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) sondearSesiones(); });
+}
+
 const VISTAS = {
+  tablero: vistaKanban,
   resumen() {
     const bl = P.backlogs.filter((b) => !b.esPlan);
     const g = P.git;
@@ -1719,6 +1860,7 @@ function vistaTodos() {
         ${r.g?.rama ? `<span class="etq" title="Rama actual">⎇ ${esc(r.g.rama)}</span>` : ''}
         ${r.sinPush ? `<span class="etq DRAFT">↑ ${r.sinPush} sin subir</span>` : ''}
         ${r.g ? ir(r, 'github', `⊙ ${r.prs} PR abiertos`) : ''}
+        ${(r.p.kanban || []).length ? ir(r, 'tablero', '▦ Tablero') : ''}
         ${ir(r, 'notas', `✉ ${r.notas} nota${r.notas === 1 ? '' : 's'}`)}
         ${r.p.bitacora ? ir(r, 'bitacora', `✎ ${r.bit} pendiente${r.bit === 1 ? '' : 's'}`) : ''}
         <span class="suave" title="Costo de los últimos 7 días (bitácora)">${usd(r.costo7)} · 7 d</span>

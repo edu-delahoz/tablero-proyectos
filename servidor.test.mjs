@@ -492,6 +492,11 @@ test('vista: la plantilla trae la tarjeta «Para retomar» y «Qué se busca» e
   for (const marca of ['function tarjetaRetomar', 'Para retomar', 'Qué se busca', 'data-retomar', 'tablero.retomar.', 'Copiar prompt de la siguiente sesión', 'Detalle técnico', 'Nadie dejó un resumen', 'hito.historia', 'plan.contexto', 'function estadoSinRetomar']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
 })
 
+test('vista: la plantilla trae la pestaña «Tablero» (kanban), la franja de Claude y «Mover a»', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ["['tablero', 'Tablero']", 'function vistaKanban', "'/api/sesiones'", 'data-kanban-col', 'Claude está trabajando', 'Mover a', 'scroll-snap', 'sin sesión activa', 'data-mover', 'draggable', 'derivada']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
 test('crear proyecto: previa sin escribir, id inválido o duplicado y rutas inexistentes → 400, mtime viejo → 409', async () => {
   const docsNuevo = join(dir, 'docs-nuevo')
   mkdirSync(docsNuevo)
