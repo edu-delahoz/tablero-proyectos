@@ -40,6 +40,25 @@ Cada proyecto tiene estas pestañas:
   <para qué>.» Es el «Qué se busca» de la tarjeta En curso (`historia`); si falta, el primer párrafo bajo el
   título (`descripcion`) o el primer párrafo de `## Context` del plan (`contexto`).
 
+### Tablero (kanban)
+
+Cada casilla de primer nivel del backlog es una tarjeta (`p.kanban`, con `archivo`, `linea`, `seccion`, `clave`,
+`hito` y `sub` con el avance de sus hijas). Columnas y de dónde sale cada una:
+
+- **Por hacer**: `- [ ]`.
+- **En curso**: `- [~]` (puesta a mano), o una sesión de Claude activa (`.jsonl` tocado hace < 5 min) que trabaja
+  ese backlog (lo nombra en un prompt o editó su archivo) y esa sección: por la clave (`S3c`, `H2`) que nombran
+  sus prompts o, si no nombran ninguna, por el frente activo del backlog.
+- **En prueba**: `- [x]` cuya rama (la del título de la sección, la del hito o «Rama \`x\`» bajo el título del
+  hito) tiene un PR abierto o no está fusionada en la principal (`origin/HEAD`, si no `main`).
+- **Hecho**: `- [x]` sin nada de lo anterior. `- [-]` = movida (fuera de los conteos y de las columnas normales).
+
+`GET /api/sesiones` → `{ sesiones: { [proyecto]: [{ sid, titulo, rama, inicio, ultimo, activa, archivos,
+ultimoPrompt, foco }] }, columnas: { [proyecto]: [{ archivo, linea, texto, estado }] } }`. Es barato a propósito
+(la vista lo sondea cada 5 s): solo los `.jsonl` de las últimas 24 h, de cada uno 64 KB de cabeza y 64 KB de cola,
+con caché por mtime y tamaño, y las columnas se recalculan sobre los datos ya construidos. La actividad de Claude
+**no entra** en la huella de `/api/version`. Sin servidor (`file://`) las mismas sesiones viajan en `datos.sesiones`.
+
 ## Instalación
 
 Requisitos: Node.js ≥ 20. Opcional: [`gh`](https://cli.github.com) autenticado para la pestaña GitHub.

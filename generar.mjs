@@ -196,16 +196,17 @@ export function importarBacklog(nombre, integracion, items, columnas, fecha, sol
 // ---------- Backlogs ----------
 function contarCasillas(texto) {
   const hechas = (texto.match(/^\s*[-*] \[x\]/gim) || []).length
-  const pendientes = (texto.match(/^\s*[-*] \[ \]/gm) || []).length
+  const pendientes = (texto.match(/^\s*[-*] \[[ ~]\]/gm) || []).length
   return { hechas, total: hechas + pendientes }
 }
 
 // ---------- Estructura (vista «Mapa»): secciones ##/### con sus casillas anidadas ----------
 const RE_TITULO = /^(#{2,3})\s+(.+?)\s*#*\s*$/
-const RE_TAREA = /^(\s*)[-*] \[([ xX])\]\s?(.*)$/
+// «[~]» = en curso a mano (cuenta como pendiente); «[-]» = movida (fuera de los conteos).
+const RE_TAREA = /^(\s*)[-*] \[([ xX~-])\]\s?(.*)$/
 const RE_CERCA = /^\s*(```|~~~)/
 const RE_COMO = /c[oó]mo ejecutarlo/i
-const RE_ITEM = /^ ?(\d+[.)]|[-*])\s+(?!\[[ xX]\])(.+)$/
+const RE_ITEM = /^ ?(\d+[.)]|[-*])\s+(?!\[[ xX~-]\])(.+)$/
 const RE_DURACION = /\s*\(([^()]*\b(?:d[ií]as?|d|semanas?|sem|horas?|h)\b[^()]*)\)\s*$/i
 // «Qué se busca»: línea «Historia:|Objetivo:|Para qué:» (también en viñeta o en negrita); la descripción es el primer
 // párrafo de texto corrido bajo el título (sin casillas, listas, tablas, citas ni código).
@@ -238,7 +239,7 @@ export function analizarTitulo(crudo) {
 }
 
 function cerrarSeccion(s) {
-  const contar = (ts) => ts.reduce((a, x) => { const h = contar(x.hijas); return { hechas: a.hechas + h.hechas + (x.hecha ? 1 : 0), total: a.total + h.total + 1 } }, { hechas: 0, total: 0 })
+  const contar = (ts) => ts.reduce((a, x) => { if (x.marca === '-') return a; const h = contar(x.hijas); return { hechas: a.hechas + h.hechas + (x.hecha ? 1 : 0), total: a.total + h.total + 1 } }, { hechas: 0, total: 0 })
   const propias = contar(s.tareas)
   s.hijas.forEach(cerrarSeccion)
   s.hechas = propias.hechas + s.hijas.reduce((a, h) => a + h.hechas, 0)
@@ -314,7 +315,7 @@ export function estructura(texto) {
     }
     const sangria = m[1].length
     const { texto: limpio, marcas } = extraerMarcas(m[3].trim())
-    const tarea = { texto: limpio.slice(0, 1500), hecha: m[2] !== ' ', linea: i, hijas: [], ...(Object.keys(marcas).length ? { marcas } : {}) }
+    const tarea = { texto: limpio.slice(0, 1500), hecha: /x/i.test(m[2]), linea: i, hijas: [], ...(/[~-]/.test(m[2]) ? { marca: m[2] } : {}), ...(Object.keys(marcas).length ? { marcas } : {}) }
     while (pila.length && pila.at(-1).sangria >= sangria) pila.pop()
     ;(pila.length ? pila.at(-1).tarea.hijas : actual.tareas).push(tarea)
     pila.push({ sangria, tarea })
@@ -405,7 +406,7 @@ export function frenteActivo(b, entradas = [], planes = []) {
     const hito = hitoDe(sec)
     if (!abierta(hito)) return null
     // La tarea abierta más profunda que contiene la línea y tiene hijas (si no, la abierta más profunda).
-    const cadena = tareas.filter((x) => x.sec === sec && x.t.linea <= L && L < x.fin && !x.t.hecha)
+    const cadena = tareas.filter((x) => x.sec === sec && x.t.linea <= L && L < x.fin && !x.t.hecha && x.t.marca !== '-')
     return { L, sec, hito, x: cadena.filter((x) => x.t.hijas.length).at(-1) || cadena.at(-1) || null }
   }
   for (const e of [...entradas].reverse()) {
@@ -693,7 +694,10 @@ function leerGit(p) {
   })
   const rama = (sh('git', ['branch', '--show-current'], p.repo) || '').trim()
   const sinPush = (sh('git', ['log', '--branches', '--not', '--remotes', '--pretty=%H'], p.repo) || '').split('\n').filter(Boolean)
-  const datos = { url, prs, commits, rama, sinPush, ramas: leerRamas(p.repo), grafo: grafoRamas(commits), actualizadoGh: prsCrudo ? new Date().toISOString() : cache.actualizadoGh || null }
+  // Ramas locales sin fusionar en la principal (origin/HEAD, si no main): las casillas hechas en ellas van «En prueba».
+  const principal = (sh('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], p.repo) || '').trim() || 'main'
+  const sinFusionar = (sh('git', ['for-each-ref', `--no-merged=${principal}`, 'refs/heads', '--format=%(refname:short)'], p.repo) || '').split('\n').filter(Boolean)
+  const datos = { url, prs, commits, rama, sinPush, sinFusionar, ramas: leerRamas(p.repo), grafo: grafoRamas(commits), actualizadoGh: prsCrudo ? new Date().toISOString() : cache.actualizadoGh || null }
   writeFileSync(rutaCache, JSON.stringify({ url, prs, actualizadoGh: datos.actualizadoGh }))
   return datos
 }
@@ -932,6 +936,128 @@ export function hechosRetomar(p, b, { transcripciones = TRANSCRIPCIONES, ahora =
   }
 }
 
+// ---------- Kanban: sesiones de Claude en vivo y columna de cada casilla ----------
+// Solo .jsonl tocados en la ventana (24 h); de cada uno, cabeza y cola de 64 KB (nunca el archivo entero) y caché por
+// ruta+mtime+size. Fuera de la huella de /api/version: la vista los sondea aparte con GET /api/sesiones.
+const TROZO_SESION = 64 * 1024
+const EDITORES = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
+const cacheSesiones = new Map()
+const textoUsuario = (o) => {
+  if (o?.type !== 'user' || o.isMeta) return null
+  const c = o.message?.content
+  const t = typeof c === 'string' ? c : Array.isArray(c) && !c.some((x) => x?.type === 'tool_result') ? c.filter((x) => x?.type === 'text').map((x) => x.text).join('\n') : ''
+  return t && t.trim() && !t.trimStart().startsWith('<') ? t.trim() : null
+}
+function resumenSesion(ruta, size) {
+  const fd = openSync(ruta, 'r')
+  const leer = (desde, largo) => { const buf = Buffer.alloc(largo); return buf.toString('utf8', 0, readSync(fd, buf, 0, largo, desde)) }
+  const objs = (t) => t.split('\n').flatMap((l) => { try { return [JSON.parse(l)] } catch { return [] } })
+  let cabeza, cola
+  try {
+    if (size <= 2 * TROZO_SESION) cabeza = cola = objs(leer(0, size))
+    else {
+      // Las líneas partidas por el corte no parsean y se descartan solas.
+      cabeza = objs(leer(0, TROZO_SESION))
+      cola = objs(leer(size - TROZO_SESION, TROZO_SESION))
+    }
+  } finally { closeSync(fd) }
+  if (!cabeza.length && !cola.length) return null
+  const todas = cabeza === cola ? cola : [...cabeza, ...cola]
+  const ultimo = (f) => { for (let i = todas.length - 1; i >= 0; i--) { const v = f(todas[i]); if (v) return v } return null }
+  const archivos = []
+  for (let i = cola.length - 1; i >= 0 && archivos.length < 5; i--) {
+    const usos = cola[i]?.type === 'assistant' && Array.isArray(cola[i].message?.content) ? cola[i].message.content : []
+    for (const u of [...usos].reverse()) {
+      const f = u?.type === 'tool_use' && EDITORES.has(u.name) && (u.input?.file_path || u.input?.notebook_path)
+      if (f && !archivos.includes(f) && archivos.length < 5) archivos.push(f)
+    }
+  }
+  const prompts = todas.map(textoUsuario).filter(Boolean)
+  const unicos = (re) => [...new Set(prompts.flatMap((t) => t.match(re) || []))]
+  return {
+    titulo: ultimo((o) => o?.customTitle) || ultimo((o) => o?.aiTitle) || null,
+    rama: ultimo((o) => o?.gitBranch),
+    inicio: cabeza.find((o) => o?.timestamp)?.timestamp || null,
+    archivos,
+    ultimoPrompt: prompts.at(-1)?.slice(0, 200) ?? null,
+    foco: { claves: unicos(/\b[HS]\d+[a-z]?\b/g), backlogs: unicos(/[\w.-]+\.md\b/g) },
+  }
+}
+// → { [proyectoId]: [{ sid, titulo, rama, inicio, ultimo, activa, archivos, ultimoPrompt, foco }] }, más reciente primero.
+export function sesionesActivas(lista, dir = TRANSCRIPCIONES, { ahora = Date.now(), ventanaMs = 24 * 3600e3, activaMs = 5 * 60e3 } = {}) {
+  const carpetas = existsSync(dir) ? readdirSync(dir) : []
+  return Object.fromEntries(lista.map((p) => {
+    const pre = p.transcripciones
+    const res = []
+    for (const d of pre ? carpetas.filter((d) => d === pre || d.startsWith(`${pre}-`)) : []) {
+      let archivos = []
+      try { archivos = readdirSync(join(dir, d)) } catch { continue }
+      for (const f of archivos) {
+        if (!f.endsWith('.jsonl')) continue
+        const ruta = join(dir, d, f)
+        const st = statSync(ruta, { throwIfNoEntry: false })
+        if (!st || ahora - st.mtimeMs > ventanaMs) continue
+        let c = cacheSesiones.get(ruta)
+        if (!c || c.mtime !== st.mtimeMs || c.size !== st.size) {
+          let r = null
+          try { r = resumenSesion(ruta, st.size) } catch {}
+          cacheSesiones.set(ruta, c = { mtime: st.mtimeMs, size: st.size, r })
+        }
+        if (c.r) res.push({ sid: f.slice(0, -6), ...c.r, ultimo: new Date(st.mtimeMs).toISOString(), activa: ahora - st.mtimeMs < activaMs, _m: st.mtimeMs })
+      }
+    }
+    return [p.id, res.sort((a, b) => b._m - a._m).map(({ _m, ...s }) => s)]
+  }))
+}
+
+// Rama de una sección: la de su título, la del hito, o «Rama `x`» en el texto bajo el título del hito.
+function ramaDe(lineas, sec, hito) {
+  if (sec.meta?.rama) return sec.meta.rama
+  if (!hito) return null
+  if (hito.meta?.rama) return hito.meta.rama
+  for (let i = hito.linea + 1; i < lineas.length && !RE_TITULO.test(lineas[i]); i++) {
+    const m = lineas[i].match(/\brama\s+`([^`]+)`/i)
+    if (m) return m[1]
+  }
+  return null
+}
+// Una tarjeta por casilla de primer nivel: por-hacer · en-curso ([~] o la sección que trabaja una sesión activa) ·
+// en-prueba (hecha y su rama con PR abierto o sin fusionar) · hecho · movida ([-]).
+export function columnasKanban(b, p, sesiones = []) {
+  const lineas = String(b.contenido || '').replace(/\t/g, '    ').split('\n')
+  const git = p?.git || {}
+  const abiertas = new Set((git.prs || []).filter((pr) => pr.state === 'OPEN').map((pr) => pr.headRefName))
+  const sinFusionar = new Set(git.sinFusionar || [])
+  const vivas = sesiones.filter((s) => s.activa && (s.foco?.backlogs?.includes(b.archivo) || s.archivos?.includes(b.ruta)))
+  const lineasDe = (t) => [t.linea, ...t.hijas.flatMap(lineasDe)]
+  const contar = (ts) => ts.reduce((a, x) => { if (x.marca === '-') return a; const h = contar(x.hijas); return { hechas: a.hechas + h.hechas + (x.hecha ? 1 : 0), total: a.total + h.total + 1 } }, { hechas: 0, total: 0 })
+  const enSesion = (sec, hito, t) => vivas.some((s) => {
+    const claves = s.foco?.claves || []
+    if (claves.length) return claves.includes(sec.clave) || (!!hito?.clave && claves.includes(hito.clave))
+    if (b.activo?.seccion !== sec.id) return false
+    return !b.activo.tarea || lineasDe(t).includes(b.activo.tarea.linea)
+  })
+  const tarjetas = []
+  const seccion = (sec, hito) => {
+    if (/^estado\b/i.test(plano(sec.titulo))) return
+    for (const t of sec.tareas) {
+      const estado = t.marca === '-' ? 'movida'
+        : t.hecha ? (() => { const r = ramaDe(lineas, sec, hito); return r && (abiertas.has(r) || sinFusionar.has(r)) ? 'en-prueba' : 'hecho' })()
+        : t.marca === '~' || enSesion(sec, hito, t) ? 'en-curso' : 'por-hacer'
+      tarjetas.push({
+        archivo: b.archivo, texto: t.texto, hecha: t.hecha, estado, seccion: sec.id, clave: sec.clave, hito: hito?.clave || null, linea: t.linea,
+        ...(t.marcas ? { marcas: t.marcas } : {}), ...(t.hijas.length ? { sub: contar(t.hijas) } : {}),
+      })
+    }
+  }
+  for (const s of b.estructura || []) {
+    const hito = s.nivel === 2 ? s : null
+    seccion(s, hito)
+    for (const h of aplanar(s.hijas)) seccion(h, hito)
+  }
+  return tarjetas
+}
+
 async function recolectar(opciones = {}) {
   cargarProyectos()
   mkdirSync(DATOS, { recursive: true })
@@ -958,7 +1084,8 @@ async function recolectar(opciones = {}) {
     const git = leerGit(p)
     const configuracion = estadoConfiguracion(p, { git, backlogs })
     const retomar = hechosRetomar({ transcripciones: p.transcripciones, git }, backlogs.find((b) => !b.esPlan) || null)
-    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones, configuracion, editable: p.editable, retomar }
+    const kanban = backlogs.filter((b) => !b.esPlan).flatMap((b) => columnasKanban(b, { git }, opciones.sesiones?.[p.id] || []))
+    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones, configuracion, editable: p.editable, retomar, kanban }
   }))
 }
 
@@ -976,7 +1103,9 @@ export function alternarFavorito(titulo, favorito) {
 }
 
 async function construir(servidor = false, opciones = {}) {
-  const datos = { generado: new Date().toISOString(), servidor, favoritos: leerFavoritos(), proyectos: await recolectar(opciones) }
+  // Sesiones de Claude una sola vez: alimentan p.kanban y viajan en datos.sesiones (para file://, sin /api/sesiones).
+  const sesiones = sesionesActivas(cargarProyectos())
+  const datos = { generado: new Date().toISOString(), servidor, favoritos: leerFavoritos(), proyectos: await recolectar({ ...opciones, sesiones }), sesiones }
   // Credenciales: solo el resumen (completa, de dónde sale, últimos 4); configMtime para el 409 al editar integraciones.
   datos.credenciales = resumenCredenciales(leerCredenciales().datos, process.env, proyectos.flatMap((p) => p.integraciones || []))
   datos.configMtime = statConfig()?.mtimeMs ?? null
@@ -1084,6 +1213,13 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
       if (req.method === 'GET' && ruta === '/api/ping') return enviar(res, 200, { tablero: true })
       if (req.method === 'GET' && ruta === '/api/version') return enviar(res, 200, { version: huella(), codigo })
       if (req.method === 'GET' && ruta === '/api/datos') return enviar(res, 200, (await fresco(true)).datos)
+      // Barato (sondeo cada 5 s): solo cabeza/cola de los .jsonl recientes y columnas sobre los datos ya construidos.
+      if (req.method === 'GET' && ruta === '/api/sesiones') {
+        const sesiones = sesionesActivas(proyectos)
+        const columnas = Object.fromEntries((cache?.datos.proyectos || []).map((p) => [p.id, p.backlogs.filter((b) => !b.esPlan)
+          .flatMap((b) => columnasKanban(b, p, sesiones[p.id] || []).map(({ archivo, linea, texto, estado }) => ({ archivo, linea, texto, estado })))]))
+        return enviar(res, 200, { sesiones, columnas })
+      }
       if (req.method !== 'POST') return enviar(res, 404, { error: 'no existe' })
       if (req.headers.origin !== `http://${host}` || !String(req.headers['content-type']).startsWith('application/json')) return enviar(res, 403, { error: 'origen no permitido' })
       if (ruta === '/api/salir') {

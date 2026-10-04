@@ -673,6 +673,7 @@ test('vista: Resumen con el avance de la integración y botón «Mis tareas» en
 })
 
 test('/api/sesiones: sesiones recientes por proyecto, barato, sin tocar la huella; /api/datos trae sesiones y kanban', async () => {
+  writeFileSync(BACKLOG, readFileSync(BACKLOG, 'utf8').replace('- [x] Uno', '- [ ] Uno')) // un test anterior la marcó
   const r = join(TR, '-prueba', 'hhhh9999-0000.jsonl')
   writeFileSync(r, JSON.stringify({ type: 'custom-title', customTitle: 'En vivo' }) + '\n' + JSON.stringify({ type: 'user', gitBranch: 'kb', timestamp: new Date().toISOString(), message: { content: 'Sesión S1 de BACKLOG_PRUEBA.md' } }) + '\n')
   await get('/api/datos') // calienta la caché de datos
