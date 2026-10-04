@@ -14,6 +14,11 @@ Cada proyecto tiene estas pestañas:
 - **Historial**: qué casillas cambiaron entre una generación y la siguiente.
 - **GitHub**: ramas, grafo de ramas y pull requests (requiere `gh`).
 - **Notas**: notas abiertas para Claude, que ve al iniciar cada sesión.
+- **Bitácora** (solo con el campo `bitacora`): totales (sesiones, costo, duración, % con contexto 🔴),
+  la tabla de sesiones del proyecto (casilla para ver todas y para «solo pendientes»), resumen semanal y
+  lecciones. Con el servidor local, las filas `_pendiente_` se completan ahí mismo (Calidad, Seguridad,
+  Notas → Guardar; Enter también guarda) y la barra de estado avisa «✎ N filas de bitácora pendientes».
+  Si la bitácora cambió afuera, recarga y conserva lo que habías escrito.
 - **Integraciones**: estado de cada conector (GitHub Projects, Trello y Azure DevOps), sus
   tarjetas por columna y el botón **Sincronizar** con vista previa. En el Mapa, cada casilla vinculada
   lleva un chip (`GH ↗`) y la barra de estado avisa «⇄ N cambios por sincronizar».
