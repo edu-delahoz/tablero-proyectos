@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `notas-tablero` · S10 hecha, tests en verde (79 pasan, 2 omitidos): vista «Todos los proyectos» (`vistaTodos`, `resumenProyecto`, `abrirProyecto` en `plantilla.html`; `todos` es un flag aparte de `P`, `#p=todos`); probada por CDP con copia de `datos/` (clic en tarjeta/enlaces, hash, recarga, sin guardado). H5 completa. Pendiente: que el usuario la pruebe (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `notas-tablero` · S9 hecha, tests en verde (79 pasan, 2 omitidos): bloque «Gastos» en Bitácora (`grafTiempo`, `grafRamas`, `grafModelos` en `plantilla.html`, SVG en línea, paleta dataviz slots 1-3 validada, tooltip, tabla accesible); nota 3 respondida. Revisado con captura headless. Siguiente: S10.
 - 2026-10-04 · rama `notas-tablero` · S8 hecha, tests en verde (79 pasan, 2 omitidos): `bitacora.mjs` con `ramaDeTranscripcion` (cache por mtime), `sidsPorProyecto(…, rutas)` llena sid→.jsonl, `asociar(bit, mapa, rutas)` añade `rama` a cada fila, `agregar(registro, { por })` → `{ grupos, excluidas }`, `semanaISO`, `normalizarModelo`. Pendiente: probar S7 en el navegador. Siguiente: S9 (cargar skill `dataviz`).
 - 2026-10-04 · rama `notas-tablero` (sale de `busqueda-favoritos`) · S7 hecha, tests en verde (76 pasan, 2 omitidos): `estasAqui` salta a la siguiente no hecha (IEP → S6), `segmentos` pinta los `###`, proyecto persistente por id (`#p=` + `tablero.proyecto`). Notas 1 y 2 respondidas. Pendiente: probar en el navegador (`node generar.mjs --abrir`; IEP → Resumen y refrescar). Siguiente: S8.
@@ -34,10 +35,10 @@ Plan: `~/.claude/plans/quiero-que-planes-las-compressed-duckling.md`. Rama `nota
 
 ### S10 — Vista general de todos los proyectos · **Sonnet** · rama `notas-tablero`
 `plantilla.html`, README (y `generar.mjs` solo si falta algún dato).
-- [ ] Opción «Todos los proyectos» primera en `#proyecto`; vista por defecto sin proyecto guardado; se recuerda con el mecanismo de S7 (`#p=todos`)
-- [ ] Una tarjeta por proyecto: progreso y «estás aquí», rama/cambios/PRs, notas abiertas y bitácora pendiente (enlazan a su pestaña), costo de 7 días y última actividad
-- [ ] Clic en la tarjeta abre el Resumen del proyecto; fila de totales globales
-- [ ] Prueba en navegador por CDP con una copia de `datos/` y PR de `notas-tablero`
+- [x] Opción «Todos los proyectos» primera en `#proyecto`; vista por defecto sin proyecto guardado; se recuerda con el mecanismo de S7 (`#p=todos`)
+- [x] Una tarjeta por proyecto: progreso y «estás aquí», rama/cambios/PRs, notas abiertas y bitácora pendiente (enlazan a su pestaña), costo de 7 días y última actividad
+- [x] Clic en la tarjeta abre el Resumen del proyecto; fila de totales globales
+- [x] Prueba en navegador por CDP con una copia de `datos/` y PR de `notas-tablero`
 
 ## H4 — Búsqueda y favoritos
 
