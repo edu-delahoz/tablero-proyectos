@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `notas-tablero` · S9 hecha, tests en verde (79 pasan, 2 omitidos): bloque «Gastos» en Bitácora (`grafTiempo`, `grafRamas`, `grafModelos` en `plantilla.html`, SVG en línea, paleta dataviz slots 1-3 validada, tooltip, tabla accesible); nota 3 respondida. Revisado con captura headless. Siguiente: S10.
 - 2026-10-04 · rama `notas-tablero` · S8 hecha, tests en verde (79 pasan, 2 omitidos): `bitacora.mjs` con `ramaDeTranscripcion` (cache por mtime), `sidsPorProyecto(…, rutas)` llena sid→.jsonl, `asociar(bit, mapa, rutas)` añade `rama` a cada fila, `agregar(registro, { por })` → `{ grupos, excluidas }`, `semanaISO`, `normalizarModelo`. Pendiente: probar S7 en el navegador. Siguiente: S9 (cargar skill `dataviz`).
 - 2026-10-04 · rama `notas-tablero` (sale de `busqueda-favoritos`) · S7 hecha, tests en verde (76 pasan, 2 omitidos): `estasAqui` salta a la siguiente no hecha (IEP → S6), `segmentos` pinta los `###`, proyecto persistente por id (`#p=` + `tablero.proyecto`). Notas 1 y 2 respondidas. Pendiente: probar en el navegador (`node generar.mjs --abrir`; IEP → Resumen y refrescar). Siguiente: S8.
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
@@ -27,9 +28,9 @@ Plan: `~/.claude/plans/quiero-que-planes-las-compressed-duckling.md`. Rama `nota
 
 ### S9 — Gráficos en la pestaña Bitácora · **Sonnet** · rama `notas-tablero`
 `plantilla.html`, README. Cargar antes la skill `dataviz`.
-- [ ] Bloque «Gastos» con SVG en línea (sin librerías, funciona en `file://`) y colores del tema: costo por día/semana/mes (selector, duración en tooltip), costo por feature (rama, top 10 + «otras») y reparto por modelo
-- [ ] Respetan el filtro «este proyecto / todas»; cada gráfico con tabla accesible o `aria-label`
-- [ ] Responder la nota 3 y moverla a «Respondidas»
+- [x] Bloque «Gastos» con SVG en línea (sin librerías, funciona en `file://`) y colores del tema: costo por día/semana/mes (selector, duración en tooltip), costo por feature (rama, top 10 + «otras») y reparto por modelo
+- [x] Respetan el filtro «este proyecto / todas»; cada gráfico con tabla accesible o `aria-label`
+- [x] Responder la nota 3 y moverla a «Respondidas»
 
 ### S10 — Vista general de todos los proyectos · **Sonnet** · rama `notas-tablero`
 `plantilla.html`, README (y `generar.mjs` solo si falta algún dato).

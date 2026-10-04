@@ -18,7 +18,7 @@ Cada proyecto tiene estas pestañas:
 - **Historial**: qué casillas cambiaron entre una generación y la siguiente.
 - **GitHub**: ramas, grafo de ramas y pull requests (requiere `gh`).
 - **Notas**: notas abiertas para Claude, que ve al iniciar cada sesión.
-- **Bitácora** (solo con el campo `bitacora`): totales (sesiones, costo, duración, % con contexto 🔴),
+- **Bitácora** (solo con el campo `bitacora`): bloque «Gastos» (SVG en línea: costo por día/semana/mes, por feature/rama y por modelo; sigue el filtro «todas», con tabla y tooltip), totales (sesiones, costo, duración, % con contexto 🔴),
   la tabla de sesiones del proyecto (casilla para ver todas y para «solo pendientes»), resumen semanal y
   lecciones. Con el servidor local, las filas `_pendiente_` se completan ahí mismo (Calidad, Seguridad,
   Notas → Guardar; Enter también guarda) y la barra de estado avisa «✎ N filas de bitácora pendientes».
