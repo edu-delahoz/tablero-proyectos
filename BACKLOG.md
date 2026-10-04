@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `trello-vista-previa` (sale de `develop`) · sesión de cierre de pendientes, solo backlog (sin código). PR #10 mergeado por el usuario; abierto PR #11 `develop` → `main`. Cerradas con el usuario: S36 y S38 (probadas a mano en el navegador), S20 (confirmada en S24b), S24b «actualizar PR #9» (superada), S5 (Trello probado con Squalo: lectura, importar y primera sincronía solo trayendo). Queda abierta a propósito la mejora opcional del reinicio (S24b). Fallos de la prueba con Trello → nuevo **H15** (S41 conector, S42 vista, S43 cierre). Ojo: `squalo-app` quedó en `sincronizar` contra el tablero del equipo; desde la segunda sincronía las ~25 casillas propias vendrían marcadas para crearse en Trello (lo cubre S42). Siguiente: **S41** (Sonnet).
+- Para retomar (2026-10-04): Se cerró todo lo pendiente salvo las notas y una mejora opcional del servidor; el bloque grande ya está en `develop` y hay un PR abierto para pasarlo a `main`. Trello funciona con tu tablero de Squalo, pero la prueba dejó tres arreglos y dos mejoras: aceptar la URL completa del tablero, saber qué tarjetas son tuyas, poder seleccionar todo en la vista previa, avisar antes de crear tarjetas en un tablero del equipo y corregir el texto del botón de importar. Por ahí se sigue. Cuidado al sincronizar Squalo: revisa la vista previa antes de aplicar.
 - 2026-10-04 · rama `integraciones-vista` · S40 hecha (cierre H11–H14), PR #10 abierto → `develop`, tests en verde (170 pasan, 2 omitidos). Prueba real en EAP10 (modo `participar`, ítem #12): asignar, quitar y cambiar estado OK; el ítem se devolvió a New y sin asignar. Hallazgo: Azure reasigna al cambiar el estado → `participar()` recalcula `mio` también en `/estado`. `proyectos.json`: `ado` de EAP10 quedó en `participar`. 5 notas respondidas (quedan abiertas: mobile, «vincularlo con todo», chat del plan, optimizar vistas). Sin sesión siguiente definida.
 - Para retomar (2026-10-04): se terminó todo el bloque de retomar en lenguaje natural, tablero kanban, elegir carpeta y participar en Azure, y se probó de verdad con EAP10. Está todo subido en el PR #10 esperando tu revisión y merge a `develop`. Lo que sigue son las notas abiertas: revisión completa para mobile, vincular un proyecto nuevo con todo (sesión, repo, integraciones) y el chat con el plan; nada está roto.
 - 2026-10-04 · rama `integraciones-vista` · S39 hecha, tests en verde (170 pasan, 2 omitidos): `generar.mjs` exporta `participar()` (validación + PATCH + parche de `externo-<p>.json`, compartida por los endpoints y el CLI), `textoTareas`, `lineasIntegraciones`; CLI `--tareas <p> [--sin-asignar|--mias] [--integracion]`, `--asignarme <p> <id> [--quitar]`, `--estado <p> <id> <estado>` (solo `participar`); el hook de inicio añade «N sin asignar, M mías abiertas». Tests nuevos en `tareas.test.mjs` (fetch simulado por `--import`; fallaron 4 antes). README «Pedírselo a Claude». Siguiente: **S40** (cierre, con el usuario; incluye la prueba en navegador pendiente de S38).
@@ -57,6 +59,40 @@
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H15 — Trello de verdad y vista previa más rápida
+
+Historia: Como usuario que trabaja en un tablero de Trello de su equipo, quiero pegar la URL del tablero, ver mis tarjetas en «Mis tareas» y elegir en bloque qué traer o enviar, para no ir casilla por casilla ni crear tarjetas por error en un tablero ajeno.
+
+Origen: prueba real del usuario con Squalo (2026-10-04, `squalo-app`, integración `squalo` en `sincronizar`, `auto: false`). Rama `trello-vista-previa` (sale de `develop`). Sin plan en `~/.claude/plans/`: las casillas de abajo son el contrato.
+
+### S41 — Conector Trello: URL del tablero y «mías» · **Sonnet** · `integraciones/trello.mjs`, `integraciones/trello.test.mjs`, `fixtures/integraciones/trello.json`, `integraciones/config.mjs`, `integraciones/config.test.mjs`, `generar.mjs`, `servidor.test.mjs`, `README.md`
+- [ ] **Test primero** (ver fallar y anotar cuántos): en `trello.test.mjs`, tabla de `normalizarTablero(texto)` (id solo; `https://trello.com/b/<id>/nombre`; sin `https`; barra final; espacios; `trello.com/c/…` o texto inválido → Error en español) y una config con la URL completa llama a `…/boards/<id>`; `leer` trae `asignado` (lista de nombres) y `mio` comparando `idMembers` con `members/me`; en `config.test.mjs`, `validarIntegracion` guarda solo el id; en `servidor.test.mjs`, `/api/integraciones/descubrir` y `/probar` devuelven `tablero` normalizado
+- [ ] `trello.mjs`: exportar `normalizarTablero` y usarla en `cargar`/`descubrir`/`traducirError` (el mensaje de error muestra el id, no la URL). Trampa: el id del tablero distingue mayúsculas (`fbMds4E0`), no pasarlo por `new URL().host`
+- [ ] `trello.mjs` `leer`: pedir `idMembers` en las tarjetas, `members/me` (id, cacheado como `quienSoy` de Azure) y `boards/<id>/members` (nombres); cada ítem con `asignado` y `mio`. Fixture `trello.json` ampliado (miembros, `me`, tarjeta asignada y otra no)
+- [ ] `config.mjs`: `validarIntegracion` de Trello guarda el id normalizado. `generar.mjs`: `descubrir`/`probar` devuelven el `tablero` normalizado, y la plantilla lo reemplaza en el campo (como la organización de Azure)
+- [ ] Comprobar que «Mis tareas» y `importarBacklog(…, soloMias)` ya funcionan con Trello sin tocar la vista (usan `mio`); si no, anotarlo en S42. README: Trello acepta la URL; «mías» = tarjetas donde eres miembro. `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S41 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + H15/S41) y trabaja solo esa sesión en la rama `trello-vista-previa`. Primero los tests, verlos fallar, luego el código. Nada de red real (fetch simulado con el fixture). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S42 — Vista previa: seleccionar todo, aviso al enviar y texto del botón · **Sonnet** · `plantilla.html`, `servidor.test.mjs`
+- [ ] **Test primero** (ver fallar y anotar cuántos): en `servidor.test.mjs`, la plantilla trae `data-pv-todo` (seleccionar todo/ninguno por grupo), el aviso de envío (`data-pv-aviso-envio` o texto «Se crearían») y el botón de importar sin «desde Azure» fijo (usa el nombre del conector)
+- [ ] `plantilla.html` `vistaPrevia` (~l.971): en cada grupo (traer, enviar, cambios/conflictos) un control «Seleccionar todo / ninguno» que marca o desmarca todas las casillas de ese grupo y actualiza el contador; teclado y 44 px en mobile. Pedido del usuario: importó 7+14 tarjetas de Squalo marcándolas una por una
+- [ ] Aviso al enviar: si hay creaciones marcadas hacia afuera (no solo en la primera sincronía), mostrar arriba del botón «Aplicar» «Se crearían N tarjetas/ítems en <tablero/proyecto>» y pedir una confirmación en línea antes de aplicar. Motivo: `squalo-app` sincroniza con un tablero del equipo y su `BACKLOG.md` tiene ~25 casillas propias; desde la segunda sincronía las creaciones vienen marcadas por defecto
+- [ ] Botón de importar (~l.1089): «Crear backlog local desde <Trello|Azure DevOps|GitHub Projects>» según `integ.tipo` (usar `TIPOS_INTEG`)
+- [ ] Lo que S41 haya anotado como pendiente de vista. `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S42 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + H15/S42) y trabaja solo esa sesión en la rama `trello-vista-previa`. Primero el test de plantilla, verlo fallar, luego `plantilla.html`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S43 — Cierre de H15 · **Sonnet**, con el usuario
+- [ ] `node --test 2>&1 | tail -40` completo en verde
+- [ ] Con el usuario y Squalo: pegar la URL completa en el formulario (se guarda `fbMds4E0`); «Mis tareas» muestra sus tarjetas; vista previa con «Seleccionar todo»; el aviso de envío aparece si hay casillas locales y no se envía nada sin confirmar
+- [ ] Notas de cierre en este backlog, push y PR `trello-vista-previa` → `develop`
+
+Prompt de arranque S43 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + H15/S43) y haz el cierre de H15 en la rama `trello-vista-previa`, conmigo delante para la prueba con Squalo. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 
 ## H11 — Retomar en lenguaje natural y «Qué se busca»
 
@@ -152,7 +188,7 @@ Prompt de arranque S35 (Opus, sin plugins/MCP):
 - [x] Al elegir `repo` en `proyecto`: rellenar `id`/`nombre`/`docs`/`notas` solo si están vacíos; `docs` como casillas de subcarpetas candidatas + «otra…»
 - [x] El campo de texto sigue (pegar ruta vale) con placeholder «Elige con el botón o pega la ruta»
 - [x] Mobile: filas de 44 px. CDP: crear proyecto desde una sugerencia sin escribir rutas → previa → crear → la guía marca repo/docs; `node --test 2>&1 | tail -40`, commit
-- [ ] Por probar a mano: el botón «Elegir…» en Editar proyecto y en `docs`/`notas`/`bitacora`; CDP solo cubrió Nuevo → repo, Explorar y la previa (añadido en S36)
+- [x] Por probar a mano: el botón «Elegir…» en Editar proyecto y en `docs`/`notas`/`bitacora`; CDP solo cubrió Nuevo → repo, Explorar y la previa (añadido en S36) — probado a mano por el usuario el 2026-10-04: funciona
 
 Prompt de arranque S36 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S36) y trabaja solo esa sesión en la rama `integraciones-vista`. Test de plantilla primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
@@ -194,7 +230,7 @@ Prompt de arranque S37b (Opus, sin plugins/MCP):
 - [x] `itemExterno` y `vistaMias`: en `participar`, «Asignarme»/«Quitarme» y `<select>` de estado con las `columnas`; confirmación en línea con el título; repintar con `datos` y aviso; en `lectura` sin controles, `title` explica cómo activar participar
 - [x] «Mis tareas»: «✓ Terminé» = `columnas.hecho[0]`; el ítem sale de la lista al confirmar (corregido: primer estado de `columnas` que tenga ítems `hecha`, `estadoHecho(integ)`)
 - [x] «ver descripción» plegable con `descripcion`, prioridad e iteración
-- [ ] CDP con `fetch` de Azure simulado por `--import`: asignarme → PATCH visto → chip con mi nombre; cambiar estado → columna nueva; `node --test 2>&1 | tail -40`, commit — NO hecho: queda la prueba en navegador (tests en verde, 165 pasan, `node --check` del script OK) → S40
+- [x] CDP con `fetch` de Azure simulado por `--import`: asignarme → PATCH visto → chip con mi nombre; cambiar estado → columna nueva; `node --test 2>&1 | tail -40`, commit — NO hecho: queda la prueba en navegador (tests en verde, 165 pasan, `node --check` del script OK) → S40; cubierto con la prueba real de S40 y con la prueba a mano del usuario en el navegador (2026-10-04: asignarme, estado, «✓ Terminé», descripción funcionan)
 
 Prompt de arranque S38 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S38) y trabaja solo esa sesión en la rama `integraciones-vista`. Test de plantilla primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
@@ -286,7 +322,7 @@ Hecho (commit en `integraciones-vista`). Trampa: `new URL` pasa el host a minús
 - [x] `integraciones/config.mjs`: `validarIntegracion` guarda solo el nombre (y no pisa un `proyecto` ya escrito). Prueba en `config.test.mjs`
 - [x] `generar.mjs`: `/api/integraciones/descubrir` y `/probar` devuelven `organizacion` normalizada. Prueba en `servidor.test.mjs`
 - [x] `plantilla.html`: el campo «Organización» se reemplaza con la normalizada al buscar/probar; el placeholder/ayuda dice «acepta la URL». Prueba: `node --test 2>&1 | tail -40`
-- [ ] Con tu org real: pegar `https://dev.azure.com/CodeFactory2026-2` y pulsar «Buscar proyectos» (debe listar EAP10) — **del usuario**; anotar el resultado aquí
+- [x] Con tu org real: pegar `https://dev.azure.com/CodeFactory2026-2` y pulsar «Buscar proyectos» (debe listar EAP10) — **del usuario**; confirmado en S24b («todo eso funciona»)
 
 Prompt de arranque S20 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S20) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
@@ -348,7 +384,7 @@ El usuario revisó EAP10 en el navegador al final de S24 pero no dictó los resu
 - [x] (el usuario confirmó «todo eso funciona»; sin detalle de equipos/`areaPath`) Preguntar al usuario y anotar aquí: ¿«Buscar proyectos» lista EAP10? ¿«Mías» coincide con Azure (`@Me`)? ¿EAP10 tiene más de un equipo (→ `areaPath`)? ¿org falsa y servidor detenido dieron los mensajes esperados? ¿causa real de «cargando»?
 - [x] (el usuario confirmó que todos están en el mismo equipo: no hace falta `areaPath`) Si hay más de un equipo: añadir sesión nueva con campo opcional `areaPath`
 - [ ] Opcional: `generar.mjs` ~l.773, el reinicio por código nuevo espera a que no haya peticiones en vuelo; prueba en `generar.test.mjs`
-- [ ] `git status` (ningún `.md` cambió salvo BACKLOG), `node --test 2>&1 | tail -40`, actualizar PR #9
+- [x] `git status` (ningún `.md` cambió salvo BACKLOG), `node --test 2>&1 | tail -40`, actualizar PR #9 — superada: PR #9 y #10 mergeados en `develop`, PR #11 `develop` → `main` abierto
 
 Prompt de arranque S24b (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S24b) y trabaja solo esa sesión en la rama `integraciones-vista`, con el usuario delante. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
@@ -560,9 +596,9 @@ Trampas: los tests del servidor comprueban que `datos` no contenga «token», as
 ## H3 — Integraciones: prueba real
 
 ### S5 — Prueba real de conectores · **Sonnet** · rama `integraciones` (~10 min, opcional)
-- [ ] Crear `~/.config/tablero/credenciales.json` (`chmod 600`)
-- [ ] Poner `tablero` (Trello) y `organizacion`/`proyecto` (ADO) en el `proyectos.json` local (ignorado por git)
-- [ ] `node generar.mjs --probar-conexiones` y corregir lo que aparezca
+- [x] Crear `~/.config/tablero/credenciales.json` (`chmod 600`) — con `azure-devops.pat` y `trello.key`/`trello.token` (2026-10-04)
+- [x] Poner `tablero` (Trello) y `organizacion`/`proyecto` (ADO) en el `proyectos.json` local (ignorado por git) — ADO: EAP10 (`participar`); Trello: tablero Squalo (`fbMds4E0`) en `squalo-app`
+- [x] `node generar.mjs --probar-conexiones` y corregir lo que aparezca — probado por el usuario desde la vista (2026-10-04): Trello conecta, lee 21 tarjetas en lectura, importa a backlog local y la primera sincronía trae sin enviar nada. Fallos encontrados → H15 (S41, S42)
 
 Hecho antes (parte D): `integraciones/trello.mjs` y `integraciones/azure-devops.mjs` registrados en `index.mjs`, fixtures y tests con `fetch` simulado, README con campos, credenciales y cómo hallar el `boardId`.
 
