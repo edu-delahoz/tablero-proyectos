@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `integraciones-vista` · S24 a medias: EAP10 añadido a `proyectos.json` (ignorado por git; el PAT ya estaba) y `--probar-conexiones` OK con la org real (204 ítems, 13 columnas, solo lectura). El usuario probó en navegador pero no dio resultados → resto pasa a **S24b**. Sin cambios de código; tests no corridos. Los cambios sin commit de `coherencia*.mjs` no son de H9.
 - 2026-10-04 · rama `integraciones-vista` · S23 hecha, tests en verde (127 pasan, 2 omitidos): vista con selector «Modo» (solo lectura preseleccionado sin backlogs), paso 4 «Modo y backlog», `auto` oculto en lectura, tipo de work item como casillas (+ «Todos» solo en lectura), tarjeta con chip de asignado/«Sin asignar», insignia de tipo, filtro Todas/Mías/Sin asignar (estado en `filtroInteg`, sobrevive al repintado; «Mías» desactivado si falta `mio`), sin «Sincronizar» ni «auto» en lectura, `cfgLimpia` manda `modo`, y la primera sincronía deja crear/traer sin marcar con aviso. Verificado en Chrome headless por CDP con servidor de prueba. Siguiente: **S24** (Sonnet, con el usuario). Los cambios sin commit de `coherencia*.mjs` no son de H9.
 - 2026-10-04 · rama `integraciones-vista` · S22 hecha, tests en verde (126 pasan, 2 omitidos): `modo` (`sincronizar`|`lectura`) en `COMUNES` (exportado; `configVisible` lo usa), en lectura `backlog` opcional y `auto: true` rechazado; `contextoIntegracion` sin backlog y adaptador solo con `leer`; `sincronizar()` → 400 «solo lectura» (previa y aplicar); `/probar` y `--probar-conexiones` sin backlog (`vinculadas: 0`); primera sincronía (sin `datos/sync-…`): previa con `primera` y `conteo`, `auto` no aplica nada; ítems con `tipo/asignado/mio`; proyecto sin `docs`/`repo` genera; README y `proyectos.ejemplo.json` con `modo`, `tipoItem` lista y ejemplo EAP10. Trampa: el `get()` de `servidor.test.mjs` parsea JSON, para el HTML usar `fetch`. Siguiente: **S23** (Sonnet). Los cambios sin commit de `coherencia*.mjs` no son de H9.
 - 2026-10-04 · rama `integraciones-vista` · S21 hecha, tests en verde (123 pasan, 2 omitidos): `leer` con `tipoItem` texto/lista/`'*'` (WIQL `IN`, orden por fecha, tope 500 con aviso, lotes de 200 en paralelo máx. 4), ítems con `tipo`, `asignado` y `mio` (segunda WIQL `@Me`, aviso si falla), estados por unión con una sola llamada a `wit/workitemtypes`; `crear` usa el primer tipo; `config.mjs` valida `tipoItem` y rechaza `'*'` salvo `modo: 'lectura'` (S22 añade `modo`). Siguiente: **S22** (Opus). Los cambios sin commit de `coherencia*.mjs` no son de H9.
@@ -136,15 +137,25 @@ Prompt de arranque S23 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S23) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 
 ### S24 — Org real (EAP10) y prueba en navegador · **Sonnet**, con el usuario
-- [ ] `proyectos.json`: añadir `{ "id": "eap10", "nombre": "EAP10", "integraciones": [{ "id": "ado", "tipo": "azure-devops", "modo": "lectura", "organizacion": "CodeFactory2026-2", "proyecto": "EAP10", "tipoItem": "*" }] }` (sin `docs`) y PAT en credenciales (scopes: Work Items Read; «Project and Team: Read» para buscar proyectos)
-- [ ] Confirmar con la org real: «Buscar proyectos» lista EAP10; la lectura trae el backlog; «Mías» coincide con lo que ves en Azure (confirma que `@Me` funciona con tu PAT); anotar aquí si el PAT no alcanzó algún scope
-- [ ] (añadido en revisión Opus) Ver en Azure si EAP10 tiene más de un equipo (el backlog del equipo es por *Area Path*); si sí, anotar aquí para una sesión con campo opcional `areaPath`
-- [ ] (S19b) Prueba en navegador: org real, org falsa, servidor detenido a media petición («El servidor no respondió; reintenta» + «Reintentar»); anotar causa real de «cargando»
-- [ ] (S19b, opcional) `generar.mjs` ~l.773: el reinicio por código nuevo espera a que no haya peticiones en vuelo; prueba en `generar.test.mjs`
-- [ ] Verificar que ningún `.md` cambió (`git status`), `node --test 2>&1 | tail -40`, actualizar PR #9 / abrir PR nuevo
+- [x] (hecho en S24; `proyectos.json` está ignorado por git; el PAT de `azure-devops` ya estaba guardado; `--probar-conexiones` → OK, 204 ítems, 13 columnas, solo lectura) `proyectos.json`: añadir `{ "id": "eap10", "nombre": "EAP10", "integraciones": [{ "id": "ado", "tipo": "azure-devops", "modo": "lectura", "organizacion": "CodeFactory2026-2", "proyecto": "EAP10", "tipoItem": "*" }] }` (sin `docs`) y PAT en credenciales (scopes: Work Items Read; «Project and Team: Read» para buscar proyectos)
+- [-] Confirmar con la org real: «Buscar proyectos» lista EAP10; la lectura trae el backlog; «Mías» coincide con lo que ves en Azure (confirma que `@Me` funciona con tu PAT); anotar aquí si el PAT no alcanzó algún scope → S24b
+- [-] (añadido en revisión Opus) Ver en Azure si EAP10 tiene más de un equipo (el backlog del equipo es por *Area Path*); si sí, anotar aquí para una sesión con campo opcional `areaPath` → S24b
+- [-] (S19b) Prueba en navegador: org real, org falsa, servidor detenido a media petición («El servidor no respondió; reintenta» + «Reintentar»); anotar causa real de «cargando» → S24b
+- [-] (S19b, opcional) `generar.mjs` ~l.773: el reinicio por código nuevo espera a que no haya peticiones en vuelo; prueba en `generar.test.mjs` → S24b
+- [-] Verificar que ningún `.md` cambió (`git status`), `node --test 2>&1 | tail -40`, actualizar PR #9 / abrir PR nuevo → S24b
 
 Prompt de arranque S24 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S24) y trabaja solo esa sesión en la rama `integraciones-vista`, con el usuario delante (necesita su PAT y navegador). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S24b — Resultados de la prueba real y cierre · **Sonnet**, con el usuario
+El usuario revisó EAP10 en el navegador al final de S24 pero no dictó los resultados (el relevo se pidió sin ellos); hay que pedírselos.
+- [ ] Preguntar al usuario y anotar aquí: ¿«Buscar proyectos» lista EAP10? ¿«Mías» coincide con Azure (`@Me`)? ¿EAP10 tiene más de un equipo (→ `areaPath`)? ¿org falsa y servidor detenido dieron los mensajes esperados? ¿causa real de «cargando»?
+- [ ] Si hay más de un equipo: añadir sesión nueva con campo opcional `areaPath`
+- [ ] Opcional: `generar.mjs` ~l.773, el reinicio por código nuevo espera a que no haya peticiones en vuelo; prueba en `generar.test.mjs`
+- [ ] `git status` (ningún `.md` cambió salvo BACKLOG), `node --test 2>&1 | tail -40`, actualizar PR #9
+
+Prompt de arranque S24b (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S24b) y trabaja solo esa sesión en la rama `integraciones-vista`, con el usuario delante. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 
 ### S25 — (opcional) Importar el backlog de EAP10 a un `.md` propio · **Sonnet**
 Solo si lo pides: hoy EAP10 no tiene dónde sincronizarse.
