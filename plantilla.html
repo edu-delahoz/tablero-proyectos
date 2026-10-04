@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tablero de proyectos</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect%7Bfill:%23b0532f%7D@media(prefers-color-scheme:dark)%7Brect%7Bfill:%23d97757%7D%7D%3C/style%3E%3Crect width='32' height='32' rx='8'/%3E%3Cpath d='M9 16.5l5 5 9-10' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>
 // Tema antes de pintar (sin parpadeo).
 (function () {
@@ -27,7 +28,8 @@
   --ok: light-dark(#3d7a37, #8cc265); --aviso: light-dark(#8a5d00, #e5c07b); --peligro: light-dark(#b3392f, #e06c75); --morado: light-dark(#7a4fb0, #c678dd);
   --azul: light-dark(#1f6fb2, #61afef); --cian: light-dark(#0f7a7a, #56b6c2);
   --barra: light-dark(#d9d0c0, #3a3731); --codigo: light-dark(#e9e2d4, #25231f); --sel: light-dark(#e8dccb, #2c2925);
-  --estado-fondo: light-dark(#005fb8, #007acc);
+  --estado-fondo: light-dark(#e3dbcb, #26241f);
+  --alto-barra: 28px; --margen-rotulo: 14px;
   --prosa: var(--mono); --titulos: var(--mono); --tam: 14px; --radio: 0;
 }
 :root[data-theme="light"] { color-scheme: light; }
@@ -128,7 +130,7 @@ details summary { cursor: pointer; }
 .mapa-interior { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); align-items: start; }
 @container (min-width: 880px) {
   .mapa-interior { grid-template-columns: minmax(0, 1fr) 300px; }
-  .panel-falta { position: sticky; top: 12px; max-height: calc(100dvh - 40px); overflow: auto; }
+  .panel-falta { position: sticky; top: 12px; max-height: calc(100dvh - 12px - var(--alto-barra) - var(--margen-rotulo)); overflow: auto; }
 }
 ol.linea { list-style: none; margin: 0; padding: 0; counter-reset: paso; }
 .paso { counter-increment: paso; scroll-margin-top: 16px; min-width: 0; }
@@ -184,11 +186,12 @@ ul.tareas ul.tareas { margin-left: 0; }
 .seg.est-hecho .bloque { color: var(--ok); } .seg.est-en-curso .bloque { color: var(--aviso); } .seg.est-pendiente .bloque { color: var(--barra); }
 
 /* ---------- Barra de estado (abajo, fija) ---------- */
-#barra-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 0 18px; position: sticky; bottom: 0; z-index: 5; background: var(--estado-fondo); color: #fff; font-size: 12.5px; padding: 3px 14px; }
+#barra-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 0 18px; position: sticky; bottom: 0; z-index: 5; background: var(--estado-fondo); color: var(--texto); border-top: 1px solid var(--borde); font-size: 12.5px; padding: 3px 14px; }
 #barra-estado button { background: none; border: 0; color: inherit; padding: 1px 0; cursor: pointer; }
 #barra-estado button:hover { text-decoration: underline; text-underline-offset: 2px; }
-#barra-estado :focus-visible { outline-color: #fff; }
-#barra-estado .rama-barra { font-weight: 700; background: rgb(255 255 255 / .16); padding: 1px 8px; }
+#barra-estado :focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
+#barra-estado .rama-barra { font-weight: 700; background: var(--acento); color: var(--sobre-acento); padding: 1px 8px; }
+#barra-estado .vivo { color: var(--ok); } #barra-estado .manual { color: var(--suave); }
 #barra-estado .derecha { margin-left: auto; }
 
 /* ---------- Rama: siempre visible ---------- */
@@ -196,7 +199,14 @@ ul.tareas ul.tareas { margin-left: 0; }
 button.rama { cursor: pointer; font-family: var(--mono); }
 button.rama:hover { background: color-mix(in srgb, var(--rama, var(--aviso)) 26%, transparent); }
 .cab-paso .rama { margin-left: 8px; }
-.rama-actual { font-size: .95em; padding: 2px .7em; }
+.rama-main { --rama: var(--acento); background: var(--acento); color: var(--sobre-acento); border-color: var(--acento); }
+.rama-dev { --rama: var(--azul); background: var(--azul); color: var(--sobre-acento); border-color: var(--azul); }
+button.rama-main:hover { background: color-mix(in srgb, var(--acento) 80%, var(--texto)); }
+button.rama-dev:hover { background: color-mix(in srgb, var(--azul) 80%, var(--texto)); }
+.rama-actual { font-size: .95em; padding: 2px .7em; box-shadow: 0 0 0 2px var(--fondo), 0 0 0 3.5px var(--rama, var(--aviso)); }
+.cab-carriles { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 10px; }
+.cab-carriles .carril { display: inline-flex; align-items: center; gap: .4em; }
+.cab-carriles .carril i { width: 14px; height: 3px; background: var(--rama); }
 .rama-actual .punto { width: .5em; height: .5em; border-radius: 50%; background: currentColor; flex: none; }
 .titulo-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
 
@@ -244,15 +254,43 @@ ul.items { list-style: "- "; }
 @media (min-width: 980px) {
   .gh-rejilla { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-areas: "ramas grafo" "prs prs"; }
   .gh-ramas { grid-area: ramas; }
-  .gh-grafo { grid-area: grafo; position: sticky; top: 12px; max-height: calc(100dvh - 56px); overflow: auto; }
+  .gh-grafo { grid-area: grafo; position: sticky; top: 12px; max-height: calc(100dvh - 12px - var(--alto-barra) - var(--margen-rotulo)); overflow: auto; }
   .gh-prs { grid-area: prs; }
 }
 @container (max-width: 520px) { .grafo-fila .cuando { display: none; } }
 .gh-grafo { container-type: inline-size; }
 
+/* ---------- Integraciones ---------- */
+.chip-ext { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--borde); font: .78em/1.5 var(--mono); color: var(--azul); text-decoration: none; white-space: nowrap; vertical-align: baseline; }
+a.chip-ext:hover { border-color: var(--azul); }
+.chip-ext.perdido { color: var(--suave); border-style: dashed; }
+.integ-estado { display: flex; flex-wrap: wrap; gap: 2px 14px; align-items: baseline; margin: 0 0 8px; font-size: .9em; }
+.integ-estado .punto { font-weight: 700; }
+.integ-estado .ok { color: var(--ok); } .integ-estado .mal { color: var(--peligro); } .integ-estado .medio { color: var(--aviso); }
+.integ-paso { margin: 6px 0 10px; padding: 8px 10px; border-left: 3px solid var(--aviso); background: var(--codigo); overflow-wrap: anywhere; font-size: .9em; }
+.integ-paso.mal { border-left-color: var(--peligro); }
+.columnas-ext { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); margin: 10px 0 4px; }
+.columna-ext { border: 1px dashed var(--borde); padding: 6px 10px; min-width: 0; }
+.columna-ext ul { list-style: none; margin: 4px 0 0; padding: 0; font-size: .9em; }
+.columna-ext li { padding: 3px 0; border-top: 1px solid var(--borde); overflow-wrap: anywhere; }
+.columna-ext li:first-child { border-top: 0; }
+.columna-ext li.hecha a { color: var(--suave); }
+.sync-previa { margin-top: 12px; border-top: 1px dashed var(--borde); padding-top: 10px; }
+.sync-previa fieldset { border: 0; margin: 0 0 12px; padding: 0; min-width: 0; }
+.sync-previa legend { padding: 0; }
+.accion { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 .6em; padding: 5px 0; border-top: 1px solid var(--borde); align-items: start; }
+.accion:first-of-type { border-top: 0; }
+.accion .det { overflow-wrap: anywhere; min-width: 0; }
+.accion .det .suave { display: block; }
+.accion input { margin: .25em 0 0; accent-color: var(--acento); }
+.lados { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; }
+.lados label { display: inline-flex; gap: 6px; align-items: baseline; cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+.resultado-sync { margin-top: 10px; font-size: .92em; }
+.resultado-sync .mal { color: var(--peligro); }
+
 /* ---------- Edición de .md ---------- */
 .editor-md textarea { display: block; width: 100%; min-height: 62vh; resize: vertical; padding: 12px; font-size: 13px; line-height: 1.55; background: var(--codigo); color: var(--texto); border: 1px solid var(--borde); tab-size: 2; }
-.editor-md .pie { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 8px; }
+.editor-md .pie, .sync-previa .pie { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 8px; }
 .boton.primario { background: var(--acento); color: var(--sobre-acento); border-color: var(--acento); }
 .boton.primario::before { color: inherit; }
 .boton[disabled] { opacity: .55; cursor: progress; }
@@ -285,6 +323,9 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
 .tarjeta > h2:first-child > * { background: var(--fondo); padding: 0 6px; pointer-events: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tarjeta > h2:first-child > span:first-child { color: var(--acento); }
 .tarjeta > h2:first-child > span:first-child::before { content: "─ "; color: var(--borde); }
+/* Los paneles sticky tienen overflow: el rótulo no puede sobresalir por arriba sin cortarse; baja dentro del borde. */
+@media (min-width: 980px) { .gh-grafo { padding-top: 30px; } .gh-grafo > h2:first-child { top: 6px; } }
+@container (min-width: 880px) { .panel-falta { padding-top: 30px; } .mapa-interior .panel-falta > .rotulo:first-child { top: 6px; } }
 .rotulo { text-transform: none; letter-spacing: 0; }
 .rotulo::before { content: "# "; color: var(--acento); }
 .panel-falta > .rotulo:first-child, .mapa-cab > .rotulo:first-child { position: absolute; top: -.8em; left: 10px; margin: 0; background: var(--fondo); padding: 0 6px; color: var(--acento); }
@@ -363,6 +404,7 @@ let P = null, pestana = leer('tablero.pestana') || 'resumen', sel = {}, ramaFoco
 let modo = { backlogs: 'mapa', planes: 'mapa' };
 try { Object.assign(modo, JSON.parse(leer('tablero.modo') || '{}')); } catch {}
 const abiertos = new Map(); // «archivo#sección» → abierta/cerrada por el usuario
+let enVivo = false; // true mientras el sondeo de /api/version responde
 const borradores = new Map(); // ruta → texto sin guardar
 let editando = null; // ruta del .md en edición
 
@@ -399,13 +441,18 @@ const acciones = (ruta) => `${botonEditar(ruta)}${enVSCode(ruta)}`;
 
 const PESTANAS = [
   ['resumen', 'Resumen'], ['backlogs', 'Backlogs'], ['planes', 'Planes'],
-  ['historial', 'Historial'], ['github', 'GitHub'], ['notas', 'Notas'],
+  ['historial', 'Historial'], ['github', 'GitHub'], ['notas', 'Notas'], ['integraciones', 'Integraciones'],
 ];
+const porSincronizar = () => (P.integraciones || []).reduce((a, x) => a + (x.pendientes || 0), 0);
 
 // ---------- Ramas: badge + vínculos con backlogs, planes y PRs ----------
 const COLORES = ['var(--acento)', 'var(--azul)', 'var(--ok)', 'var(--morado)', 'var(--aviso)', 'var(--cian)', 'var(--peligro)'];
 const color = (i) => COLORES[i % COLORES.length];
-const badgeRama = (nombre, extra = '', estiloColor = '') => `<button class="rama ${extra}" data-rama="${esc(nombre)}" title="Ver la rama ${esc(nombre)} en GitHub"${estiloColor ? ` style="--rama:${estiloColor}"` : ''}><span aria-hidden="true">⎇</span>${esc(nombre)}</button>`;
+const ROTATIVOS = COLORES.filter((c) => c !== 'var(--acento)' && c !== 'var(--azul)');
+const esMain = (n) => n === 'main' || n === 'master';
+const claseRama = (n) => (esMain(n) ? 'rama-main' : n === 'develop' ? 'rama-dev' : '') + (n === P.git?.rama ? ' rama-actual' : '');
+const iconoRama = (n) => esMain(n) ? '★' : n === 'develop' ? '◆' : '⎇';
+const badgeRama = (nombre, extra = '', estiloColor = '') => `<button class="rama ${claseRama(nombre)} ${extra}" data-rama="${esc(nombre)}" title="Ver la rama ${esc(nombre)} en GitHub"${estiloColor && !claseRama(nombre).match(/rama-(main|dev)/) ? ` style="--rama:${estiloColor}"` : ''}><span aria-hidden="true">${iconoRama(nombre)}</span>${esc(nombre)}</button>`;
 function sesionesDeRama(nombre) {
   return P.backlogs.flatMap((b) => aplanar(b.estructura || []).filter((s) => s.meta?.rama === nombre).map((s) => ({ b, s })));
 }
@@ -419,9 +466,21 @@ const etqPR = (pr) => { const [cls, txt] = ESTADO_PR(pr); return `<a class="etq 
 const completa = (t) => t.hecha && t.hijas.every(completa);
 const cajas = (t) => 1 + t.hijas.reduce((a, x) => a + cajas(x), 0);
 const pendientes = (t) => (t.hecha ? 0 : 1) + t.hijas.reduce((a, x) => a + pendientes(x), 0);
+// Chip «GH ↗» / «Trello ↗» / «ADO #12 ↗» por cada marca <!-- integración:id --> de la casilla.
+const CORTO_APP = { 'github-projects': () => 'GH', trello: () => 'Trello', 'azure-devops': (id) => `ADO #${id}` };
+function chipsExternos(marcas) {
+  if (!marcas) return '';
+  return Object.entries(marcas).map(([k, id]) => {
+    const integ = (P.integraciones || []).find((x) => x.id === k), item = integ?.items.find((x) => x.id === id);
+    const txt = integ ? (CORTO_APP[integ.tipo] || (() => k))(id) : k;
+    return item?.url
+      ? `<a class="chip-ext" href="${esc(item.url)}" target="_blank" rel="noopener" title="${esc(`${integ.nombre}: ${item.titulo}${item.columna ? ` · ${item.columna}` : ''}`)}">${esc(txt)} ↗<span class="sr"> (abre ${esc(integ.nombre)})</span></a>`
+      : `<span class="chip-ext perdido" title="${integ?.items.length ? `Ya no está en ${esc(integ.nombre)}` : 'Sin datos de la integración'}">${esc(txt)}</span>`;
+  }).join('');
+}
 function tarea(t) {
   const c = corto(t.texto);
-  return `<li class="tarea${t.hecha ? ' hecha' : ''}"><span class="casilla" aria-hidden="true">${CASILLA()[t.hecha ? 1 : 0]}</span><span class="texto"${c !== t.texto ? ` title="${esc(plano(t.texto))}"` : ''}><span class="sr">${t.hecha ? 'Hecha' : 'Pendiente'}: </span>${inline(c)}</span>${t.hijas.length ? `<ul class="tareas">${t.hijas.map(tarea).join('')}</ul>` : ''}</li>`;
+  return `<li class="tarea${t.hecha ? ' hecha' : ''}"><span class="casilla" aria-hidden="true">${CASILLA()[t.hecha ? 1 : 0]}</span><span class="texto"${c !== t.texto ? ` title="${esc(plano(t.texto))}"` : ''}><span class="sr">${t.hecha ? 'Hecha' : 'Pendiente'}: </span>${inline(c)}${chipsExternos(t.marcas)}</span>${t.hijas.length ? `<ul class="tareas">${t.hijas.map(tarea).join('')}</ul>` : ''}</li>`;
 }
 function chips(meta = {}) {
   const pr = meta.rama && prsDeRama(meta.rama)[0];
@@ -599,13 +658,15 @@ function segmentos(b) {
 function pintarNavegacion() {
   const n = P.notas?.abiertas.length || 0;
   $('#pestanas').innerHTML = PESTANAS.map(([id, t]) =>
-    `<button data-p="${id}"${id === pestana ? ' aria-current="page"' : ''}>${t}${id === 'notas' && n ? `<span class="cuenta">${n}</span>` : ''}${id === 'planes' ? ` <span class="suave">${P.planes.length}</span>` : ''}</button>`).join('');
+    `<button data-p="${id}"${id === pestana ? ' aria-current="page"' : ''}>${t}${id === 'notas' && n ? `<span class="cuenta">${n}</span>` : ''}${id === 'integraciones' && porSincronizar() ? ` <span class="suave">⇄${porSincronizar()}</span>` : ''}${id === 'planes' ? ` <span class="suave">${P.planes.length}</span>` : ''}</button>`).join('');
   const g = P.git, abiertosPR = g ? g.prs.filter((x) => x.state === 'OPEN').length : 0;
   $('#rama-cab').innerHTML = g?.rama ? `${badgeRama(g.rama, 'rama-actual')}${g.sinPush?.length ? ` <span class="etq DRAFT">↑ ${g.sinPush.length} sin subir</span>` : ''}` : '';
   $('#barra-estado').innerHTML = `${g?.rama ? `<button class="rama-barra" data-rama="${esc(g.rama)}" title="Rama actual">⎇ ${esc(g.rama)}</button>` : ''}${g?.sinPush?.length ? `<span>↑ ${g.sinPush.length} sin subir</span>` : ''}
     ${g ? `<button data-p="github">⊙ ${abiertosPR} PR abiertos</button>` : ''}
     <button data-p="notas">✉ ${n} notas</button>
+    ${porSincronizar() ? `<button data-p="integraciones">⇄ ${porSincronizar()} cambio${porSincronizar() === 1 ? '' : 's'} por sincronizar</button>` : ''}
     <span class="opcional">${editable() ? '✎ edición activa' : '◌ solo lectura'}</span>
+    <span class="${enVivo ? 'vivo' : 'manual'}" title="${enVivo ? 'Se actualiza solo cuando cambian los archivos' : 'Sin servidor: actualiza con el hook o recargando'}">${enVivo ? '● en vivo' : '◌ manual'}</span>
     <span class="derecha opcional">Actualizado ${esc(fecha(DATOS.generado))}</span>`;
 }
 
@@ -664,7 +725,24 @@ const limpiarRef = (r) => r.replace(/^HEAD -> /, '').replace(/^origin\//, '').re
 function refsDe(c) {
   return [...new Set((c.refs || '').split(', ').filter((r) => r && r !== 'origin/HEAD' && r !== 'HEAD').map(limpiarRef))];
 }
-function svgGrafo(filas, H) {
+// Carril → nombre de rama (main/develop tienen prioridad) y color fijo: main = acento, develop = azul, el resto rota.
+function carrilesGrafo(filas, commits) {
+  const nombres = new Map();
+  filas.forEach((f, i) => {
+    for (const r of refsDe(commits[i])) {
+      const actual = nombres.get(f.col);
+      if (!actual || ((esMain(r) || r === 'develop') && !(esMain(actual) || actual === 'develop'))) nombres.set(f.col, r);
+    }
+  });
+  const colores = new Map(); let k = 0;
+  const lanes = [...new Set(filas.flatMap((f) => [...f.antes, ...f.despues, f.col]))].sort((a, b) => a - b);
+  for (const l of lanes) {
+    const n = nombres.get(l);
+    colores.set(l, esMain(n) ? 'var(--acento)' : n === 'develop' ? 'var(--azul)' : ROTATIVOS[k++ % ROTATIVOS.length]);
+  }
+  return { nombres, color: (l) => colores.get(l) || color(l), lanes };
+}
+function svgGrafo(filas, H, color) {
   const X = (i) => 9 + i * 16, ancho = X(Math.max(1, ...filas.flatMap((f) => [...f.antes, ...f.despues, f.col]))) + 10;
   const curva = (x1, y1, x2, y2) => x1 === x2 ? `M${x1} ${y1}V${y2}` : `M${x1} ${y1}C${x1} ${(y1 + y2) / 2} ${x2} ${(y1 + y2) / 2} ${x2} ${y2}`;
   const lineas = [], puntos = [];
@@ -686,6 +764,9 @@ function svgGrafo(filas, H) {
 function vistaGrafo(g) {
   const H = 30, filas = (g.grafo || []).map((f, i) => ({ ...f, merge: g.commits[i].padres.length > 1, padres: g.commits[i].padres.length }));
   if (!filas.length) return '<div class="suave">Sin commits.</div>';
+  const car = carrilesGrafo(filas, g.commits);
+  const vistos = new Set();
+  const cabecera = car.lanes.map((l) => car.nombres.has(l) && !vistos.has(car.nombres.get(l)) && vistos.add(car.nombres.get(l)) ? `<span class="carril" style="--rama:${car.color(l)}"><i></i>${badgeRama(car.nombres.get(l), '', car.color(l))}</span>` : '').join('');
   const prDe = new Map();
   for (const pr of g.prs) for (const c of pr.commits) if (!prDe.has(c.oid) || pr.baseRefName !== 'main') prDe.set(c.oid, pr);
   const filasHtml = g.commits.map((c, i) => {
@@ -694,11 +775,12 @@ function vistaGrafo(g) {
     const foco = ramaFoco && refs.includes(ramaFoco);
     const tit = mpr ? `<span class="tit merge">⑂ merge de ${badgeRama(mpr[2], '', 'var(--suave)')}${pr ? ` → ${esc(pr.baseRefName)}` : ''}</span>` : `<span class="tit" title="${esc(c.titulo)}">${esc(c.titulo)}</span>`;
     return `<li class="grafo-fila${foco ? ' foco' : ''}"${foco ? ' id="foco-grafo"' : ''}><a class="hash" href="${esc(g.url)}/commit/${c.oid}">${c.oid.slice(0, 7)}</a>
-      ${refs.map((r) => badgeRama(r, '', color(filas[i].col))).join('')}${tit}
+      ${refs.map((r) => badgeRama(r, '', car.color(filas[i].col))).join('')}${tit}
       ${pr ? `<a class="hash" href="${esc(pr.url)}">#${pr.number}</a>` : ''}${g.sinPush.includes(c.oid) ? '<span class="etq DRAFT">sin subir</span>' : ''}<span class="cuando">${hace(c.fecha)}</span></li>`;
   }).join('');
-  return `<div class="leyenda"><span>● commit</span><span>○ merge (PR)</span><span>cada color es un carril; la etiqueta ⎇ marca dónde está cada rama</span></div>
-    <div class="tabla-scroll"><div class="grafo">${svgGrafo(filas, H)}<ol class="grafo-filas">${filasHtml}</ol></div></div>`;
+  return `<div class="cab-carriles" aria-label="Carriles del grafo">${cabecera}</div>
+    <div class="leyenda"><span>● commit</span><span>○ merge (PR)</span><span>★ main · ◆ develop · cada línea de color es la rama de su etiqueta</span></div>
+    <div class="tabla-scroll"><div class="grafo">${svgGrafo(filas, H, car.color)}<ol class="grafo-filas">${filasHtml}</ol></div></div>`;
 }
 function filaRama(r, g) {
   const prs = prsDeRama(r.nombre), ses = sesionesDeRama(r.nombre), pls = planesDeRama(r.nombre);
@@ -707,6 +789,109 @@ function filaRama(r, g) {
   return `<tr${ramaFoco === r.nombre ? ' class="foco" id="foco-rama"' : ''}>
     <td class="col-rama">${badgeRama(r.nombre, r.nombre === g.rama ? 'rama-actual' : '')}${r.nombre === g.rama ? ' <span class="suave">actual</span>' : ''}<br><span class="suave">${donde}${seg ? ' · ' + esc(seg) : ''} · ${hace(r.fecha)}</span></td>
     <td><div class="sesiones">${prs.map(etqPR).join(' ')}${ses.map(botonSesion).join('')}${pls.map(botonPlan).join('')}${!prs.length && !ses.length && !pls.length ? '<span class="suave">sin PR ni sesión enlazada</span>' : ''}</div></td></tr>`;
+}
+
+// ---------- Integraciones: estado, ítems por columna y sincronía con vista previa ----------
+const previas = new Map(); // id de integración → { acciones, hash, resultado }
+const ESTADO_INTEG = {
+  conectado: ['ok', '●', 'conectado'], 'falta-credencial': ['medio', '○', 'falta credencial'],
+  'sin-conector': ['medio', '○', 'conector no disponible'], error: ['mal', '✕', 'error'],
+};
+const GRUPOS_SYNC = [
+  ['conflicto', 'Conflictos · cambió en los dos lados: elige cuál gana'],
+  ['crear-fuera', 'Crear en {app}'], ['actualizar-fuera', 'Actualizar en {app}'],
+  ['actualizar-local', 'Actualizar el backlog'], ['traer', 'Traer al backlog (bajo «## Entrante ({id})»)'],
+  ['huerfana', 'Huérfanas · el ítem ya no existe en {app} (solo se informa; no se borra nada)'],
+];
+const estadoTxt = (hecha) => hecha ? 'hecha' : 'pendiente';
+function detalleCambios(c, app) {
+  const partes = [];
+  if ('hecha' in c) partes.push(c.hecha ? `marcar como hecha${app ? ` (mover a la columna de hecho)` : ''}` : `desmarcar${app ? ' (volver a la columna inicial)' : ''}`);
+  if ('titulo' in c) partes.push(`renombrar a «${c.titulo}»`);
+  return partes.join(' · ');
+}
+function filaAccion(a, integ) {
+  const enlace = a.url ? ` <a href="${esc(a.url)}" target="_blank" rel="noopener">↗<span class="sr"> abrir en ${esc(integ.nombre)}</span></a>` : '';
+  const caja = (marcada) => `<input type="checkbox" name="accion" value="${esc(a.clave)}"${marcada ? ' checked' : ''} aria-label="Aplicar: ${esc(a.titulo)}">`;
+  if (a.tipo === 'huerfana') return `<div class="accion"><span aria-hidden="true">·</span><div class="det">${esc(a.titulo)} <span class="suave">${esc(a.id)}</span></div></div>`;
+  if (a.tipo === 'conflicto') {
+    const lado = (v, t, x) => `<label><input type="radio" name="lado:${esc(a.clave)}" value="${v}"> ${t}: «${esc(x.titulo)}» · ${estadoTxt(x.hecha)}</label>`;
+    return `<div class="accion">${caja(false)}<div class="det">${esc(a.titulo)}${enlace}
+      <div class="lados" role="radiogroup" aria-label="Qué lado gana">${lado('local', 'usar backlog', a.local)}${lado('externo', `usar ${esc(integ.nombre)}`, a.externo)}</div></div></div>`;
+  }
+  const det = a.tipo === 'crear-fuera' ? `${estadoTxt(a.hecha)}${a.seccion ? ` · sección ${a.seccion}` : ''}${a.subtareas?.length ? ` · ${a.subtareas.length} subtareas como checklist` : ''}`
+    : a.tipo === 'traer' ? `${a.columna || 'sin columna'} → ${estadoTxt(a.hecha)}`
+    : detalleCambios(a.cambios, a.tipo === 'actualizar-fuera');
+  return `<div class="accion">${caja(true)}<div class="det">${esc(a.titulo)}${enlace}<span class="suave">${esc(det)}</span></div></div>`;
+}
+function vistaPrevia(integ) {
+  const pv = previas.get(integ.id);
+  if (!pv) return '';
+  if (pv.resultado) {
+    const r = pv.resultado, mal = r.filter((x) => !x.ok);
+    return `<div class="resultado-sync" role="status"><strong>${r.length - mal.length} aplicada${r.length - mal.length === 1 ? '' : 's'}</strong>${mal.length ? `, <span class="mal">${mal.length} con error</span>` : ''}.
+      ${mal.length ? `<ul>${mal.map((x) => `<li class="mal">${esc(x.clave)}: ${esc(x.error)}</li>`).join('')}</ul>` : ''}
+      <button class="boton" type="button" data-cerrar-sync="${esc(integ.id)}">Cerrar</button></div>`;
+  }
+  if (!pv.acciones.length) return `<div class="resultado-sync" role="status">Todo sincronizado: no hay cambios. <button class="boton" type="button" data-cerrar-sync="${esc(integ.id)}">Cerrar</button></div>`;
+  const app = integ.nombre;
+  return `<form class="sync-previa" data-integ="${esc(integ.id)}" aria-label="Vista previa de la sincronía">
+    <p class="suave" style="margin-top:0">Vista previa: nada se ha aplicado todavía. Primero se escribe en ${esc(app)} y luego, de una vez, en ${esc(integ.backlog)}.</p>
+    ${GRUPOS_SYNC.map(([tipo, titulo]) => {
+      const as = pv.acciones.filter((a) => a.tipo === tipo);
+      return as.length ? `<fieldset><legend class="rotulo">${esc(titulo.replace('{app}', app).replace('{id}', integ.id))} · ${as.length}</legend>${as.map((a) => filaAccion(a, integ)).join('')}</fieldset>` : '';
+    }).join('')}
+    <div class="pie"><button class="boton primario" type="submit">Aplicar</button><button class="boton" type="button" data-cerrar-sync="${esc(integ.id)}">Cancelar</button></div></form>`;
+}
+function tarjetaIntegracion(integ) {
+  const [cls, punto, txt] = ESTADO_INTEG[integ.estado] || ESTADO_INTEG.error;
+  const columnas = [...integ.columnas, ...new Set(integ.items.map((x) => x.columna || 'Sin estado').filter((c) => !integ.columnas.includes(c)))];
+  const porCol = columnas.map((c) => [c, integ.items.filter((x) => (x.columna || 'Sin estado') === c)]).filter(([, xs]) => xs.length);
+  const pt = integ.porTipo || {};
+  return `<section class="tarjeta" style="margin-bottom:18px" aria-label="${esc(integ.nombre)} ${esc(integ.id)}">
+    <h2><span>${esc(integ.nombre)} · ${esc(integ.id)}</span><small>${esc(integ.backlog || '')}</small></h2>
+    <p class="integ-estado"><span class="${cls}"><span class="punto" aria-hidden="true">${punto}</span> ${txt}</span>
+      ${integ.titulo ? `<span>«${esc(integ.titulo)}»</span>` : ''}
+      ${integ.leidoEn ? `<span class="suave">leído ${hace(integ.leidoEn)}${integ.desdeCache ? ' (caché)' : ''}</span>` : ''}
+      <span class="suave">última sincronía: ${integ.ultimaSincronia ? hace(integ.ultimaSincronia) : 'nunca'}</span>
+      <span class="suave">auto: ${integ.auto ? 'sí' : 'no'}</span></p>
+    ${integ.mensaje ? `<div class="integ-paso ${integ.estado === 'error' ? 'mal' : ''}">${esc(integ.mensaje)}${integ.paso ? `<br><span class="suave">${esc(integ.paso)}</span>` : ''}</div>` : ''}
+    ${integ.aviso ? `<div class="integ-paso">${esc(integ.aviso)}</div>` : ''}
+    ${(integ.avisos || []).map((a) => `<p class="suave" style="margin:4px 0">· ${esc(a)}</p>`).join('')}
+    ${integ.estado === 'conectado' || integ.desdeCache ? `<p class="suave" style="margin:4px 0 8px">${integ.pendientes ? `⇄ ${integ.pendientes} cambio${integ.pendientes === 1 ? '' : 's'} por sincronizar` : '✓ sin cambios por sincronizar'}${Object.entries(pt).length ? ` · ${Object.entries(pt).map(([k, v]) => `${v} ${k}`).join(' · ')}` : ''}</p>` : ''}
+    <p style="margin:0">${integ.url ? `<a class="boton" href="${esc(integ.url)}" target="_blank" rel="noopener">Abrir en ${esc(integ.nombre)} ↗</a>` : ''}
+      ${integ.estado === 'conectado' ? (editable() ? `<button class="boton primario" type="button" data-sincronizar="${esc(integ.id)}">Sincronizar</button>` : '<span class="suave">Sincronizar requiere el servidor local: abre el tablero con Tablero.app o <code>node generar.mjs --abrir</code>. Como archivo suelto es solo lectura.</span>') : ''}</p>
+    ${vistaPrevia(integ)}
+    ${porCol.length ? `<div class="columnas-ext">${porCol.map(([c, xs]) => `<div class="columna-ext"><div class="rotulo">${esc(c)} · ${xs.length}</div><ul>${xs.map((x) => `<li${x.hecha ? ' class="hecha"' : ''}><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a></li>`).join('')}</ul></div>`).join('')}</div>` : integ.estado === 'conectado' ? '<p class="suave">El tablero externo está vacío.</p>' : ''}
+  </section>`;
+}
+async function pedirPrevia(id, boton) {
+  boton.disabled = true; boton.textContent = 'Leyendo…';
+  try {
+    const r = await api('/api/sincronia/previa', { proyecto: P.id, integracion: id });
+    previas.set(id, { acciones: r.acciones, hash: r.hash }); pintar();
+    document.querySelector(`.sync-previa[data-integ="${CSS.escape(id)}"] input, [data-cerrar-sync="${CSS.escape(id)}"]`)?.focus();
+  } catch (e) { boton.disabled = false; boton.textContent = 'Sincronizar'; avisar(`No se pudo leer: ${e.message}`, true); }
+}
+async function aplicarPrevia(form) {
+  const id = form.dataset.integ, pv = previas.get(id), boton = form.querySelector('[type=submit]');
+  const acciones = [...form.querySelectorAll('input[name=accion]:checked')].map((x) => x.value);
+  const resoluciones = Object.fromEntries([...form.querySelectorAll('input[type=radio]:checked')].map((x) => [x.name.slice(5), x.value]));
+  const sinLado = acciones.filter((k) => k.startsWith('conflicto:') && !resoluciones[k]);
+  if (sinLado.length) { avisar('Elige «usar backlog» o el otro lado en cada conflicto marcado.', true); return; }
+  if (!acciones.length) { avisar('No hay acciones marcadas.', true); return; }
+  boton.disabled = true; boton.textContent = 'Aplicando…';
+  try {
+    const r = await api('/api/sincronia/aplicar', { proyecto: P.id, integracion: id, acciones, resoluciones, hashPrevio: pv.hash });
+    recargarDatos(r.datos); previas.set(id, { resultado: r.resultados }); pintar();
+    const mal = r.resultados.filter((x) => !x.ok).length;
+    avisar(mal ? `Sincronía con ${mal} error(es).` : 'Sincronía aplicada.', !!mal);
+    document.querySelector(`[data-cerrar-sync="${CSS.escape(id)}"]`)?.focus();
+  } catch (e) {
+    boton.disabled = false; boton.textContent = 'Aplicar';
+    if (e.estado === 409) { previas.delete(id); pintar(); }
+    avisar(`No se aplicó: ${e.message}`, true);
+  }
 }
 
 const VISTAS = {
@@ -815,6 +1000,11 @@ const VISTAS = {
       <section class="tarjeta" style="margin-top:18px"><h2><span>${esc(P.notas.ruta.split('/').pop())}</span><small>${hace(P.notas.modificado)}</small></h2>
         <p>${acciones(P.notas.ruta)}</p>${md(P.notas.contenido)}</section>`;
   },
+  integraciones() {
+    const xs = P.integraciones || [];
+    if (!xs.length) return `<div class="tarjeta"><h2><span>Integraciones</span></h2><p>Este proyecto no tiene integraciones. Añade un arreglo <code>integraciones</code> al proyecto en <code>proyectos.json</code> (hay ejemplos de GitHub Projects, Trello y Azure DevOps en <code>proyectos.ejemplo.json</code>) y la sección «Conectores y credenciales» del README.</p></div>`;
+    return `<p class="suave">Cada casilla de primer nivel del backlog se vincula con una tarjeta mediante un comentario oculto <code>&lt;!-- id:… --&gt;</code>. Sincronizar muestra primero una vista previa; nunca se borra nada en ningún lado.</p>${xs.map(tarjetaIntegracion).join('')}`;
+  },
 };
 
 function filaPR(pr, sinFila) {
@@ -863,6 +1053,38 @@ function irRama(nombre) {
   if (el) { desplazar(el); el.querySelector('button')?.focus({ preventScroll: true }); } else alInicio();
 }
 
+// Altura real de la barra de estado sticky: los paneles sticky la descuentan para no cortarse.
+{
+  const barra = $('#barra-estado');
+  const medir = () => document.documentElement.style.setProperty('--alto-barra', barra.offsetHeight + 'px');
+  if (barra) { medir(); if (window.ResizeObserver) new ResizeObserver(medir).observe(barra); }
+}
+
+// Actualización en vivo (solo con el servidor local): sondea la huella barata y repinta si cambió.
+if (editable()) {
+  let version = null, ocupado = false;
+  const hayEdicion = () => editando || document.querySelector('#contenido textarea:focus, #contenido input:focus, #contenido select:focus');
+  const marcar = (v) => { if (enVivo !== v) { enVivo = v; pintarNavegacion(); } };
+  const sondear = async () => {
+    if (ocupado || document.hidden) return;
+    ocupado = true;
+    try {
+      const v = (await (await fetch('/api/version', { cache: 'no-store' })).json()).version;
+      marcar(true);
+      if (version === null) version = v;
+      else if (v !== version && !hayEdicion()) {
+        const nuevos = await (await fetch('/api/datos', { cache: 'no-store' })).json();
+        const y = window.scrollY;
+        recargarDatos(nuevos); pintar(); window.scrollTo({ top: y });
+        version = v;
+      }
+    } catch { marcar(false); } finally { ocupado = false; }
+  };
+  setInterval(sondear, 3000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) sondear(); });
+  sondear();
+}
+
 document.addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;
@@ -876,6 +1098,8 @@ document.addEventListener('click', (e) => {
     return;
   }
   if (b.dataset.rama) { e.preventDefault(); irRama(b.dataset.rama); return; }
+  if (b.dataset.sincronizar) { pedirPrevia(b.dataset.sincronizar, b); return; }
+  if (b.dataset.cerrarSync) { const id = b.dataset.cerrarSync; previas.delete(id); pintar(); document.querySelector(`[data-sincronizar="${CSS.escape(id)}"]`)?.focus(); return; }
   if (b.dataset.editar) { editando = b.dataset.editar; pintar(); const t = $('#texto-md'); t?.focus(); t?.setSelectionRange(0, 0); t?.scrollTo(0, 0); return; }
   if ('cancelar' in b.dataset) { borradores.delete(editando); editando = null; pintar(); return; }
   if ('forzar' in b.dataset) { guardarEdicion(b.closest('form'), true); return; }
@@ -899,6 +1123,7 @@ document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target;
   if (f.classList.contains('editor-md')) return guardarEdicion(f);
+  if (f.classList.contains('sync-previa')) return aplicarPrevia(f);
   if (f.id === 'form-nota') {
     const t = f.querySelector('textarea'), boton = f.querySelector('[type=submit]');
     if (!t.value.trim()) { t.focus(); return; }
@@ -918,6 +1143,11 @@ window.addEventListener('beforeunload', (e) => {
   const t = $('#texto-md');
   if (borradores.size || (t && editando && t.value !== (contenidoDe(editando) ?? ''))) e.preventDefault();
 });
+// En un conflicto, elegir un lado marca su casilla.
+document.addEventListener('change', (e) => {
+  const r = e.target;
+  if (r.type === 'radio' && r.name.startsWith('lado:')) { const c = r.closest('.accion')?.querySelector('input[name=accion]'); if (c) c.checked = true; }
+});
 // Recuerda qué secciones abrió/cerró el usuario.
 document.addEventListener('toggle', (e) => { const k = e.target.dataset?.k; if (k) abiertos.set(k, e.target.open); }, true);
 
@@ -930,7 +1160,7 @@ $('#tema').addEventListener('change', (e) => {
 });
 
 $('#proyecto').innerHTML = DATOS.proyectos.map((p, i) => `<option value="${i}">${esc(p.nombre)}</option>`).join('');
-$('#proyecto').addEventListener('change', (e) => { soltarEditor(); P = DATOS.proyectos[e.target.value]; sel = {}; ramaFoco = null; pintar(); });
+$('#proyecto').addEventListener('change', (e) => { soltarEditor(); P = DATOS.proyectos[e.target.value]; sel = {}; ramaFoco = null; previas.clear(); pintar(); });
 P = DATOS.proyectos[0];
 if (P) pintar(); else $('#contenido').innerHTML = '<div class="vacio">No hay proyectos en proyectos.json.</div>';
 </script>

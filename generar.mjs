@@ -5,6 +5,8 @@
 //   node generar.mjs --abrir       → regenera y abre http://127.0.0.1:47321 (arranca el servidor si hace falta)
 //   node generar.mjs --servir      → servidor local: sirve el tablero fresco y guarda las ediciones de los .md
 //   node generar.mjs --hook-inicio → (SessionStart) imprime contexto para Claude y regenera en segundo plano
+//   node generar.mjs --probar-conexiones → lectura mínima de cada integración (GitHub Projects, Trello, Azure DevOps)
+// Variables opcionales: TABLERO_PROYECTOS (otro proyectos.json), TABLERO_DATOS (otra carpeta datos/), TABLERO_PUERTO.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, realpathSync } from 'node:fs'
 import { execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
@@ -12,9 +14,13 @@ import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { extraerMarcas, tareasLocales, planificarSincronia, aplicarSincronia } from './integraciones/sincronia.mjs'
+import { leerCredenciales, credencialesPara } from './integraciones/credenciales.mjs'
+import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
-const DATOS = join(AQUI, 'datos')
+const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
+const DATOS = process.env.TABLERO_DATOS || join(AQUI, 'datos')
 const PLANES = join(homedir(), '.claude', 'plans')
 const TRANSCRIPCIONES = join(homedir(), '.claude', 'projects')
 const args = process.argv.slice(2)
@@ -26,7 +32,7 @@ const leerJson = (r, def) => { try { return JSON.parse(readFileSync(r, 'utf8')) 
 const sh = (cmd, a, cwd, timeout = 15000) => {
   try { return execFileSync(cmd, a, { cwd, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'ignore'] }) } catch { return null }
 }
-const proyectos = leerJson(join(AQUI, 'proyectos.json'), []).map((p) => ({
+const proyectos = leerJson(CONFIG, []).map((p) => ({
   ...p,
   repo: p.repo && expandir(p.repo),
   docs: (p.docs || []).map(expandir),
@@ -104,7 +110,7 @@ const textoDeCita = (lineas) => lineas.map((l) => l.replace(/^\s*>\s?/, '').trim
   .reduce((ps, l) => { if (!l) ps.push([]); else (ps.at(-1) || (ps[ps.push([]) - 1])).push(l); return ps }, [])
   .filter((p) => p.length).map((p) => p.join(' ')).join('\n\n')
 
-// Árbol de secciones: [{ id, titulo, tituloCrudo, clave, nivel, meta, hechas, total, estado, tareas:[{texto,hecha,hijas}], items, prompts:[{etiqueta,texto,clave,modelo}], hijas:[sección] }]
+// Árbol de secciones: [{ id, titulo, tituloCrudo, clave, nivel, meta, hechas, total, estado, tareas:[{texto,hecha,hijas,marcas?}], items, prompts:[{etiqueta,texto,clave,modelo}], hijas:[sección] }]
 export function estructura(texto) {
   const raiz = []
   let padre = null, actual = null, pila = [], cerca = null, cita = null, rotulo = null, n = 0
@@ -153,7 +159,8 @@ export function estructura(texto) {
       continue
     }
     const sangria = m[1].length
-    const tarea = { texto: m[3].trim().slice(0, 1500), hecha: m[2] !== ' ', hijas: [] }
+    const { texto: limpio, marcas } = extraerMarcas(m[3].trim())
+    const tarea = { texto: limpio.slice(0, 1500), hecha: m[2] !== ' ', hijas: [], ...(Object.keys(marcas).length ? { marcas } : {}) }
     while (pila.length && pila.at(-1).sangria >= sangria) pila.pop()
     ;(pila.length ? pila.at(-1).tarea.hijas : actual.tareas).push(tarea)
     pila.push({ sangria, tarea })
@@ -272,14 +279,16 @@ function actualizarHistorial(p, backlogs) {
 }
 
 // ---------- Planes de Claude (~/.claude/plans), asignados por transcripción ----------
+// «planes» en proyectos.json asigna planes a mano: mandan sobre la transcripción y salen de los demás proyectos.
+const planesAsignados = new Map(proyectos.flatMap((p) => (p.planes || []).map((n) => [n, p.id])))
 function leerPlanes(p) {
-  if (!p.transcripciones || !existsSync(TRANSCRIPCIONES)) return []
-  const usados = new Map() // nombre -> Set(carpeta)
-  for (const d of readdirSync(TRANSCRIPCIONES)) {
+  const usados = new Map((p.planes || []).map((n) => [n, new Set(['(asignado)'])])) // nombre -> Set(carpeta)
+  for (const d of p.transcripciones && existsSync(TRANSCRIPCIONES) ? readdirSync(TRANSCRIPCIONES) : []) {
     if (!d.startsWith(p.transcripciones)) continue
     const salida = sh('grep', ['-ohE', 'plans/[A-Za-z0-9_-]+\\.md', '-r', '--include=*.jsonl', join(TRANSCRIPCIONES, d)], undefined, 20000) || ''
     for (const m of new Set(salida.split('\n').filter(Boolean))) {
       const nombre = basename(m)
+      if ((planesAsignados.get(nombre) ?? p.id) !== p.id) continue
       if (!usados.has(nombre)) usados.set(nombre, new Set())
       usados.get(nombre).add(d.slice(p.transcripciones.length).replace(/^-/, '') || '(raíz)')
     }
@@ -378,6 +387,115 @@ function leerGit(p) {
   return datos
 }
 
+// ---------- Integraciones (GitHub Projects, Trello, Azure DevOps) ----------
+// Al generar solo se LEE afuera (timeout corto, caché en datos/externo-<proyecto>.json); con «auto: true» se
+// aplican además las acciones que no son conflicto. Las credenciales jamás llegan al HTML.
+const LECTURA_MS = 8000
+const rutaInstantanea = (p, cfg) => join(DATOS, `sync-${p.id}-${cfg.id}.json`)
+const hashDe = (t) => createHash('sha1').update(t).digest('hex')
+const conTiempo = (promesa, ms) => Promise.race([promesa, new Promise((_, mal) => setTimeout(() => mal(new Error(`Sin conexión: no respondió en ${ms / 1000} s.`)), ms).unref())])
+export class ErrorSincronia extends Error { constructor(msg, estado, extra) { super(msg); Object.assign(this, { estado, extra }) } }
+
+// Todo lo necesario para sincronizar una integración: config, backlog, adaptador enlazado y credenciales.
+function contextoIntegracion(p, cfg, backlogs, adaptadores) {
+  const backlog = backlogs.find((b) => b.archivo === cfg.backlog)
+  if (!backlog) throw new ErrorSincronia(`No encuentro «${cfg.backlog}» en las carpetas «docs» del proyecto.`, 400)
+  const mod = adaptadores[cfg.tipo]
+  if (!mod) throw new ErrorSincronia(`El conector «${NOMBRES[cfg.tipo] || cfg.tipo}» aún no está disponible en esta versión.`, 400, { estado: 'sin-conector' })
+  const { datos, aviso } = leerCredenciales()
+  const { cred, faltan, paso } = credencialesPara(cfg, datos)
+  if (faltan.length) throw new ErrorSincronia(`Falta credencial: ${faltan.join(', ')}.`, 400, { estado: 'falta-credencial', paso })
+  const deps = { memo: new Map() }
+  const adaptador = {
+    leer: () => mod.leer(cfg, cred, deps),
+    crear: (c, cr, t) => mod.crear(c, cr, t, deps),
+    actualizar: (c, cr, id, x) => mod.actualizar(c, cr, id, x, deps),
+  }
+  return { backlog, adaptador, cred, aviso }
+}
+
+// Vista previa (elegidas == null) o aplicación. Orden al aplicar: afuera → una escritura del .md → instantánea.
+export async function sincronizar(p, idIntegracion, { elegidas = null, resoluciones = {}, hashPrevio, adaptadores = ADAPTADORES, rutasPermitidas } = {}) {
+  const cfg = (p.integraciones || []).find((x) => x.id === idIntegracion)
+  if (!cfg) throw new ErrorSincronia('Esa integración no está en proyectos.json.', 404)
+  const ctx = contextoIntegracion(p, cfg, leerBacklogs(p), adaptadores)
+  const ruta = ctx.backlog.ruta
+  if (rutasPermitidas && !rutasPermitidas.has(ruta)) throw new ErrorSincronia('Ese archivo no lo administra el tablero.', 403)
+  const contenido = readFileSync(ruta, 'utf8'), hash = hashDe(contenido)
+  if (hashPrevio !== undefined && hashPrevio !== hash) throw new ErrorSincronia(`${cfg.backlog} cambió desde la vista previa: vuelve a pulsar Sincronizar.`, 409)
+  const fuera = await conTiempo(ctx.adaptador.leer(), 15000)
+  const instantanea = leerJson(rutaInstantanea(p, cfg), {})
+  const acciones = planificarSincronia(tareasLocales(contenido, cfg.id), fuera.items, instantanea)
+  if (elegidas == null) return { acciones, hash, url: fuera.url, backlog: cfg.backlog }
+  // «auto»: todo menos conflictos (y las huérfanas, que solo se informan).
+  if (elegidas === 'auto') elegidas = new Set(acciones.filter((a) => a.tipo !== 'conflicto' && a.tipo !== 'huerfana').map((a) => a.clave))
+  const r = await aplicarSincronia({
+    contenido, integracion: cfg.id, acciones, elegidas, resoluciones, externos: fuera.items, instantanea,
+    adaptador: ctx.adaptador, cfg, cred: ctx.cred,
+  })
+  if (r.contenido !== contenido) {
+    if (readFileSync(ruta, 'utf8') !== contenido) throw new ErrorSincronia(`${cfg.backlog} cambió mientras se sincronizaba; lo de afuera ya se aplicó: ${JSON.stringify(r.resultados.filter((x) => x.id))}.`, 409)
+    writeFileSync(ruta, r.contenido)
+  }
+  mkdirSync(DATOS, { recursive: true })
+  writeFileSync(rutaInstantanea(p, cfg), JSON.stringify(r.instantanea, null, 1))
+  const rutaExt = join(DATOS, `externo-${p.id}.json`), cache = leerJson(rutaExt, {})
+  cache[cfg.id] = { ...cache[cfg.id], ultimaSincronia: new Date().toISOString() }
+  writeFileSync(rutaExt, JSON.stringify(cache))
+  return { acciones, resultados: r.resultados }
+}
+
+// Datos de cada integración para el HTML: estado, ítems por columna y cuántos cambios hay por sincronizar.
+async function leerIntegraciones(p, backlogs, { adaptadores = ADAPTADORES, aplicarAuto = true } = {}) {
+  if (!p.integraciones?.length) return []
+  const rutaExt = join(DATOS, `externo-${p.id}.json`), cache = leerJson(rutaExt, {})
+  const salida = await Promise.all(p.integraciones.map(async (cfg) => {
+    const base = { id: cfg.id, tipo: cfg.tipo, nombre: NOMBRES[cfg.tipo] || cfg.tipo, backlog: cfg.backlog, auto: !!cfg.auto, ultimaSincronia: cache[cfg.id]?.ultimaSincronia || null }
+    let ctx
+    try { ctx = contextoIntegracion(p, cfg, backlogs, adaptadores) } catch (e) {
+      return { ...base, estado: e.extra?.estado || 'error', mensaje: e.message, paso: e.extra?.paso || null }
+    }
+    let fuera, error = null
+    try {
+      fuera = await conTiempo(ctx.adaptador.leer(), LECTURA_MS)
+      cache[cfg.id] = { ...cache[cfg.id], url: fuera.url, titulo: fuera.titulo, columnas: fuera.columnas, items: fuera.items, avisos: fuera.avisos, fecha: new Date().toISOString() }
+    } catch (e) { error = String(e?.message || e); fuera = cache[cfg.id]?.items ? cache[cfg.id] : null }
+    const acciones = fuera ? planificarSincronia(tareasLocales(ctx.backlog.contenido, cfg.id), fuera.items, leerJson(rutaInstantanea(p, cfg), {})) : []
+    const porTipo = acciones.reduce((m, a) => ({ ...m, [a.tipo]: (m[a.tipo] || 0) + 1 }), {})
+    const auto = cfg.auto && !error && aplicarAuto && acciones.some((a) => a.tipo !== 'conflicto' && a.tipo !== 'huerfana')
+    return {
+      ...base, estado: error ? 'error' : 'conectado', mensaje: error, aviso: ctx.aviso, avisos: fuera?.avisos || [],
+      url: fuera?.url || null, titulo: fuera?.titulo || null, columnas: fuera?.columnas || [],
+      items: (fuera?.items || []).map(({ id, titulo, hecha, columna, url }) => ({ id, titulo, hecha, columna, url })),
+      leidoEn: error ? cache[cfg.id]?.fecha || null : new Date().toISOString(), desdeCache: !!error && !!fuera,
+      pendientes: acciones.filter((a) => a.tipo !== 'huerfana').length, porTipo, _auto: auto,
+    }
+  }))
+  writeFileSync(rutaExt, JSON.stringify(cache))
+  return salida
+}
+
+// --probar-conexiones: una lectura mínima por integración, con el resultado en español.
+async function probarConexiones() {
+  let hubo = false
+  for (const p of proyectos) for (const cfg of p.integraciones || []) {
+    hubo = true
+    const titulo = `${p.nombre} · ${cfg.id} (${NOMBRES[cfg.tipo] || cfg.tipo})`
+    try {
+      const ctx = contextoIntegracion(p, cfg, leerBacklogs(p), ADAPTADORES)
+      if (ctx.aviso) console.log(`  ⚠ ${ctx.aviso}`)
+      const r = await conTiempo(ctx.adaptador.leer(), 15000)
+      const vinculadas = tareasLocales(ctx.backlog.contenido, cfg.id).filter((t) => t.marca).length
+      console.log(`✓ ${titulo}: OK · «${r.titulo || ''}» ${r.url || ''} · ${r.items.length} ítems · columnas: ${r.columnas.join(', ')} · ${vinculadas} casillas vinculadas en ${cfg.backlog}`)
+      for (const a of r.avisos || []) console.log(`  · ${a}`)
+    } catch (e) {
+      process.exitCode = 1
+      console.log(`✗ ${titulo}: ${e.message}${e.extra?.paso ? `\n  → ${e.extra.paso}` : ''}`)
+    }
+  }
+  if (!hubo) console.log('No hay integraciones en proyectos.json (ver «integraciones» en proyectos.ejemplo.json).')
+}
+
 // ---------- Notas ----------
 function leerNotas(p) {
   if (!p.notas) return null
@@ -388,35 +506,75 @@ function leerNotas(p) {
   return { ruta: p.notas, contenido, abiertas, modificado: statSync(p.notas).mtime.toISOString() }
 }
 
-function recolectar() {
+async function recolectar(opciones = {}) {
   mkdirSync(DATOS, { recursive: true })
-  return proyectos.map((p) => {
-    const backlogs = leerBacklogs(p)
-    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial: actualizarHistorial(p, backlogs), planes: leerPlanes(p), git: leerGit(p), notas: leerNotas(p) }
-  })
+  return Promise.all(proyectos.map(async (p) => {
+    let backlogs = leerBacklogs(p)
+    let integraciones = await leerIntegraciones(p, backlogs, opciones)
+    const auto = integraciones.filter((x) => x._auto)
+    if (auto.length) {
+      const fallos = new Map()
+      for (const x of auto) {
+        try { await sincronizar(p, x.id, { elegidas: 'auto', adaptadores: opciones.adaptadores }) } catch (e) { fallos.set(x.id, `Sincronía automática: ${e.message}`) }
+      }
+      backlogs = leerBacklogs(p)
+      integraciones = await leerIntegraciones(p, backlogs, { ...opciones, aplicarAuto: false })
+      for (const x of integraciones) if (fallos.has(x.id)) Object.assign(x, { estado: 'error', mensaje: fallos.get(x.id) })
+    }
+    for (const x of integraciones) delete x._auto
+    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial: actualizarHistorial(p, backlogs), planes: leerPlanes(p), git: leerGit(p), notas: leerNotas(p), integraciones }
+  }))
 }
 
-function construir(servidor = false) {
-  const datos = { generado: new Date().toISOString(), servidor, proyectos: recolectar() }
+async function construir(servidor = false, opciones = {}) {
+  const datos = { generado: new Date().toISOString(), servidor, proyectos: await recolectar(opciones) }
   const plantilla = readFileSync(join(AQUI, 'plantilla.html'), 'utf8')
   const json = JSON.stringify(datos).replace(/</g, '\\u003c')
   return { datos, html: plantilla.replace('/*__DATOS__*/null', () => json) }
 }
-function generar() {
-  const { datos, html } = construir(false)
+async function generar() {
+  const { datos, html } = await construir(false)
   writeFileSync(join(AQUI, 'index.html'), html)
   return datos
 }
 
+// ---------- Huella barata de lo que alimenta el tablero (solo mtimes y tamaños, sin leer contenido ni construir) ----------
+function huella() {
+  const marcas = []
+  const ver = (r) => { try { const s = statSync(r); marcas.push(`${r}:${s.mtimeMs}:${s.size}`); return s } catch { return null } }
+  const carpeta = (dir, filtro = () => true, profundo = false) => {
+    if (!ver(dir)?.isDirectory()) return
+    for (const f of readdirSync(dir).sort()) {
+      const r = join(dir, f)
+      if (profundo && statSync(r, { throwIfNoEntry: false })?.isDirectory()) carpeta(r, filtro, true)
+      else if (filtro(f)) ver(r)
+    }
+  }
+  carpeta(PLANES)
+  for (const p of proyectos) {
+    const patron = new RegExp(p.patronBacklogs || '^BACKLOG.*\\.md$', 'i')
+    for (const d of p.docs) carpeta(d, (f) => patron.test(f))
+    if (p.notas) ver(p.notas)
+    if (p.bitacora) ver(expandir(p.bitacora))
+    if (p.repo) {
+      const git = join(p.repo, '.git')
+      ver(join(git, 'HEAD')); ver(join(git, 'packed-refs'))
+      carpeta(join(git, 'refs'), () => true, true)
+    }
+  }
+  return createHash('sha1').update(marcas.join('\n')).digest('hex').slice(0, 16)
+}
+
 // ---------- Servidor local: el mismo tablero, pero puede guardar los .md ----------
 // Solo escucha en 127.0.0.1, exige Host/Origin propios y solo escribe archivos que el tablero ya muestra.
-export const PUERTO = 47321
+export const PUERTO = Number(process.env.TABLERO_PUERTO) || 47321
 const URL_LOCAL = `http://127.0.0.1:${PUERTO}/`
 const INACTIVIDAD_MS = 6 * 3600e3
-function servir() {
-  let ultimo = Date.now(), cache = null
-  const fresco = (forzar) => { if (forzar || !cache || Date.now() - cache.t > 15000) cache = { t: Date.now(), ...construir(true) }; return cache }
-  const permitidas = () => new Set(fresco().datos.proyectos.flatMap((p) => [...p.backlogs.map((b) => b.ruta), ...p.planes.map((x) => x.ruta), p.notas?.ruta]).filter(Boolean))
+// Manejador HTTP (exportado para los tests: puerto y adaptadores inyectables).
+export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alUsar = () => {} } = {}) {
+  let cache = null
+  const fresco = async (forzar) => { if (forzar || !cache || Date.now() - cache.t > 15000) cache = { t: Date.now(), ...(await construir(true, { adaptadores })) }; return cache }
+  const permitidas = async () => new Set((await fresco()).datos.proyectos.flatMap((p) => [...p.backlogs.map((b) => b.ruta), ...p.planes.map((x) => x.ruta), p.notas?.ruta]).filter(Boolean))
   const enviar = (res, codigo, cuerpo, tipo = 'application/json; charset=utf-8') => {
     res.writeHead(codigo, { 'content-type': tipo, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
     res.end(typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo))
@@ -427,23 +585,25 @@ function servir() {
     req.on('data', (c) => { t += c; if (t.length > 4e6) { mal(new Error('demasiado grande')); req.destroy() } })
     req.on('end', () => { try { ok(JSON.parse(t)) } catch (e) { mal(e) } })
   })
-  createServer(async (req, res) => {
-    ultimo = Date.now()
+  return async (req, res) => {
+    alUsar()
     const host = req.headers.host || ''
-    if (host !== `127.0.0.1:${PUERTO}` && host !== `localhost:${PUERTO}`) return enviar(res, 403, { error: 'host no permitido' })
+    if (host !== `127.0.0.1:${puerto}` && host !== `localhost:${puerto}`) return enviar(res, 403, { error: 'host no permitido' })
     const ruta = new URL(req.url, `http://${host}`).pathname
     try {
-      if (req.method === 'GET' && (ruta === '/' || ruta === '/index.html')) return enviar(res, 200, fresco(true).html, 'text/html; charset=utf-8')
+      if (req.method === 'GET' && (ruta === '/' || ruta === '/index.html')) return enviar(res, 200, (await fresco(true)).html, 'text/html; charset=utf-8')
       if (req.method === 'GET' && ruta === '/api/ping') return enviar(res, 200, { tablero: true })
+      if (req.method === 'GET' && ruta === '/api/version') return enviar(res, 200, { version: huella() })
+      if (req.method === 'GET' && ruta === '/api/datos') return enviar(res, 200, (await fresco(true)).datos)
       if (req.method !== 'POST') return enviar(res, 404, { error: 'no existe' })
       if (req.headers.origin !== `http://${host}` || !String(req.headers['content-type']).startsWith('application/json')) return enviar(res, 403, { error: 'origen no permitido' })
       const b = await leerCuerpo(req)
       if (ruta === '/api/guardar') {
-        if (typeof b.ruta !== 'string' || typeof b.contenido !== 'string' || !permitidas().has(b.ruta)) return enviar(res, 403, { error: 'Ese archivo no lo administra el tablero.' })
+        if (typeof b.ruta !== 'string' || typeof b.contenido !== 'string' || !(await permitidas()).has(b.ruta)) return enviar(res, 403, { error: 'Ese archivo no lo administra el tablero.' })
         const actual = readFileSync(b.ruta, 'utf8')
         if (typeof b.previo === 'string' && actual !== b.previo) return enviar(res, 409, { error: 'El archivo cambió fuera del tablero desde que lo abriste.', actual })
         writeFileSync(b.ruta, b.contenido)
-        return enviar(res, 200, { ok: true, datos: fresco(true).datos })
+        return enviar(res, 200, { ok: true, datos: (await fresco(true)).datos })
       }
       if (ruta === '/api/nota') {
         const p = proyectos.find((x) => x.id === b.proyecto)
@@ -451,13 +611,29 @@ function servir() {
         if (!p?.notas || !texto) return enviar(res, 400, { error: 'Falta el proyecto o el texto de la nota.' })
         leerNotas(p) // crea el archivo con la plantilla si no existe
         writeFileSync(p.notas, anadirNota(readFileSync(p.notas, 'utf8'), texto.slice(0, 4000)))
-        return enviar(res, 200, { ok: true, datos: fresco(true).datos })
+        return enviar(res, 200, { ok: true, datos: (await fresco(true)).datos })
+      }
+      // Sincronía: el cliente solo manda claves y lados elegidos; el plan se recalcula aquí con datos frescos.
+      if (ruta === '/api/sincronia/previa' || ruta === '/api/sincronia/aplicar') {
+        const p = proyectos.find((x) => x.id === b.proyecto)
+        if (!p || typeof b.integracion !== 'string') return enviar(res, 400, { error: 'Falta el proyecto o la integración.' })
+        const opciones = { adaptadores, rutasPermitidas: await permitidas() }
+        if (ruta === '/api/sincronia/previa') return enviar(res, 200, await sincronizar(p, b.integracion, opciones))
+        if (!Array.isArray(b.acciones) || typeof b.hashPrevio !== 'string') return enviar(res, 400, { error: 'Faltan las acciones elegidas o el hash de la vista previa.' })
+        const resoluciones = Object.fromEntries(Object.entries(b.resoluciones || {}).filter(([, v]) => v === 'local' || v === 'externo'))
+        const r = await sincronizar(p, b.integracion, { ...opciones, elegidas: new Set(b.acciones.map(String)), resoluciones, hashPrevio: b.hashPrevio })
+        return enviar(res, 200, { ok: true, ...r, datos: (await fresco(true)).datos })
       }
       return enviar(res, 404, { error: 'no existe' })
     } catch (e) {
+      if (e instanceof ErrorSincronia) return enviar(res, e.estado, { error: e.message, paso: e.extra?.paso })
       return enviar(res, 500, { error: String(e?.message || e) })
     }
-  }).listen(PUERTO, '127.0.0.1')
+  }
+}
+function servir() {
+  let ultimo = Date.now()
+  createServer(crearManejador({ alUsar: () => { ultimo = Date.now() } })).listen(PUERTO, '127.0.0.1')
   setInterval(() => { if (Date.now() - ultimo > INACTIVIDAD_MS) process.exit(0) }, 60e3)
 }
 async function servidorVivo() {
@@ -500,13 +676,14 @@ function hookInicio() {
 let esPrincipal = false
 try { esPrincipal = realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)) } catch {}
 if (!esPrincipal) { /* importado */ }
-else if (!existsSync(join(AQUI, 'proyectos.json')) && (console.error('Falta proyectos.json: copia proyectos.ejemplo.json a proyectos.json y edítalo (ver README.md).'), true)) process.exitCode = 1
+else if (!existsSync(CONFIG) && (console.error('Falta proyectos.json: copia proyectos.ejemplo.json a proyectos.json y edítalo (ver README.md).'), true)) process.exitCode = 1
 else if (args.includes('--hook-inicio')) hookInicio()
 else if (args.includes('--servir')) servir()
+else if (args.includes('--probar-conexiones')) await probarConexiones()
 else {
-  const d = generar()
+  const d = await generar()
   if (!args.includes('--silencioso')) {
-    for (const p of d.proyectos) console.log(`${p.nombre}: ${p.backlogs.length} backlogs · ${p.planes.length} planes · ${p.git?.prs.length ?? 0} PRs · ${p.notas?.abiertas.length ?? 0} notas abiertas`)
+    for (const p of d.proyectos) console.log(`${p.nombre}: ${p.backlogs.length} backlogs · ${p.planes.length} planes · ${p.git?.prs.length ?? 0} PRs · ${p.notas?.abiertas.length ?? 0} notas abiertas${p.integraciones.length ? ` · ${p.integraciones.map((x) => `${x.id}: ${x.estado}${x.pendientes ? ` (${x.pendientes} por sincronizar)` : ''}`).join(', ')}` : ''}`)
     console.log(join(AQUI, 'index.html'))
   }
   if (args.includes('--abrir')) await abrir()
