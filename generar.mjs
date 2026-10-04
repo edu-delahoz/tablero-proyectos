@@ -923,6 +923,106 @@ async function leerIntegraciones(p, backlogs, { adaptadores = ADAPTADORES, aplic
   return salida
 }
 
+// Asignarse / quitarse un ítem o cambiarle el estado (modo «participar»). Misma ruta para los endpoints y el CLI.
+// Errores de validación: ErrorConfig. Errores de afuera: Error con `remoto = true`. Parchea el ítem en datos/externo-<p>.json (sin releer).
+export async function participar(p, cfg, { asignar, id, aMi, estado }, adaptadores = ADAPTADORES) {
+  if (!cfg) throw new ErrorConfig('Esa integración no está en proyectos.json.', 404)
+  if (cfg.modo !== 'participar') throw new ErrorConfig(`Solo puedes asignarte ítems o cambiar su estado en una integración en modo «participar» (pon "modo": "participar" en la integración «${cfg.id}» de proyectos.json o elígelo en Editar proyecto).`)
+  const mod = adaptadores[cfg.tipo]
+  if (!mod?.asignar || !mod?.cambiarEstado) throw new ErrorConfig(`${NOMBRES[cfg.tipo] || cfg.tipo}: este conector aún no participa.`)
+  id = String(id ?? '')
+  if (!/^\d+$/.test(id)) throw new ErrorConfig('Falta el id del ítem (solo números).')
+  if (asignar && typeof aMi !== 'boolean') throw new ErrorConfig('«aMi» debe ser sí o no.')
+  const rutaExt = join(DATOS, `externo-${p.id}.json`)
+  const columnas = leerJson(rutaExt, {})[cfg.id]?.columnas || []
+  let elegido
+  if (!asignar) {
+    elegido = typeof estado === 'string' ? columnas.find((x) => x.toLowerCase() === estado.trim().toLowerCase()) : undefined
+    if (!elegido) throw new ErrorConfig(`«${estado}» no es un estado conocido de esta integración${columnas.length ? ` (${columnas.join(', ')})` : ': recarga para leer los estados'}.`)
+  }
+  const ctx = contextoIntegracion(p, cfg, [], adaptadores)
+  let item, yo
+  try {
+    if (asignar) {
+      yo = leerJson(rutaExt, {})[cfg.id]?.yo
+      if (aMi && !(yo?.correo && Date.now() - Date.parse(yo.fecha) < 3600e3)) yo = { ...(await conTiempo(ctx.adaptador.quienSoy(), 15000)), fecha: new Date().toISOString() }
+      item = await conTiempo(ctx.adaptador.asignar(id, aMi ? yo.correo : null), 15000)
+    } else item = await conTiempo(ctx.adaptador.cambiarEstado(id, elegido, { columnas }), 15000)
+  } catch (e) { throw Object.assign(e instanceof Error ? e : new Error(String(e)), { remoto: true }) }
+  const correoYo = yo?.correo || leerJson(rutaExt, {})[cfg.id]?.yo?.correo
+  const cambios = { columna: item.columna, hecha: item.hecha, asignado: item.asignado ?? null }
+  if (asignar) cambios.mio = !!item.asignado && (aMi || (!!correoYo && item.asignado.correo?.toLowerCase() === correoYo.toLowerCase()))
+  const ext = leerJson(rutaExt, {})
+  ext[cfg.id] = { ...ext[cfg.id], ...(yo ? { yo } : {}) }
+  const enCache = ext[cfg.id].items?.find((x) => String(x.id) === id)
+  if (enCache) Object.assign(enCache, cambios)
+  mkdirSync(DATOS, { recursive: true })
+  writeFileSync(rutaExt, JSON.stringify(ext))
+  return { id, cambios, enCache, titulo: enCache?.titulo ?? null }
+}
+
+// ---- Pedírselo a Claude: --tareas / --asignarme / --estado y la línea del hook ----
+const abiertas = (items) => items.filter((x) => !x.hecha)
+const esMia = (x) => !!x.mio
+const sinDueno = (x) => !x.asignado
+// Markdown por estado (orden de `columnas`): #id · tipo · P · iteración · asignado · título · descripción corta · url.
+export function textoTareas(items, { sinAsignar = false, mias = false } = {}, { columnas = [], nombre = '', id = '' } = {}) {
+  const sel = items.filter((x) => (sinAsignar ? !x.hecha && sinDueno(x) : mias ? esMia(x) : true))
+  const orden = [...columnas, ...sel.map((x) => x.columna).filter((c) => c && !columnas.includes(c))]
+  const por = new Map()
+  for (const x of sel) { const c = x.columna || 'Sin estado'; por.set(c, [...(por.get(c) || []), x]) }
+  const filtro = sinAsignar ? ' (sin asignar)' : mias ? ' (mías)' : ''
+  const lineas = [`## ${[nombre, id && `\`${id}\``].filter(Boolean).join(' ') || 'Tareas'}${filtro} — ${sel.length} ítem(s)`]
+  if (!sel.length) lineas.push('', 'Nada que mostrar con ese filtro.')
+  for (const c of [...new Set([...orden, ...por.keys()])]) {
+    const g = por.get(c)
+    if (!g) continue
+    lineas.push('', `### ${c} (${g.length})`)
+    for (const x of g) {
+      const corta = x.descripcion ? x.descripcion.replace(/\s+/g, ' ').trim().slice(0, 160) : ''
+      lineas.push(['#' + x.id, x.tipo, x.prioridad && `P${x.prioridad}`, x.iteracion, x.asignado ? `asignado a ${x.asignado.nombre}${x.mio ? ' (yo)' : ''}` : 'sin asignar', x.titulo, corta, x.url].filter(Boolean).join(' · ').replace(/^/, '- '))
+    }
+  }
+  return lineas.join('\n')
+}
+// Una línea por integración con caché (sin red): cuántos ítems sin asignar y cuántos míos abiertos, y cómo pedirlos.
+export function lineasIntegraciones(p, cache = {}) {
+  return (p.integraciones || []).filter((c) => (c.modo === 'participar' || c.modo === 'lectura') && cache[c.id]?.items).map((c) => {
+    const it = abiertas(cache[c.id].items)
+    return `- ${NOMBRES[c.tipo] || c.tipo} \`${c.id}\`: ${it.filter(sinDueno).length} sin asignar, ${it.filter(esMia).length} mías abiertas. Para recomendarte una: \`node ${join(AQUI, 'generar.mjs')} --tareas ${p.id} --sin-asignar\``
+  })
+}
+
+function tareasCli() {
+  const pos = (flag) => { const i = args.indexOf(flag); return i < 0 ? [] : args.slice(i + 1).filter((a, j, v) => !a.startsWith('--') && v.slice(0, j).every((z) => !z.startsWith('--'))) }
+  const valor = (flag) => { const i = args.indexOf(flag); return i < 0 ? null : args[i + 1] }
+  const accion = ['--tareas', '--asignarme', '--estado'].find((f) => args.includes(f))
+  const [pid, id, ...resto] = pos(accion)
+  const fallo = (m) => { console.error(m); process.exitCode = 1 }
+  const p = proyectos.find((x) => x.id === pid)
+  if (!p) return fallo(`Proyecto «${pid ?? ''}» no encontrado. Proyectos: ${proyectos.map((x) => x.id).join(', ')}.`)
+  const pedida = valor('--integracion')
+  const cands = (p.integraciones || []).filter((c) => (pedida ? c.id === pedida : accion === '--tareas' ? true : c.modo === 'participar'))
+  if (!cands.length) return fallo(pedida ? `«${p.id}» no tiene la integración «${pedida}».` : `«${p.id}» no tiene integraciones${accion === '--tareas' ? '' : ' en modo participar (activa "modo": "participar" en proyectos.json o en Editar proyecto)'}.`)
+  const cache = leerJson(join(DATOS, `externo-${p.id}.json`), {})
+  if (accion === '--tareas') {
+    for (const c of cands) {
+      const e = cache[c.id]
+      if (!e?.items) { console.log(`## ${NOMBRES[c.tipo] || c.tipo} \`${c.id}\`\n\nSin datos todavía: abre el tablero (node generar.mjs) para leerla.`); continue }
+      console.log(textoTareas(e.items, { sinAsignar: args.includes('--sin-asignar'), mias: args.includes('--mias') }, { columnas: e.columnas || [], nombre: NOMBRES[c.tipo] || c.tipo, id: c.id }) + '\n')
+    }
+    return
+  }
+  const c = cands[0]
+  if (cands.length > 1) return fallo(`«${p.id}» tiene varias integraciones en participar (${cands.map((x) => x.id).join(', ')}): indica una con --integracion.`)
+  const asignar = accion === '--asignarme'
+  const estado = resto.join(' ')
+  return participar(p, c, { asignar, id, aMi: !args.includes('--quitar'), estado }).then((r) => {
+    const t = r.titulo ? ` «${r.titulo}»` : ''
+    console.log(asignar ? (args.includes('--quitar') ? `✓ #${r.id}${t} quedó sin asignar.` : `✓ #${r.id}${t} quedó asignado a ti.`) : `✓ #${r.id}${t} ahora está en «${r.cambios.columna}».`)
+  }, (e) => fallo(e.message))
+}
+
 // --probar-conexiones: una lectura mínima por integración, con el resultado en español.
 async function probarConexiones() {
   let hubo = false
@@ -1456,47 +1556,17 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
         const p = integracionDe(b)
         const cfg = (p.integraciones || []).find((x) => x.id === b.integracion)
-        if (!cfg) throw new ErrorConfig('Esa integración no está en proyectos.json.', 404)
-        if (cfg.modo !== 'participar') throw new ErrorConfig('Solo puedes asignarte ítems o cambiar su estado en una integración en modo «participar».')
-        const mod = adaptadores[cfg.tipo]
-        if (!mod?.asignar || !mod?.cambiarEstado) throw new ErrorConfig(`${NOMBRES[cfg.tipo] || cfg.tipo}: este conector aún no participa.`)
-        const id = String(b.id ?? '')
-        if (!/^\d+$/.test(id)) throw new ErrorConfig('Falta el id del ítem (solo números).')
         const esAsignar = ruta === '/api/integraciones/asignar'
-        if (esAsignar && typeof b.aMi !== 'boolean') throw new ErrorConfig('«aMi» debe ser sí o no.')
-        const rutaExt = join(DATOS, `externo-${p.id}.json`)
-        const columnas = leerJson(rutaExt, {})[cfg.id]?.columnas || []
-        let estado
-        if (!esAsignar) {
-          estado = typeof b.estado === 'string' ? columnas.find((x) => x.toLowerCase() === b.estado.trim().toLowerCase()) : undefined
-          if (!estado) throw new ErrorConfig(`«${b.estado}» no es un estado conocido de esta integración${columnas.length ? ` (${columnas.join(', ')})` : ': recarga para leer los estados'}.`)
-        }
-        const ctx = contextoIntegracion(p, cfg, [], adaptadores)
-        let item, yo
-        try {
-          if (esAsignar) {
-            yo = leerJson(rutaExt, {})[cfg.id]?.yo
-            if (b.aMi && !(yo?.correo && Date.now() - Date.parse(yo.fecha) < 3600e3)) yo = { ...(await conTiempo(ctx.adaptador.quienSoy(), 15000)), fecha: new Date().toISOString() }
-            item = await conTiempo(ctx.adaptador.asignar(id, b.aMi ? yo.correo : null), 15000)
-          } else item = await conTiempo(ctx.adaptador.cambiarEstado(id, estado, { columnas }), 15000)
-        } catch (e) {
-          registrar(`${esAsignar ? 'asignar' : 'estado'} ${p.id}/${cfg.id} #${id}: ${e?.message || e}`)
+        let r
+        try { r = await participar(p, cfg, { asignar: esAsignar, id: b.id, aMi: b.aMi, estado: b.estado }, adaptadores) } catch (e) {
+          if (!e.remoto) throw e
+          registrar(`${esAsignar ? 'asignar' : 'estado'} ${p.id}/${cfg.id} #${String(b.id)}: ${e?.message || e}`)
           return enviar(res, 502, { error: String(e?.message || e) })
         }
-        const correoYo = yo?.correo || leerJson(rutaExt, {})[cfg.id]?.yo?.correo
-        const cambios = { columna: item.columna, hecha: item.hecha, asignado: item.asignado ?? null }
-        if (esAsignar) cambios.mio = !!item.asignado && (b.aMi || (!!correoYo && item.asignado.correo?.toLowerCase() === correoYo.toLowerCase()))
-        // Caché en disco: el ítem parcheado (y quién soy, 1 h). Sin releer los ítems de afuera.
-        const ext = leerJson(rutaExt, {})
-        ext[cfg.id] = { ...ext[cfg.id], ...(yo ? { yo } : {}) }
-        const enCache = ext[cfg.id].items?.find((x) => String(x.id) === id)
-        if (enCache) Object.assign(enCache, cambios)
-        mkdirSync(DATOS, { recursive: true })
-        writeFileSync(rutaExt, JSON.stringify(ext))
         const c = await fresco()
-        const enDatos = c.datos.proyectos.find((x) => x.id === p.id)?.integraciones?.find((x) => x.id === cfg.id)?.items?.find((x) => String(x.id) === id)
-        if (enDatos) Object.assign(enDatos, cambios)
-        return enviar(res, 200, { ok: true, item: { ...(enDatos || enCache || {}), id, ...cambios }, datos: c.datos })
+        const enDatos = c.datos.proyectos.find((x) => x.id === p.id)?.integraciones?.find((x) => x.id === cfg.id)?.items?.find((x) => String(x.id) === r.id)
+        if (enDatos) Object.assign(enDatos, r.cambios)
+        return enviar(res, 200, { ok: true, item: { ...(enDatos || r.enCache || {}), id: r.id, ...r.cambios }, datos: c.datos })
       }
       // Importar una integración de solo lectura a un BACKLOG_<ID>.md propio (nunca sobrescribe; `previa` no escribe).
       if (ruta === '/api/integraciones/importar') {
@@ -1679,6 +1749,7 @@ function hookInicio() {
     for (const a of n.abiertas.slice(0, 8)) lineas.push(`  · ${a.slice(0, 200)}`)
     lineas.push('  Atiéndelas (responde con «→ respuesta (fecha)» y muévelas a «Respondidas») o menciónalas al empezar.')
   }
+  lineas.push(...lineasIntegraciones(p, leerJson(join(DATOS, `externo-${p.id}.json`), {})))
   process.stdout.write(lineas.join('\n') + '\n')
 }
 
@@ -1687,6 +1758,7 @@ let esPrincipal = false
 try { esPrincipal = realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)) } catch {}
 if (!esPrincipal) { /* importado */ }
 else if (!existsSync(CONFIG) && (console.error('Falta proyectos.json: copia proyectos.ejemplo.json a proyectos.json y edítalo (ver README.md).'), true)) process.exitCode = 1
+else if (['--tareas', '--asignarme', '--estado'].some((f) => args.includes(f))) await tareasCli()
 else if (args.includes('--hook-inicio')) hookInicio()
 else if (args.includes('--servir')) servir()
 else if (args.includes('--probar-conexiones')) await probarConexiones()

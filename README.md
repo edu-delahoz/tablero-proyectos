@@ -290,6 +290,23 @@ de solo lectura.
 node generar.mjs --probar-conexiones   # lectura mínima de cada integración: OK o el error en español
 ```
 
+### Pedírselo a Claude
+
+Desde la terminal (o pidiéndoselo a Claude) se puede ver el backlog de una integración y, en modo `participar`
+(solo Azure DevOps), asignarse ítems y cambiar su estado. Lee de la caché (`datos/externo-<proyecto>.json`, sin red);
+asignar/estado usan la misma ruta que los botones del tablero y confirman con el título.
+
+```sh
+node generar.mjs --tareas eap10 [--sin-asignar | --mias] [--integracion ado]   # Markdown por estado, con conteos
+node generar.mjs --asignarme eap10 123 [--quitar]                              # solo en «participar»
+node generar.mjs --estado eap10 123 "Doing"                                    # solo estados conocidos de la integración
+```
+
+El hook de inicio añade, por integración, «N sin asignar, M mías abiertas» y el comando para pedirlas. Prompt de ejemplo:
+
+> Revisa las tareas pendientes de EAP10 con `node generar.mjs --tareas eap10 --sin-asignar`, recomiéndame cuál asignarme
+> según prioridad e iteración y, cuando te confirme, asígnamela con `--asignarme eap10 <id>`.
+
 ### Credenciales
 
 Las credenciales **nunca** van en el repo ni llegan al navegador (el HTML solo recibe «conectado» o
