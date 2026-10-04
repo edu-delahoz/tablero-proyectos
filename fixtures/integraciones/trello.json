@@ -1,0 +1,15 @@
+{
+  "tablero": { "id": "b0ard1d", "name": "Tablero de ejemplo", "url": "https://trello.com/b/AbCdEfGh/tablero-de-ejemplo" },
+  "listas": [
+    { "id": "l_porhacer", "name": "Por hacer" },
+    { "id": "l_encurso", "name": "En curso" },
+    { "id": "l_hecho", "name": "Hecho" }
+  ],
+  "tarjetas": [
+    { "id": "c1", "name": "Crear el esquema", "idList": "l_hecho", "url": "https://trello.com/c/aaa111/1-crear-el-esquema", "dateLastActivity": "2026-01-10T10:00:00.000Z" },
+    { "id": "c2", "name": "Probar el login", "idList": "l_encurso", "url": "https://trello.com/c/bbb222/2-probar-el-login", "dateLastActivity": "2026-01-11T10:00:00.000Z" }
+  ],
+  "etiquetas": [ { "id": "lb_s1", "name": "S1", "color": "green" } ],
+  "etiquetaNueva": { "id": "lb_s3", "name": "S3", "color": null },
+  "tarjetaNueva": { "id": "c_nueva", "url": "https://trello.com/c/ccc333/3-nueva", "shortUrl": "https://trello.com/c/ccc333" }
+}

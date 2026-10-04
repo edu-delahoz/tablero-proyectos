@@ -1,0 +1,19 @@
+{
+  "wiql": { "workItems": [ { "id": 101, "url": "https://dev.azure.com/org-ejemplo/proyecto-ejemplo/_apis/wit/workItems/101" }, { "id": 102 }, { "id": 103 } ] },
+  "items": { "count": 3, "value": [
+    { "id": 101, "fields": { "System.Title": "Crear el esquema", "System.State": "Done", "System.ChangedDate": "2026-01-10T10:00:00Z", "System.WorkItemType": "Task", "System.AssignedTo": { "displayName": "Ana Ejemplo", "uniqueName": "ana@ejemplo.com" }, "System.Description": "<div>Crear las <b>tablas</b> base.</div><p>Ver&nbsp;el diseño &amp; las notas<br>del equipo &lt;v2&gt;.</p>", "Microsoft.VSTS.Common.Priority": 2, "System.IterationPath": "proyecto-ejemplo\\Sprint 3", "System.Parent": 100 } },
+    { "id": 102, "fields": { "System.Title": "Probar el login", "System.State": "Active", "System.ChangedDate": "2026-01-11T10:00:00Z", "System.WorkItemType": "Bug", "System.AssignedTo": "Luis Ejemplo <luis@ejemplo.com>" } },
+    { "id": 103, "fields": { "System.Title": "Sin empezar", "System.State": "To Do", "System.ChangedDate": "2026-01-12T10:00:00Z", "System.WorkItemType": "Task" } }
+  ] },
+  "estados": { "count": 4, "value": [ { "name": "To Do" }, { "name": "Active" }, { "name": "Done" }, { "name": "Removed" } ] },
+  "tipos": { "count": 3, "value": [
+    { "name": "Task", "states": [ { "name": "To Do" }, { "name": "Active" }, { "name": "Done" }, { "name": "Removed" } ] },
+    { "name": "Bug", "states": [ { "name": "New" }, { "name": "Active" }, { "name": "Resolved" } ] },
+    { "name": "Epic", "states": [ { "name": "New" }, { "name": "Done" } ] }
+  ] },
+  "mias": { "workItems": [ { "id": 101 } ] },
+  "yo": { "authenticatedUser": { "id": "aaaa-1111", "providerDisplayName": "Ana Ejemplo", "properties": { "Account": { "$type": "System.String", "$value": "ana@ejemplo.com" } } }, "authorizedUser": { "id": "aaaa-1111" } },
+  "asignado": { "id": 103, "fields": { "System.Title": "Sin empezar", "System.State": "To Do", "System.AssignedTo": { "displayName": "Ana Ejemplo", "uniqueName": "ana@ejemplo.com" } } },
+  "nuevo": { "id": 201, "fields": { "System.Title": "Nueva" } },
+  "loginHtml": "<!DOCTYPE html><html><head><title>Sign In</title></head><body>Sign in to your account</body></html>"
+}
