@@ -1,7 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
-- 2026-10-04 · rama `integraciones-vista` · S24 a medias: EAP10 añadido a `proyectos.json` (ignorado por git; el PAT ya estaba) y `--probar-conexiones` OK con la org real (204 ítems, 13 columnas, solo lectura). El usuario probó en navegador pero no dio resultados → resto pasa a **S24b**. Sin cambios de código; tests no corridos. Los cambios sin commit de `coherencia*.mjs` no son de H9.
+- 2026-10-04 · rama `integraciones-vista` · S24 a medias: EAP10 añadido a `proyectos.json` (ignorado por git; el PAT ya estaba) y `--probar-conexiones` OK con la org real (204 ítems, 13 columnas, solo lectura). El usuario probó en navegador pero no dio resultados → resto pasa a **S24b**. Después el usuario confirmó que todo funciona y pidió crear proyectos y backlogs desde la vista → **S26** (Opus, servidor) y **S27** (Sonnet, vista); S24b queda solo con tests/PR y el opcional. Sin cambios de código; tests no corridos. Los cambios sin commit de `coherencia*.mjs` no son de H9.
 - 2026-10-04 · rama `integraciones-vista` · S23 hecha, tests en verde (127 pasan, 2 omitidos): vista con selector «Modo» (solo lectura preseleccionado sin backlogs), paso 4 «Modo y backlog», `auto` oculto en lectura, tipo de work item como casillas (+ «Todos» solo en lectura), tarjeta con chip de asignado/«Sin asignar», insignia de tipo, filtro Todas/Mías/Sin asignar (estado en `filtroInteg`, sobrevive al repintado; «Mías» desactivado si falta `mio`), sin «Sincronizar» ni «auto» en lectura, `cfgLimpia` manda `modo`, y la primera sincronía deja crear/traer sin marcar con aviso. Verificado en Chrome headless por CDP con servidor de prueba. Siguiente: **S24** (Sonnet, con el usuario). Los cambios sin commit de `coherencia*.mjs` no son de H9.
 - 2026-10-04 · rama `integraciones-vista` · S22 hecha, tests en verde (126 pasan, 2 omitidos): `modo` (`sincronizar`|`lectura`) en `COMUNES` (exportado; `configVisible` lo usa), en lectura `backlog` opcional y `auto: true` rechazado; `contextoIntegracion` sin backlog y adaptador solo con `leer`; `sincronizar()` → 400 «solo lectura» (previa y aplicar); `/probar` y `--probar-conexiones` sin backlog (`vinculadas: 0`); primera sincronía (sin `datos/sync-…`): previa con `primera` y `conteo`, `auto` no aplica nada; ítems con `tipo/asignado/mio`; proyecto sin `docs`/`repo` genera; README y `proyectos.ejemplo.json` con `modo`, `tipoItem` lista y ejemplo EAP10. Trampa: el `get()` de `servidor.test.mjs` parsea JSON, para el HTML usar `fetch`. Siguiente: **S23** (Sonnet). Los cambios sin commit de `coherencia*.mjs` no son de H9.
 - 2026-10-04 · rama `integraciones-vista` · S21 hecha, tests en verde (123 pasan, 2 omitidos): `leer` con `tipoItem` texto/lista/`'*'` (WIQL `IN`, orden por fecha, tope 500 con aviso, lotes de 200 en paralelo máx. 4), ítems con `tipo`, `asignado` y `mio` (segunda WIQL `@Me`, aviso si falla), estados por unión con una sola llamada a `wit/workitemtypes`; `crear` usa el primer tipo; `config.mjs` valida `tipoItem` y rechaza `'*'` salvo `modo: 'lectura'` (S22 añade `modo`). Siguiente: **S22** (Opus). Los cambios sin commit de `coherencia*.mjs` no son de H9.
@@ -149,13 +149,33 @@ Prompt de arranque S24 (Sonnet, sin plugins/MCP):
 
 ### S24b — Resultados de la prueba real y cierre · **Sonnet**, con el usuario
 El usuario revisó EAP10 en el navegador al final de S24 pero no dictó los resultados (el relevo se pidió sin ellos); hay que pedírselos.
-- [ ] Preguntar al usuario y anotar aquí: ¿«Buscar proyectos» lista EAP10? ¿«Mías» coincide con Azure (`@Me`)? ¿EAP10 tiene más de un equipo (→ `areaPath`)? ¿org falsa y servidor detenido dieron los mensajes esperados? ¿causa real de «cargando»?
+- [x] (el usuario confirmó «todo eso funciona»; sin detalle de equipos/`areaPath`) Preguntar al usuario y anotar aquí: ¿«Buscar proyectos» lista EAP10? ¿«Mías» coincide con Azure (`@Me`)? ¿EAP10 tiene más de un equipo (→ `areaPath`)? ¿org falsa y servidor detenido dieron los mensajes esperados? ¿causa real de «cargando»?
 - [ ] Si hay más de un equipo: añadir sesión nueva con campo opcional `areaPath`
 - [ ] Opcional: `generar.mjs` ~l.773, el reinicio por código nuevo espera a que no haya peticiones en vuelo; prueba en `generar.test.mjs`
 - [ ] `git status` (ningún `.md` cambió salvo BACKLOG), `node --test 2>&1 | tail -40`, actualizar PR #9
 
 Prompt de arranque S24b (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S24b) y trabaja solo esa sesión en la rama `integraciones-vista`, con el usuario delante. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S26 — Crear proyecto y backlog desde el tablero (servidor) · **Opus** (escribe archivos)
+Pedido del usuario al cerrar S24: en la vista no puede elegir backlog si el proyecto no tiene ninguno, y no puede añadir un proyecto nuevo sin editar `proyectos.json` a mano (notas abiertas de NOTAS_TABLERO.md: «crear un nuevo proyecto»).
+- [ ] `generar.mjs`: `POST /api/proyectos/crear` `{id, nombre, repo?, docs?}` → valida `id` (`[a-z0-9-]`, único), `repo`/`docs` rutas existentes, escribe `proyectos.json` con control de `mtime` (como `/api/integraciones/guardar`, 409 si cambió); solo local
+- [ ] `generar.mjs`: `POST /api/backlog/crear` `{proyecto, archivo?}` → crea `BACKLOG.md` (o `BACKLOG_<ID>.md`) con plantilla mínima (título, «## Estado», una sección con casilla) dentro de `docs` del proyecto; **nunca sobrescribe** (existe → 409), nombre sin `/` ni `..`, requiere que el proyecto tenga `docs`
+- [ ] Vista previa: ambos endpoints aceptan `{previa: true}` y devuelven lo que escribirían sin escribir
+- [ ] Pruebas en `servidor.test.mjs`: id duplicado → 400, archivo existente → 409, ruta fuera de `docs` → 400, `mtime` viejo → 409; tras crear, `/api/datos` lista el backlog
+- [ ] `node --test 2>&1 | tail -40`, commit
+
+Prompt de arranque S26 (Opus, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S26) y trabaja solo esa sesión en la rama `integraciones-vista`. Prioridad: no sobrescribir nunca archivos ni escribir fuera de `docs`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+
+### S27 — Crear proyecto y backlog desde el tablero (vista) · **Sonnet**
+- [ ] `plantilla.html`: botón «Nuevo proyecto» (selector de proyectos / «Todos los proyectos») con formulario id, nombre, repo, docs y vista previa antes de crear
+- [ ] `plantilla.html`: en el paso «Modo y backlog» de integraciones y en la pestaña Backlogs, botón «Crear backlog» cuando el proyecto no tiene (con vista previa); al crearlo se preselecciona en el selector «Archivo»
+- [ ] Verificar en Chrome headless por CDP (copia de `datos/`): crear proyecto → crear backlog → crear integración en modo sincronizar con ese backlog
+- [ ] Test de que la plantilla trae el botón y el formulario; `node --test 2>&1 | tail -40`, commit, actualizar PR #9
+
+Prompt de arranque S27 (Sonnet, sin plugins/MCP):
+> Lee `BACKLOG.md` (Estado + S27) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 
 ### S25 — (opcional) Importar el backlog de EAP10 a un `.md` propio · **Sonnet**
 Solo si lo pides: hoy EAP10 no tiene dónde sincronizarse.
