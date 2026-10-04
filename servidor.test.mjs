@@ -1,7 +1,7 @@
 // Endpoints de sincronía del servidor local, en proceso, con un adaptador en memoria. node --test
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,6 +27,9 @@ writeFileSync(join(dir, 'proyectos.json'), JSON.stringify([{
 }]))
 process.env.TABLERO_PROYECTOS = join(dir, 'proyectos.json')
 process.env.TABLERO_DATOS = join(dir, 'datos')
+// Credenciales: siempre un archivo del temporal, nunca ~/.config/tablero.
+const CRED = join(dir, 'config', 'credenciales.json')
+process.env.TABLERO_CREDENCIALES = CRED
 
 const fuera = new Map([['E1', { id: 'E1', titulo: 'Desde afuera', hecha: false, columna: 'Todo', url: 'https://x/E1' }]])
 let n = 0
@@ -250,4 +253,68 @@ test('asegurarServidor: arranca si no hay, deja el vigente y recicla si la huell
   const log = '2026 arranque (pid 11, puerto 47321)\n2026 arranque (pid 22, puerto 9)\n2026 arranque (pid 33, puerto 47321)\n'
   assert.equal(pidDelLog(log, 47321), 33)
   assert.equal(pidDelLog(log, 1), null)
+})
+
+// ---------- Integraciones desde la vista (S16) ----------
+const CONF = join(dir, 'proyectos.json')
+const mtime = async () => (await get('/api/datos')).json.configMtime
+
+test('integraciones: guardar añade solo campos de la lista blanca, edita en su sitio y quitar deja el resto', async () => {
+  const antes = JSON.parse(readFileSync(CONF, 'utf8'))
+  const nueva = { id: 'gh2', tipo: 'github-projects', propietario: 'otro', numero: '7', backlog: 'BACKLOG_PRUEBA.md', token: 'no-se-guarda' }
+  const r = await post('/api/integraciones/guardar', { proyecto: 'prueba', integracion: nueva, mtime: await mtime() })
+  assert.equal(r.estado, 200, r.json.error)
+  let p = JSON.parse(readFileSync(CONF, 'utf8'))[0]
+  assert.deepEqual(p.integraciones.map((x) => x.id), ['gh', 'tr', 'gh2'])
+  assert.deepEqual(p.integraciones[2], { id: 'gh2', tipo: 'github-projects', backlog: 'BACKLOG_PRUEBA.md', propietario: 'otro', numero: 7 })
+  assert.deepEqual({ ...p, integraciones: undefined }, { ...antes[0], integraciones: undefined })
+  assert.ok(r.json.datos.proyectos[0].integraciones.some((x) => x.id === 'gh2'), 'la vista recibe la integración nueva sin reiniciar')
+  // Editar renombrando: en su sitio y avisa.
+  const e = await post('/api/integraciones/guardar', { proyecto: 'prueba', idOriginal: 'gh2', integracion: { ...nueva, id: 'gh3', numero: 8 }, mtime: await mtime() })
+  assert.equal(e.json.renombrada, true)
+  p = JSON.parse(readFileSync(CONF, 'utf8'))[0]
+  assert.deepEqual(p.integraciones.map((x) => [x.id, x.numero]), [['gh', 1], ['tr', undefined], ['gh3', 8]])
+  const q = await post('/api/integraciones/quitar', { proyecto: 'prueba', id: 'gh3', mtime: await mtime() })
+  assert.equal(q.estado, 200)
+  assert.deepEqual(JSON.parse(readFileSync(CONF, 'utf8')), antes)
+})
+
+test('integraciones: 409 si proyectos.json cambió, 400 con errores si no valida, 403 sin Origin', async () => {
+  const m = await mtime()
+  const cfg = { id: 'gh9', tipo: 'github-projects', propietario: 'u', numero: 1, backlog: 'BACKLOG_PRUEBA.md' }
+  assert.equal((await post('/api/integraciones/guardar', { proyecto: 'prueba', integracion: cfg, mtime: m - 1000 })).estado, 409)
+  assert.equal((await post('/api/integraciones/quitar', { proyecto: 'prueba', id: 'gh', mtime: m - 1000 })).estado, 409)
+  const mala = await post('/api/integraciones/guardar', { proyecto: 'prueba', integracion: { ...cfg, id: 'gh', backlog: 'NADA.md' }, mtime: m })
+  assert.equal(mala.estado, 400)
+  assert.ok(mala.json.errores.some((x) => /Ya hay otra/.test(x)) && mala.json.errores.some((x) => /NADA.md/.test(x)))
+  assert.equal((await post('/api/integraciones/guardar', { proyecto: 'prueba', integracion: cfg, mtime: m }, { origin: 'http://evil.com' })).estado, 403)
+  assert.equal((await post('/api/integraciones/guardar', { proyecto: 'nada', integracion: cfg, mtime: m })).estado, 404)
+  assert.ok(!JSON.parse(readFileSync(CONF, 'utf8'))[0].integraciones.some((x) => x.id === 'gh9'))
+})
+
+test('integraciones: probar lee con la config propuesta sin guardar', async () => {
+  const antes = readFileSync(CONF, 'utf8')
+  const r = await post('/api/integraciones/probar', { proyecto: 'prueba', integracion: { id: 'nueva', tipo: 'github-projects', propietario: 'u', numero: 5, backlog: 'BACKLOG_PRUEBA.md' } })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.deepEqual([r.json.titulo, r.json.columnas, typeof r.json.items], ['Falso', ['Todo', 'Done'], 'number'])
+  assert.equal(readFileSync(CONF, 'utf8'), antes)
+  assert.equal((await post('/api/integraciones/probar', { proyecto: 'prueba', integracion: { id: 'x', tipo: 'github-projects', backlog: 'BACKLOG_PRUEBA.md' } })).estado, 400)
+})
+
+test('credenciales: se guardan en 0600, la respuesta y /api/datos solo traen el resumen, nunca el valor', async () => {
+  const SECRETO = 'tok-SUPERSECRETO-abcdef123456', CLAVE = 'key-OTROSECRETO-998877'
+  const r = await post('/api/credenciales', { clave: 'trello', campos: { key: CLAVE, token: SECRETO } })
+  assert.equal(r.estado, 200, r.json.error)
+  assert.deepEqual(r.json.credenciales.trello, { tipo: 'trello', guardada: true, fuente: 'archivo', fin: '…3456' })
+  assert.equal(statSync(CRED).mode & 0o777, 0o600)
+  assert.deepEqual(JSON.parse(readFileSync(CRED, 'utf8')), { trello: { key: CLAVE, token: SECRETO } })
+  const html = await new Promise((ok) => request({ host: '127.0.0.1', port: puerto, path: '/', headers: { host: `127.0.0.1:${puerto}` } }, (x) => { let t = ''; x.on('data', (c) => { t += c }); x.on('end', () => ok(t)) }).end())
+  for (const texto of [JSON.stringify(r.json), JSON.stringify((await get('/api/datos')).json), html]) {
+    assert.ok(!texto.includes('SUPERSECRETO') && !texto.includes('OTROSECRETO'), 'un secreto salió del servidor')
+  }
+  assert.equal((await post('/api/credenciales', { clave: 'trello', campos: { pat: 'x' } })).estado, 400)
+  assert.equal((await post('/api/credenciales', { clave: 'github-projects', campos: { token: 'x' } })).estado, 400)
+  assert.equal((await post('/api/credenciales', { clave: 'trello', campos: { token: 'con espacio' } })).estado, 400)
+  assert.equal((await post('/api/credenciales', { clave: 'trello', campos: { token: 'x' } }, { origin: 'http://evil.com' })).estado, 403)
+  assert.equal(JSON.parse(readFileSync(CRED, 'utf8')).trello.token, SECRETO)
 })

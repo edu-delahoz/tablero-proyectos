@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `integraciones-vista` (sale de `plan-en-curso`) · H8 escrito en el backlog (faltaba: la sesión del plan no lo dejó) y S16 hecha, tests en verde (105 pasan, 2 omitidos): `cargarProyectos()` recarga `proyectos.json` por mtime, `integraciones/config.mjs` (validar, aplicarCambio, escribirAtomico), `guardarCredencial`/`resumenCredenciales`, endpoints `/api/integraciones/{guardar,quitar,probar}` y `/api/credenciales`, `datos.credenciales` y `datos.configMtime`. Probado solo con tests (copias en temporal); nada contra el `proyectos.json` ni las credenciales reales. Siguiente: **S17** (Sonnet, `listar()` + `/api/integraciones/descubrir`).
 - 2026-10-04 · S15 hecha (mod `~/.claude/mods/panel-tablero`, sin git): rutas relativas y nombres sueltos de backlog resueltos contra el root, sesión pedida en el prompt («Sesión S3c de BACKLOG_MVP.md»), `seccionDe` entiende viñetas `- **S3c — …**` (tarea madre, casillas, fallback a la primera abierta), tarjeta con `H3 › Personas mal migradas › S3c  …` + hasta 4 casillas, y texto ajustado en vez de recortado. `claude plugin test` 11/11, `plugin validate` OK (solo aviso de `author`), `tsc` limpio. Con el `BACKLOG_MVP.md` real: pedida S3c → 3/3; sin pistas → S4c con 4 casillas. H7 cerrado.
 - 2026-10-04 · rama `plan-en-curso` · S14 hecha, tests en verde (93 pasan, 2 omitidos): huella del código en `/api/version` (`codigo`), `POST /api/salir` (solo local), `asegurarServidor()` recicla (salir → SIGTERM al pid de `lsof` → arrancar) y el servidor se relanza solo cada 30 s si cambia el código — comprobado con el servidor real (viejo de S11 reciclado por SIGTERM; `touch plantilla.html` → «reinicio por código nuevo» en 30 s). `construirFrente`: abiertas por sub-sesión (Falta = la siguiente), `planDelFrente` (mención en la siguiente → en la hecha → nombre con la clave y el backlog → lo de antes) con `planDe`; tarjeta «Falta · S3c — …», «S3c 0/3», «Plan (de S3)». Con el `BACKLOG_MVP.md` real: S3c siguiente, 3 casillas, plan `sesi-n-s3c-de-backlog-mvp-md-swift-ember.md`. No se miró la tarjeta en el navegador (solo `/api/datos`). Los cambios sin commit de `coherencia.*` (aviso «sesión sin casillas») no son de S14. Siguiente: **S15** (mod).
 - 2026-10-04 · fuera del repo · revisión del panel `panel-tablero` a 207 y ~120 col: no se pudo ver el panel real (`/tablero` solo se ve en la UI de Claude Code). Ampliado el test «plan solo leído» del mod a anchos 120 y 207: `claude plugin test` 7/7, ningún texto desborda. Sin cambios en el repo salvo este backlog. Pendiente solo: vistazo del usuario a `/tablero` (207 y ~120).
@@ -16,6 +17,34 @@
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H8 — Configurar integraciones desde la vista Integraciones
+
+Plan: `~/.claude/plans/quiero-que-planes-en-vivid-locket.md`. Rama `integraciones-vista` (sale de `plan-en-curso`). Crear, editar, quitar y probar integraciones, guardar credenciales (`chmod 600`, nunca vuelven al HTML ni a `/api/datos`: solo `{ guardada, fuente, fin }`) y elegir el destino en desplegables, sin tocar archivos a mano.
+
+### S16 — Núcleo: config recargable, credenciales y endpoints · **Opus** · rama `integraciones-vista`
+`generar.mjs`, `integraciones/config.mjs` (nuevo), `integraciones/credenciales.mjs`, `servidor.test.mjs`, `integraciones/*.test.mjs`.
+- [x] `generar.mjs`: `proyectos` deja de ser `const`; `cargarProyectos()` recarga si cambia el mtime de `CONFIG`; `CONFIG` entra en `huella()`
+- [x] `integraciones/config.mjs`: `validarIntegracion` (id `^[a-z0-9-]{1,30}$` único, tipo en `ADAPTADORES`, obligatorios por tipo, backlog existente, lista blanca de campos), `aplicarCambio` (sobre JSON crudo, conserva `~`, campos ajenos y orden), `escribirAtomico` (tmp + rename); tests
+- [x] `integraciones/credenciales.mjs`: `guardarCredencial(clave, campos, ruta)` (mezcla, atómico, `0o600`, `mkdir -p`) y `resumenCredenciales(datos, env)` sin secretos; tests contra ruta temporal
+- [x] Endpoints `POST /api/integraciones/guardar` y `/quitar` (409 si cambió el mtime de `proyectos.json`), `/probar` (sin guardar, con timeout) y `POST /api/credenciales` (solo campos de `REQUISITOS`, responde el resumen); mismas guardas Host/Origin/JSON
+- [x] `recolectar` añade `datos.credenciales` (resumen) y `datos.configMtime`
+- [x] Tests de servidor contra copia (`TABLERO_PROYECTOS`, ruta de credenciales inyectada): guardar/quitar, 409, `/api/credenciales` sin el secreto y archivo `0600`, `/api/datos` sin el valor de ningún token
+
+Decisiones y trampas (S16): la ruta de credenciales se inyecta con `TABLERO_CREDENCIALES` (los tests nunca tocan `~/.config/tablero`). `resumenCredenciales` va por tipo (`trello`, `azure-devops`, `github-projects` → `fuente: 'gh'`) y por id con entrada propia; `fin` solo si el valor tiene ≥ 8 caracteres; nunca nombres de campo (el test de `/api/datos` busca «token»). `guardarCredencial` no pisa un `credenciales.json` con JSON roto; campo vacío = borrarlo. `/api/credenciales` acepta como `clave` un tipo o el id de una integración ya configurada. `/probar` responde 502 con el error del conector si la lectura falla (400 si no valida). Editar conserva campos fuera de la lista blanca; renombrar responde `renombrada: true` (la vista debe avisar de marcas huérfanas). `proyectos.json` se reescribe con la sangría detectada (el real usa 2 → `git diff` solo del bloque). `CONFIG` y `credenciales.json` entran en `huella()`.
+
+### S17 — Descubrir Projects, tableros y columnas · **Sonnet** · rama `integraciones-vista`
+- [ ] GitHub `listar()`: Projects del usuario y sus orgs (`gql` vía `gh`); con `{propietario, numero}` → campos de selección con opciones y campos de texto; tests con `gh` simulado
+- [ ] Trello `listar()`: tableros abiertos; con `tablero` → listas abiertas; tests con `fetch` simulado
+- [ ] ADO `listar()`: proyectos de la organización; con `proyecto` → tipos de work item y estados; tests con `fetch` simulado
+- [ ] `POST /api/integraciones/descubrir` `{ tipo, clave?, consulta }` (timeout 15 s, errores con `traducirError`); test de servidor
+
+### S18 — Formulario en la vista Integraciones · **Sonnet** · rama `integraciones-vista`
+- [ ] «+ Añadir integración»; el estado vacío pasa a ser el formulario (no el texto del README)
+- [ ] Formulario por pasos: tipo → credencial (guardar / «guardada · …ab12» + Cambiar) → destino (desplegable) → backlog → columnas → id propuesto → `auto` → Probar → Guardar
+- [ ] «Editar» y «Quitar» en cada tarjeta (avisos de marcas huérfanas y de que no se borra nada afuera); deshabilitados sin servidor
+- [ ] README «Conectores y credenciales»: primero la vista, el JSON a mano como alternativa
+- [ ] Prueba real en el navegador con `proyectos.json` y `HOME` de prueba: añadir, editar, probar y quitar (Trello o GitHub); `git diff` del json de prueba muestra solo el bloque; push y PR
 
 ## H7 — Sub-sesión exacta y sus casillas
 

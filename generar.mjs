@@ -17,7 +17,8 @@ import { homedir } from 'node:os'
 import { join, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extraerMarcas, tareasLocales, planificarSincronia, aplicarSincronia } from './integraciones/sincronia.mjs'
-import { leerCredenciales, credencialesPara } from './integraciones/credenciales.mjs'
+import { leerCredenciales, credencialesPara, guardarCredencial, resumenCredenciales, REQUISITOS, RUTA_CREDENCIALES } from './integraciones/credenciales.mjs'
+import { validarIntegracion, aplicarCambio, escribirAtomico, ErrorConfig } from './integraciones/config.mjs'
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { desajustes, describir } from './coherencia.mjs'
 import { parsearBitacora, sidsPorProyecto, asociar, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
@@ -36,13 +37,25 @@ const leerJson = (r, def) => { try { return JSON.parse(readFileSync(r, 'utf8')) 
 const sh = (cmd, a, cwd, timeout = 15000) => {
   try { return execFileSync(cmd, a, { cwd, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'ignore'] }) } catch { return null }
 }
-const proyectos = leerJson(CONFIG, []).map((p) => ({
-  ...p,
-  repo: p.repo && expandir(p.repo),
-  docs: (p.docs || []).map(expandir),
-  notas: p.notas && expandir(p.notas),
-  bitacora: p.bitacora && expandir(p.bitacora),
-}))
+// proyectos.json se relee cuando cambia (la vista Integraciones lo edita con el servidor en marcha).
+// «planes» en proyectos.json asigna planes a mano: mandan sobre la transcripción y salen de los demás proyectos.
+let proyectos = [], planesAsignados = new Map(), firmaConfig = null
+const statConfig = () => statSync(CONFIG, { throwIfNoEntry: false })
+function cargarProyectos(forzar = false) {
+  const st = statConfig(), firma = st ? `${st.mtimeMs}:${st.size}` : null
+  if (!forzar && firma === firmaConfig) return proyectos
+  firmaConfig = firma
+  proyectos = leerJson(CONFIG, []).map((p) => ({
+    ...p,
+    repo: p.repo && expandir(p.repo),
+    docs: (p.docs || []).map(expandir),
+    notas: p.notas && expandir(p.notas),
+    bitacora: p.bitacora && expandir(p.bitacora),
+  }))
+  planesAsignados = new Map(proyectos.flatMap((p) => (p.planes || []).map((n) => [n, p.id])))
+  return proyectos
+}
+cargarProyectos()
 
 const PLANTILLA_NOTAS = `# Notas para Claude
 
@@ -393,8 +406,6 @@ function actualizarHistorial(p, backlogs) {
 }
 
 // ---------- Planes de Claude (~/.claude/plans), asignados por transcripción ----------
-// «planes» en proyectos.json asigna planes a mano: mandan sobre la transcripción y salen de los demás proyectos.
-const planesAsignados = new Map(proyectos.flatMap((p) => (p.planes || []).map((n) => [n, p.id])))
 // Plan -> proyecto con más menciones (empate: el primero en proyectos.json). Pura: la usan leerPlanes y los tests.
 // menciones: Map(proyectoId -> Map(nombre -> Map(carpeta -> veces))).
 export function asignarPlanes(menciones, manuales = new Map()) {
@@ -657,6 +668,7 @@ function leerBitacoras() {
 }
 
 async function recolectar(opciones = {}) {
+  cargarProyectos()
   mkdirSync(DATOS, { recursive: true })
   const bitacoras = leerBitacoras()
   const menciones = contarMenciones()
@@ -697,6 +709,9 @@ export function alternarFavorito(titulo, favorito) {
 
 async function construir(servidor = false, opciones = {}) {
   const datos = { generado: new Date().toISOString(), servidor, favoritos: leerFavoritos(), proyectos: await recolectar(opciones) }
+  // Credenciales: solo el resumen (completa, de dónde sale, últimos 4); configMtime para el 409 al editar integraciones.
+  datos.credenciales = resumenCredenciales(leerCredenciales().datos, process.env, proyectos.flatMap((p) => p.integraciones || []))
+  datos.configMtime = statConfig()?.mtimeMs ?? null
   const plantilla = readFileSync(join(AQUI, 'plantilla.html'), 'utf8')
   const json = JSON.stringify(datos).replace(/</g, '\\u003c')
   return { datos, html: plantilla.replace('/*__DATOS__*/null', () => json) }
@@ -719,6 +734,9 @@ function huella() {
       else if (filtro(f)) ver(r)
     }
   }
+  cargarProyectos()
+  ver(CONFIG)
+  ver(RUTA_CREDENCIALES)
   carpeta(PLANES)
   ver(rutaFavoritos())
   for (const p of proyectos) {
@@ -763,8 +781,33 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
     req.on('data', (c) => { t += c; if (t.length > 4e6) { mal(new Error('demasiado grande')); req.destroy() } })
     req.on('end', () => { try { ok(JSON.parse(t)) } catch (e) { mal(e) } })
   })
+  // Integraciones desde la vista: 409 si proyectos.json cambió desde que se cargó la vista (mtime de datos.configMtime).
+  const integracionDe = (b) => {
+    cargarProyectos()
+    const p = proyectos.find((x) => x.id === b.proyecto)
+    if (!p) throw new ErrorConfig('Falta el proyecto o no está en proyectos.json.', 404)
+    return p
+  }
+  const exigirMtime = (b) => {
+    if (typeof b.mtime !== 'number') throw new ErrorConfig('Falta el mtime de proyectos.json cargado.')
+    if (b.mtime !== statConfig()?.mtimeMs) throw new ErrorConfig('proyectos.json cambió desde que cargaste la vista: recarga y vuelve a intentarlo.', 409)
+  }
+  const validar = (p, cfg, idOriginal) => {
+    const { errores, limpia } = validarIntegracion(cfg, {
+      backlogs: leerBacklogs(p).map((x) => x.archivo),
+      otras: (p.integraciones || []).map((x) => x.id).filter((id) => id !== idOriginal),
+      adaptadores,
+    })
+    if (errores.length) throw Object.assign(new ErrorConfig(errores.join(' ')), { errores })
+    return limpia
+  }
+  const escribirConfig = (p, cambio) => {
+    escribirAtomico(CONFIG, aplicarCambio(readFileSync(CONFIG, 'utf8'), p.id, cambio))
+    cargarProyectos(true)
+  }
   return async (req, res) => {
     alUsar()
+    cargarProyectos()
     const host = req.headers.host || ''
     if (host !== `127.0.0.1:${puerto}` && host !== `localhost:${puerto}`) return enviar(res, 403, { error: 'host no permitido' })
     const ruta = new URL(req.url, `http://${host}`).pathname
@@ -825,10 +868,55 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         const r = await sincronizar(p, b.integracion, { ...opciones, elegidas: new Set(b.acciones.map(String)), resoluciones, hashPrevio: b.hashPrevio })
         return enviar(res, 200, { ok: true, ...r, datos: (await fresco(true)).datos })
       }
+      // Alta/edición: solo campos de la lista blanca; las marcas y datos/sync-* de un id viejo se conservan (quedan huérfanas).
+      if (ruta === '/api/integraciones/guardar') {
+        const p = integracionDe(b)
+        exigirMtime(b)
+        const idOriginal = typeof b.idOriginal === 'string' && b.idOriginal ? b.idOriginal : undefined
+        const limpia = validar(p, b.integracion, idOriginal)
+        escribirConfig(p, { op: 'guardar', integracion: limpia, idOriginal })
+        return enviar(res, 200, { ok: true, integracion: limpia, renombrada: !!idOriginal && idOriginal !== limpia.id, datos: (await fresco(true)).datos })
+      }
+      // Baja: solo el bloque en proyectos.json; nada se borra en el backlog ni afuera.
+      if (ruta === '/api/integraciones/quitar') {
+        const p = integracionDe(b)
+        exigirMtime(b)
+        if (typeof b.id !== 'string') throw new ErrorConfig('Falta el id de la integración.')
+        escribirConfig(p, { op: 'quitar', id: b.id })
+        return enviar(res, 200, { ok: true, datos: (await fresco(true)).datos })
+      }
+      // Probar sin guardar: una lectura con la config propuesta (lo mismo que --probar-conexiones).
+      if (ruta === '/api/integraciones/probar') {
+        const p = integracionDe(b)
+        const limpia = validar(p, b.integracion, b.integracion?.id)
+        const backlogs = leerBacklogs(p)
+        const ctx = contextoIntegracion(p, limpia, backlogs, adaptadores)
+        let r
+        try { r = await conTiempo(ctx.adaptador.leer(), 15000) } catch (e) { return enviar(res, 502, { error: String(e?.message || e) }) }
+        const vinculadas = tareasLocales(ctx.backlog.contenido, limpia.id).filter((t) => t.marca).length
+        return enviar(res, 200, { ok: true, titulo: r.titulo || null, url: r.url || null, columnas: r.columnas || [], items: r.items.length, avisos: [...(ctx.aviso ? [ctx.aviso] : []), ...(r.avisos || [])], vinculadas })
+      }
+      // Credenciales: se guardan en el archivo (0600) y la respuesta solo trae el resumen, nunca un valor.
+      if (ruta === '/api/credenciales') {
+        const clave = typeof b.clave === 'string' ? b.clave : ''
+        const tipo = REQUISITOS[clave] ? clave : proyectos.flatMap((p) => p.integraciones || []).find((x) => x.id === clave)?.tipo
+        const req = REQUISITOS[tipo] || {}
+        if (!Object.keys(req).length) return enviar(res, 400, { error: 'Esa clave no es un tipo de conector con credenciales ni una integración configurada.' })
+        const campos = b.campos && typeof b.campos === 'object' && !Array.isArray(b.campos) ? b.campos : null
+        if (!campos || !Object.keys(campos).length) return enviar(res, 400, { error: 'Faltan los campos de la credencial.' })
+        for (const [k, v] of Object.entries(campos)) {
+          if (!(k in req)) return enviar(res, 400, { error: `«${k}» no es un campo de ${NOMBRES[tipo]} (usa ${Object.keys(req).join(', ')}).` })
+          if (v !== null && v !== '' && (typeof v !== 'string' || v.length > 500 || /[\s]/.test(v.trim()) || !v.trim())) return enviar(res, 400, { error: `«${k}» no parece válido (texto sin espacios, hasta 500 caracteres).` })
+        }
+        guardarCredencial(clave, campos)
+        const datos = (await fresco(true)).datos
+        return enviar(res, 200, { ok: true, credenciales: datos.credenciales, datos })
+      }
       return enviar(res, 404, { error: 'no existe' })
     } catch (e) {
       if (e instanceof ErrorSincronia) return enviar(res, e.estado, { error: e.message, paso: e.extra?.paso })
       if (e instanceof ErrorBitacora) return enviar(res, e.estado, { error: e.message })
+      if (e instanceof ErrorConfig) return enviar(res, e.estado, { error: e.message, errores: e.errores })
       return enviar(res, 500, { error: String(e?.message || e) })
     }
   }
