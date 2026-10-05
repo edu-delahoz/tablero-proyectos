@@ -275,7 +275,7 @@ Después: **S59**
 
 ### S59 — Cierre de H18–H20 · **Sonnet**, con Eduardo · ~40k
 Se espera: Todo en verde, revisado a ojo en el navegador con datos reales y con PRs abiertos hacia `develop`; la nota del chat de estudio queda cerrada.
-- [ ] [rendimiento] `/api/metodologia` tarda ~18 s y la vista Metodología se queda en «Leyendo…» — `generar.mjs` ~1680 / `metodologia.mjs`: medir qué lee (transcripciones) y cachear o acotar (añadido en S58b)
+- [ ] [rendimiento] Que Metodología cargue rápido (hoy ~18 s en «Leyendo…») — `/api/metodologia` en `generar.mjs` ~1680 / `metodologia.mjs`: medir qué lee (transcripciones) y cachear o acotar (añadido en S58b)
 - [ ] [test] Suite completa y formato — `node --test 2>&1 | tail -40`, `scripts/probar.sh`, `verificar_backlog.mjs --formato`
 - [ ] Revisar a ojo las tres vistas con datos reales — Tablero, Estudio y Oficina a 1200 y 390 px; anotar lo que falle como sesión nueva
 - [ ] PRs y nota — `kanban-sesiones`, `estudio-plan`, `oficina-agentes` → `develop`; marcar la nota en `../notas/NOTAS_TABLERO.md`
