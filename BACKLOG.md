@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `formato-backlog` (sin PR) · S49 hecha, suite en verde (321 pasan, 2 omitidos): `verificar_backlog.mjs --formato` pasó de 81 avisos a 0 en tablero, IEP (`BACKLOG_H7.md` S2b–S7), EAP10 y Squalo; solo se migró lo abierto. Costo: S41 +1 %, S42 +8 %, S50/IEP S3 +60 % por traer `Prompt:` nuevo (juzgar en S52). Respaldo del IEP en `~/.claude/jobs/d8faa79c/tmp/BACKLOG_H7.antes.md` (no es repo git). Siguiente: **S50** (Opus).
+- Para retomar (2026-10-05): los backlogs abiertos de los proyectos ya están en el formato nuevo y el linter sale limpio. Falta la parte de «metodología viva»: primero los datos del grafo de piezas y luego su pestaña en el tablero. Nada roto.
 - 2026-10-05 · rama `formato-backlog` (tablero y `metodologia-claude-code`, sin PR) · S48 hecha: reglas y skills con el formato; `probar.sh` 20/20 (fallaban 4 de 4 al escribirlas). Siguiente: **S49** (Sonnet).
 - Para retomar (2026-10-05): Las reglas globales y las skills de planear y relevo ya exigen el formato nuevo (con «Se espera» y prompt de la siguiente). Falta migrar las secciones abiertas de los proyectos; la instalación real de `~/.claude` aún no tiene la carpeta `metodologia/` enlazada.
 - 2026-10-05 · rama `formato-backlog` en el tablero y en `metodologia-claude-code` (sin PR) · S47 hecha, en verde: panel-tablero 20/20 (antes fallaban 9 de 20), `scripts/probar.sh` 16/16. `seccionDe` en `register.tsx` lee clave general (`S-CI1b`, `E5b`), `####`, modelo, «Se espera» y prompt (bloque, cita o «…»), y el panel muestra «Se espera» o avisa si falta; `estado-trabajo` no necesitó cambio; copiado a `~/.claude/mods/panel-tablero`. Siguiente: **S48** (Sonnet).
@@ -159,17 +161,30 @@ Prompt:
 ```text
 Sesión S49 de BACKLOG.md. Lee /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (sección Estado con `grep -n`, y S49 con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S49 BACKLOG.md`) y trabaja solo esa sesión, en la rama `formato-backlog`. Contrato: `~/Desktop/Desarrollo/metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
-- [ ] Pasar al formato solo lo abierto — tablero, IEP (`BACKLOG_MVP.md` H4–H7), EAP10, Squalo; anotar tokens antes/después
+- [x] Pasar al formato solo lo abierto — tablero, IEP (`BACKLOG_MVP.md` H4–H7), EAP10, Squalo; anotar tokens antes/después
+
+Resultado: `verificar_backlog.mjs --formato` pasó de 81 avisos (tablero 24, IEP 54 en `BACKLOG_H7.md`, EAP10 3, Squalo 0) a 0 en los 4 proyectos con backlog (`metodologia-claude-code` no tiene). Solo se tocó lo abierto: tablero S24b, E2, S41–S43, S50, S51 (casillas «llano — técnico», `Se espera`, `Prompt:`); IEP S2b–S7 (llano antepuesto, técnico intacto; `BACKLOG_MVP.md` ya cumplía); EAP10 reescrito desde la plantilla vieja. Costo (chars de `backlog.mjs seccion`, antes→después): S41 2208→2221 (+1 %), S42 1755→1899 (+8 %), S50 721→1174 (+63 %, trae su `Prompt:` que antes no tenía), IEP S3 1575→2548 (+62 %, Se espera + Prompt nuevos): el +10 % se juzga en S52 con secciones que ya tenían prompt. Copia del IEP antes de migrar: `~/.claude/jobs/d8faa79c/tmp/BACKLOG_H7.antes.md` (el IEP no es repo git).
 
 ### S50 — Metodología viva: datos · **Opus** · rama `formato-backlog` · ~70k
 Se espera: `/api/metodologia` devuelve el grafo de piezas (hooks, skills, mods, agentes, scripts, notas, bitácora, backlog) con estado instalada/activa/falta y qué proyectos de `proyectos.json` usan cada una.
-- [ ] [test] Un `~/.claude` de mentira — `metodologia.test.mjs` + `fixtures/metodologia/home/`: pieza instalada, pieza que falta, hook en `settings.json`, proyecto conectado y no conectado; verla fallar
-- [ ] Armar el grafo — `metodologia.mjs` (puro; catálogo esperado desde `metodologia-claude-code/instalar.sh`) y endpoint en `generar.mjs` sin exponer secretos
+- [ ] [test] Un hogar de mentira con piezas instaladas y faltantes, verlo fallar — `metodologia.test.mjs` + `fixtures/metodologia/home/`: pieza instalada, pieza que falta, hook en `settings.json`, proyecto conectado y no conectado
+- [ ] Armar el grafo de piezas — `metodologia.mjs` (puro; catálogo esperado desde `metodologia-claude-code/instalar.sh`) y endpoint en `generar.mjs` sin exponer secretos
+
+Prompt:
+```text
+Modelo: Opus. Sesión S50 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S50 BACKLOG.md`). Rama `formato-backlog`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S51**
 
 ### S51 — Metodología viva: vista · **Sonnet** · rama `formato-backlog` · ~60k
 Se espera: Pestaña «Metodología» con el flujo Planear → Sesión (hooks) → Relevo → Backlog → Tablero/Bitácora, cada nodo en verde/ámbar/rojo y al tocarlo qué hace y qué proyectos lo usan; en móvil, lista vertical.
-- [ ] [test] La pestaña pinta los nodos del fixture — `servidor.test.mjs`; verla fallar
-- [ ] Dibujarla — `plantilla.html`, SVG en línea con los colores del tablero
+- [ ] [test] La pestaña pinta los nodos del fixture, verlo fallar — `servidor.test.mjs`
+- [ ] Dibujar el flujo con estados — `plantilla.html`, SVG en línea con los colores del tablero
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S51 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S51 BACKLOG.md`). Rama `formato-backlog`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
 
 ### S52 — Cierre y medición · **Sonnet**, con Eduardo (tras ≥ 8 sesiones con el formato) · ~40k
 Se espera: Decisión anotada de mantener o recortar la línea en llano según costo y calidad; PRs abiertos.
@@ -197,11 +212,17 @@ Plan completo y datos: `../PLAN_EFICIENCIA.md`. Rama `eficiencia` desde `develop
 - [x] `backlog.mjs seccion|marcar` reutilizando el árbol de `generar.mjs` (`estructura`, ~línea 365).
 - [x] Prompt de arranque (plantilla en `generar.mjs`) y `~/.claude/skills/relevo/SKILL.md` usan `backlog.mjs seccion`.
 
-### E2 — Hooks de lectura (Sonnet)
+### E2 — Hooks de lectura · **Sonnet**
+Se espera: Un aviso se dispara al leer archivos grandes de golpe y queda registrado en el log; se comprueba con `acotar_lectura.test.mjs` (9 pasan) y, tras 7 días, con el log revisado.
 - [x] Test primero `acotar_lectura.test.mjs` con entradas JSON de hook (umbral ~3k tokens = bytes/4): Read sin limit de archivo >3k tokens → aviso con sugerencia `grep -n '^#'` + línea en el log, sin bloqueo; Read de `tool-results` sin limit → aviso; Read con offset/limit → pasa sin log; `cat <ruta>` por Bash → resuelve la ruta, mide con `wc -lc` y avisa solo si supera el umbral; `cat` de archivo chico, `cat x | grep` o ruta no resoluble → pasa (nunca por patrón de texto solo); con `MODO=bloqueo` el primer caso bloquea. Verlo fallar y anotar cuántos. (fallaban 6 de 9; ahora pasan 9; test en `tablero/acotar_lectura.test.mjs`)
 - [x] `~/.claude/hooks/acotar_lectura.mjs` (PreToolUse Read|Bash), modo **aviso** la primera semana: deja pasar, sugiere rango y registra en `~/.claude/session-metrics/acotar_lectura.jsonl` `{fecha, sid, tool, archivo, lineas, tokens, habriaBloqueado}`; interruptor `MODO=aviso|bloqueo`. Aviso PostToolUse si el resultado de Bash ≥2k tokens. Alta en `~/.claude/settings.json`; anotar aquí la fecha de alta.
   - Alta en `~/.claude/settings.json` el 2026-10-04 (autorizada por el usuario): PreToolUse `Bash` y `Read`, PostToolUse `Bash`. Modo aviso; revisar el log desde el 2026-10-11.
-- [ ] Tras 7 días desde el alta: revisar el log (falsos positivos, distribución de tokens y líneas), ajustar el umbral y pasar a `MODO=bloqueo`; anotar cifras en `PLAN_EFICIENCIA.md` (fila 1).
+- [ ] Pasar el hook a bloqueo si el log lo justifica — `~/.claude/session-metrics/acotar_lectura.jsonl` tras 7 días desde el alta: revisar falsos positivos, distribución de tokens y líneas, ajustar el umbral, `MODO=bloqueo`; cifras en `PLAN_EFICIENCIA.md` (fila 1)
+
+Prompt:
+```text
+Lee `BACKLOG.md` (Estado + E2) y trabaja solo la casilla abierta de E2 (revisión del log de `acotar_lectura`, desde el 2026-10-11). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
 
 ### E3 — Reglas y poda (Sonnet)
 - [x] `/context` antes: anotar tokens de skills y total inicial. (2026-10-04, Sonnet 5.5, sesión E3 con plugin aún cargado: Skills 4.7k (28 skills; sincronizadas claude.ai ≈1.9k, built-in ≈2.6k, session-report ≈60), prompt 2.6k, tools 21.9k (+24.9k diferidas), memoria 1.4k, agentes 143; total 55.3k de los cuales mensajes 24.5k → base ≈30.8k)
@@ -267,33 +288,44 @@ Historia: Como usuario que trabaja en un tablero de Trello de su equipo, quiero 
 
 Origen: prueba real del usuario con Squalo (2026-10-04, `squalo-app`, integración `squalo` en `sincronizar`, `auto: false`). Rama `trello-vista-previa` (sale de `develop`). Sin plan en `~/.claude/plans/`: las casillas de abajo son el contrato.
 
-### S41 — Conector Trello: URL del tablero y «mías» · **Sonnet** · `integraciones/trello.mjs`, `integraciones/trello.test.mjs`, `fixtures/integraciones/trello.json`, `integraciones/config.mjs`, `integraciones/config.test.mjs`, `generar.mjs`, `servidor.test.mjs`, `README.md`
-- [ ] **Test primero** (ver fallar y anotar cuántos): en `trello.test.mjs`, tabla de `normalizarTablero(texto)` (id solo; `https://trello.com/b/<id>/nombre`; sin `https`; barra final; espacios; `trello.com/c/…` o texto inválido → Error en español) y una config con la URL completa llama a `…/boards/<id>`; `leer` trae `asignado` (lista de nombres) y `mio` comparando `idMembers` con `members/me`; en `config.test.mjs`, `validarIntegracion` guarda solo el id; en `servidor.test.mjs`, `/api/integraciones/descubrir` y `/probar` devuelven `tablero` normalizado
-- [ ] `trello.mjs`: exportar `normalizarTablero` y usarla en `cargar`/`descubrir`/`traducirError` (el mensaje de error muestra el id, no la URL). Trampa: el id del tablero distingue mayúsculas (`fbMds4E0`), no pasarlo por `new URL().host`
-- [ ] `trello.mjs` `leer`: pedir `idMembers` en las tarjetas, `members/me` (id, cacheado como `quienSoy` de Azure) y `boards/<id>/members` (nombres); cada ítem con `asignado` y `mio`. Fixture `trello.json` ampliado (miembros, `me`, tarjeta asignada y otra no)
-- [ ] `config.mjs`: `validarIntegracion` de Trello guarda el id normalizado. `generar.mjs`: `descubrir`/`probar` devuelven el `tablero` normalizado, y la plantilla lo reemplaza en el campo (como la organización de Azure)
-- [ ] Comprobar que «Mis tareas» y `importarBacklog(…, soloMias)` ya funcionan con Trello sin tocar la vista (usan `mio`); si no, anotarlo en S42. README: Trello acepta la URL; «mías» = tarjetas donde eres miembro. `node --test 2>&1 | tail -40`, commit
+### S41 — Conector Trello: URL del tablero y «mías» · **Sonnet** · rama `trello-vista-previa` · plugins: ninguno
+Se espera: Pegar la URL completa de un tablero de Trello funciona y cada tarjeta dice si es tuya; se comprueba con `node --test` en verde, sin red real.
+- [ ] [test] Pruebas de la URL y de «mías», ver cuántas fallan — `trello.test.mjs`: tabla de `normalizarTablero(texto)` (id solo; `https://trello.com/b/<id>/nombre`; sin `https`; barra final; espacios; `trello.com/c/…` o texto inválido → Error en español) y config con URL completa llama a `…/boards/<id>`; `leer` trae `asignado` y `mio` comparando `idMembers` con `members/me`; `config.test.mjs`: `validarIntegracion` guarda solo el id; `servidor.test.mjs`: `/api/integraciones/descubrir` y `/probar` devuelven `tablero` normalizado
+- [ ] Aceptar la URL del tablero en vez del id — `integraciones/trello.mjs`: exportar `normalizarTablero` y usarla en `cargar`/`descubrir`/`traducirError` (el error muestra el id, no la URL). Trampa: el id distingue mayúsculas (`fbMds4E0`), no pasarlo por `new URL().host`
+- [ ] Marcar qué tarjetas son mías — `trello.mjs` `leer`: pedir `idMembers`, `members/me` (cacheado como `quienSoy` de Azure) y `boards/<id>/members`; cada ítem con `asignado` y `mio`; `fixtures/integraciones/trello.json` ampliado (miembros, `me`, tarjeta asignada y otra no)
+- [ ] Guardar el id limpio al configurar — `integraciones/config.mjs` `validarIntegracion` de Trello guarda el id normalizado; `generar.mjs` `descubrir`/`probar` devuelven el `tablero` normalizado y `plantilla.html` lo reemplaza en el campo (como la organización de Azure)
+- [ ] Comprobar «Mis tareas» con Trello sin tocar la vista — `importarBacklog(…, soloMias)` usa `mio`; si no basta, anotarlo en S42. README: Trello acepta la URL; «mías» = tarjetas donde eres miembro. `node --test 2>&1 | tail -40`, commit
 
-Prompt de arranque S41 (Sonnet, sin plugins/MCP):
-> Lee `BACKLOG.md` (Estado + H15/S41) y trabaja solo esa sesión en la rama `trello-vista-previa`. Primero los tests, verlos fallar, luego el código. Nada de red real (fetch simulado con el fixture). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Prompt:
+```text
+Lee `BACKLOG.md` (Estado + H15/S41) y trabaja solo esa sesión en la rama `trello-vista-previa`. Primero los tests, verlos fallar, luego el código. Nada de red real (fetch simulado con el fixture). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S42**
 
-### S42 — Vista previa: seleccionar todo, aviso al enviar y texto del botón · **Sonnet** · `plantilla.html`, `servidor.test.mjs`
-- [ ] **Test primero** (ver fallar y anotar cuántos): en `servidor.test.mjs`, la plantilla trae `data-pv-todo` (seleccionar todo/ninguno por grupo), el aviso de envío (`data-pv-aviso-envio` o texto «Se crearían») y el botón de importar sin «desde Azure» fijo (usa el nombre del conector)
-- [ ] `plantilla.html` `vistaPrevia` (~l.971): en cada grupo (traer, enviar, cambios/conflictos) un control «Seleccionar todo / ninguno» que marca o desmarca todas las casillas de ese grupo y actualiza el contador; teclado y 44 px en mobile. Pedido del usuario: importó 7+14 tarjetas de Squalo marcándolas una por una
-- [ ] Aviso al enviar: si hay creaciones marcadas hacia afuera (no solo en la primera sincronía), mostrar arriba del botón «Aplicar» «Se crearían N tarjetas/ítems en <tablero/proyecto>» y pedir una confirmación en línea antes de aplicar. Motivo: `squalo-app` sincroniza con un tablero del equipo y su `BACKLOG.md` tiene ~25 casillas propias; desde la segunda sincronía las creaciones vienen marcadas por defecto
-- [ ] Botón de importar (~l.1089): «Crear backlog local desde <Trello|Azure DevOps|GitHub Projects>» según `integ.tipo` (usar `TIPOS_INTEG`)
-- [ ] Lo que S41 haya anotado como pendiente de vista. `node --test 2>&1 | tail -40`, commit
+### S42 — Vista previa: seleccionar todo, aviso al enviar y texto del botón · **Sonnet** · rama `trello-vista-previa` · plugins: ninguno
+Se espera: En la vista previa se marca todo un grupo de un clic, avisa cuántas tarjetas se crearían hacia afuera antes de aplicar, y el botón nombra el conector; se comprueba con `servidor.test.mjs` en verde.
+- [ ] [test] Pruebas de seleccionar todo, aviso y botón, ver cuántas fallan — `servidor.test.mjs`: `data-pv-todo` (todo/ninguno por grupo), aviso de envío (`data-pv-aviso-envio` o «Se crearían») y botón de importar sin «desde Azure» fijo
+- [ ] Seleccionar todo o ninguno por grupo — `plantilla.html` `vistaPrevia` (~l.971): en cada grupo (traer, enviar, cambios/conflictos) un control que marca/desmarca todas las casillas del grupo y actualiza el contador; teclado y 44 px en mobile. Pedido del usuario: importó 7+14 tarjetas de Squalo una por una
+- [ ] Avisar antes de crear hacia afuera — `plantilla.html`: si hay creaciones marcadas (no solo en la primera sincronía), mostrar sobre «Aplicar» «Se crearían N tarjetas/ítems en <tablero/proyecto>» y pedir confirmación en línea. Motivo: `squalo-app` sincroniza con un tablero del equipo y su `BACKLOG.md` tiene ~25 casillas propias; desde la segunda sincronía las creaciones vienen marcadas
+- [ ] El botón de importar nombra el conector — `plantilla.html` (~l.1089): «Crear backlog local desde <Trello|Azure DevOps|GitHub Projects>» según `integ.tipo` (`TIPOS_INTEG`)
+- [ ] Cerrar lo que S41 dejó pendiente de vista — `plantilla.html`; `node --test 2>&1 | tail -40`, commit
 
-Prompt de arranque S42 (Sonnet, sin plugins/MCP):
-> Lee `BACKLOG.md` (Estado + H15/S42) y trabaja solo esa sesión en la rama `trello-vista-previa`. Primero el test de plantilla, verlo fallar, luego `plantilla.html`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Prompt:
+```text
+Lee `BACKLOG.md` (Estado + H15/S42) y trabaja solo esa sesión en la rama `trello-vista-previa`. Primero el test de plantilla, verlo fallar, luego `plantilla.html`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S43**
 
-### S43 — Cierre de H15 · **Sonnet**, con el usuario
-- [ ] `node --test 2>&1 | tail -40` completo en verde
-- [ ] Con el usuario y Squalo: pegar la URL completa en el formulario (se guarda `fbMds4E0`); «Mis tareas» muestra sus tarjetas; vista previa con «Seleccionar todo»; el aviso de envío aparece si hay casillas locales y no se envía nada sin confirmar
-- [ ] Notas de cierre en este backlog, push y PR `trello-vista-previa` → `develop`
+### S43 — Cierre de H15 · **Sonnet**, con el usuario · rama `trello-vista-previa`
+Se espera: Con Squalo, la URL completa de Trello se guarda como id, «Mis tareas» muestra sus tarjetas y nada se envía sin confirmar; se comprueba a mano con el usuario y con `node --test` en verde.
+- [ ] Toda la suite en verde — `node --test 2>&1 | tail -40`
+- [ ] Probar con Squalo y el usuario — pegar la URL completa (se guarda `fbMds4E0`); «Mis tareas» muestra sus tarjetas; vista previa con «Seleccionar todo»; el aviso de envío sale si hay casillas locales y no se envía nada sin confirmar
+- [ ] Cerrar H15 — notas de cierre en este backlog, push y PR `trello-vista-previa` → `develop`
 
-Prompt de arranque S43 (Sonnet, sin plugins/MCP):
-> Lee `BACKLOG.md` (Estado + H15/S43) y haz el cierre de H15 en la rama `trello-vista-previa`, conmigo delante para la prueba con Squalo. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Prompt:
+```text
+Lee `BACKLOG.md` (Estado + H15/S43) y trabaja solo esa sesión en la rama `trello-vista-previa`, con el usuario delante. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
 
 ## H11 — Retomar en lenguaje natural y «Qué se busca»
 
@@ -581,10 +613,12 @@ Prompt de arranque S24 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S24) y trabaja solo esa sesión en la rama `integraciones-vista`, con el usuario delante (necesita su PAT y navegador). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 
 ### S24b — Resultados de la prueba real y cierre · **Sonnet**, con el usuario
+Se espera: Quedan anotados los resultados de la prueba real de EAP10 y el reinicio por código nuevo no corta peticiones en vuelo; se comprueba con `generar.test.mjs` en verde.
 El usuario revisó EAP10 en el navegador al final de S24 pero no dictó los resultados (el relevo se pidió sin ellos); hay que pedírselos.
 - [x] (el usuario confirmó «todo eso funciona»; sin detalle de equipos/`areaPath`) Preguntar al usuario y anotar aquí: ¿«Buscar proyectos» lista EAP10? ¿«Mías» coincide con Azure (`@Me`)? ¿EAP10 tiene más de un equipo (→ `areaPath`)? ¿org falsa y servidor detenido dieron los mensajes esperados? ¿causa real de «cargando»?
 - [x] (el usuario confirmó que todos están en el mismo equipo: no hace falta `areaPath`) Si hay más de un equipo: añadir sesión nueva con campo opcional `areaPath`
-- [ ] Opcional: `generar.mjs` ~l.773, el reinicio por código nuevo espera a que no haya peticiones en vuelo; prueba en `generar.test.mjs`
+- [ ] [fix] El reinicio por código nuevo espera a las peticiones en curso — `generar.mjs` ~l.773, con prueba en `generar.test.mjs` (opcional)
+- [x] `git status` (ningún `.md` cambió salvo BACKLOG), `node --test 2>&1 | tail -40`, actualizar PR #9 — superada: PR #9 y #10 mergeados en `develop`, PR #11 `develop` → `main` abierto
 - [x] `git status` (ningún `.md` cambió salvo BACKLOG), `node --test 2>&1 | tail -40`, actualizar PR #9 — superada: PR #9 y #10 mergeados en `develop`, PR #11 `develop` → `main` abierto
 
 Prompt de arranque S24b (Sonnet, sin plugins/MCP):
