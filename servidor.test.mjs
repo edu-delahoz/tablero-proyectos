@@ -712,8 +712,9 @@ test('/api/oficina (S57): agentes desde el hook y, sin hook, desde la transcripc
   mkdirSync(dirname(EVENTOS), { recursive: true })
   const ev = (o) => JSON.stringify({ t: ahora(), sid: 'of1', agente: 'principal', tipo: null, herramienta: null, archivo: null, cwd: '/prueba/sub', ...o }) + '\n'
   writeFileSync(EVENTOS, ev({ evento: 'PreToolUse', herramienta: 'Read', archivo: 'BACKLOG_PRUEBA.md' }) + ev({ evento: 'SubagentStart', agente: 'ag1', tipo: 'buscador' }) + ev({ evento: 'PreToolUse', agente: 'ag1', tipo: 'buscador', herramienta: 'Grep' }))
+  writeFileSync(join(TR, '-prueba', 'of1.jsonl'), JSON.stringify({ type: 'user', cwd: dir, gitBranch: 'rama-of1', timestamp: ahora(), message: { content: 'Modelo: Opus. Sesión S65 de BACKLOG_OTRO.md, primera casilla' } }) + '\n')
   const cola = join(TR, '-prueba', 'oooo1111-0000.jsonl')
-  writeFileSync(cola, JSON.stringify({ type: 'user', cwd: dir, timestamp: ahora(), message: { content: 'hola' } }) + '\n' + JSON.stringify({ type: 'assistant', cwd: dir, message: { content: [{ type: 'tool_use', id: 'u1', name: 'Edit', input: { file_path: join(dir, 'x.mjs'), old_string: 'SECRETO' } }] } }) + '\n')
+  writeFileSync(cola, JSON.stringify({ type: 'user', cwd: dir, gitBranch: 'rama-oooo', timestamp: ahora(), message: { content: 'hola' } }) + '\n' + JSON.stringify({ type: 'assistant', cwd: dir, message: { content: [{ type: 'tool_use', id: 'u1', name: 'Edit', input: { file_path: join(dir, 'x.mjs'), old_string: 'SECRETO' } }] } }) + '\n')
   const v = (await get('/api/version')).json.version
   const r = await get('/api/oficina')
   assert.equal(r.estado, 200)
@@ -727,6 +728,20 @@ test('/api/oficina (S57): agentes desde el hook y, sin hook, desde la transcripc
   assert.equal(t.archivo, 'x.mjs')
   assert.equal(t.proyecto, 'prueba', 'la carpeta de la transcripción manda sobre el cwd')
   assert.ok(!JSON.stringify(r.json).includes('SECRETO'), 'nunca contenido')
+  // S-OF1: placa, apariencia, casilla propia y salas por proyecto.
+  const p = de('of1', 'principal'), s = de('of1', 'ag1')
+  assert.equal(p.etiqueta, 'S65', '«Sesión S65 de …» en la cabeza de su transcripción')
+  assert.equal(s.etiqueta, 'S65', 'el subagente lleva la placa de su sesión')
+  assert.equal(t.etiqueta, 'rama-oooo', 'sin SX → la rama')
+  for (const a of r.json.agentes) {
+    assert.deepEqual(Object.keys(a.apariencia || {}).sort(), ['camiseta', 'peinado', 'pelo', 'piel'], `${a.sid}/${a.agente}: apariencia`)
+    assert.ok(a.casilla && typeof a.casilla.x === 'number' && typeof a.casilla.y === 'number', `${a.sid}/${a.agente}: casilla`)
+  }
+  assert.equal(s.apariencia.camiseta, p.apariencia.camiseta)
+  const pos = r.json.agentes.map((a) => `${a.casilla.sala}:${a.casilla.x},${a.casilla.y}`)
+  assert.equal(new Set(pos).size, pos.length, 'nadie comparte casilla')
+  assert.ok(Array.isArray(r.json.salas) && r.json.salas.some((x) => x.proyecto === 'prueba'), 'una sala para «prueba»')
+  assert.ok(!JSON.stringify(r.json).includes('BACKLOG_OTRO'), 'de la transcripción solo sale la placa, nunca el prompt')
   writeFileSync(EVENTOS, readFileSync(EVENTOS, 'utf8') + ev({ evento: 'Stop' }))
   assert.equal((await get('/api/oficina')).json.agentes.find((a) => a.sid === 'of1' && a.agente === 'principal').accion, 'quieto')
   assert.equal((await get('/api/version')).json.version, v, 'la oficina no entra en la huella')
