@@ -23,6 +23,7 @@ import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
 import { parsearBitacora, sidsPorProyecto, asociar, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
+import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
@@ -1302,7 +1303,13 @@ async function recolectar(opciones = {}) {
     const configuracion = estadoConfiguracion(p, { git, backlogs })
     const retomar = hechosRetomar({ transcripciones: p.transcripciones, git }, backlogs.find((b) => !b.esPlan) || null)
     const kanban = backlogs.filter((b) => !b.esPlan).flatMap((b) => columnasKanban(b, { git }, opciones.sesiones?.[p.id] || []))
-    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones, configuracion, editable: p.editable, retomar, kanban }
+    // Badge «≠ plan»: el modelo de la fila (foto de la statusline) frente al que pedía el prompt de esa sesión.
+    const bitacora = bitacoras.get(p.bitacora) || null
+    for (const f of bitacora?.registro || []) if (f.proyecto === p.id) {
+      const plan = modeloPlanDe(f.tarea, backlogs)
+      if (plan) Object.assign(f, { modeloPlan: plan, modeloDistinto: modeloDistinto(plan, f.modelo) })
+    }
+    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora, integraciones, configuracion, editable: p.editable, retomar, kanban }
   }))
 }
 

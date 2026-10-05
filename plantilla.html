@@ -152,6 +152,7 @@ ol.linea { list-style: none; margin: 0; padding: 0; counter-reset: paso; }
 .avance { flex: none; margin-left: auto; display: inline-flex; gap: 8px; align-items: center; color: var(--suave); }
 .avance .progreso { width: 90px; margin: 0; }
 .chip { display: inline-block; margin-left: 8px; font-size: .78em; color: var(--suave); white-space: nowrap; }
+.chip.ch-aviso { color: var(--aviso); }
 .etq-aqui { margin-left: 8px; color: var(--acento); font: 700 .78em var(--mono); white-space: nowrap; }
 .cuerpo { margin: 2px 0 10px calc(.6em + 4px); padding: 4px 0 4px 14px; border-left: 1px solid var(--borde); min-width: 0; }
 .cuerpo .nota { margin: 2px 0 8px; color: var(--suave); font-size: .9em; }
@@ -1382,7 +1383,7 @@ function vistaBitacora() {
   const fila = (f) => {
     const edit = f.pendiente && f.sid && f.proyecto === P.id && editable();
     const ctx = f.contexto ? `${f.contexto.ini != null ? f.contexto.ini + 'k→' : ''}${f.contexto.fin != null ? f.contexto.fin + 'k' : ''} ${f.contexto.semaforo || ''}` : f.contextoTxt;
-    return `<tr${f.pendiente ? ' class="pend"' : ''} data-sid="${esc(f.sid || '')}"><td class="n">${esc(f.fecha)}</td><td>${esc(f.tarea)}${f.proyecto && f.proyecto !== P.id ? ` <span class="suave">(${esc(f.proyecto)})</span>` : ''}</td><td class="n">${esc(f.modelo)}</td><td class="n">${esc(f.duracion)}</td><td class="n">${esc(f.costoTxt)}</td><td class="n">${esc(ctx)}</td>
+    return `<tr${f.pendiente ? ' class="pend"' : ''} data-sid="${esc(f.sid || '')}"><td class="n">${esc(f.fecha)}</td><td>${esc(f.tarea)}${f.proyecto && f.proyecto !== P.id ? ` <span class="suave">(${esc(f.proyecto)})</span>` : ''}</td><td class="n">${esc(f.modelo)}${f.modeloDistinto ? ` <span class="chip ch-aviso" title="El plan pedía ${esc(f.modeloPlan)}">≠ plan</span>` : ''}</td><td class="n">${esc(f.duracion)}</td><td class="n">${esc(f.costoTxt)}</td><td class="n">${esc(ctx)}</td>
       ${edit ? celdaEdit(f) : `<td>${f.pendiente ? '<span class="etq DRAFT">pendiente</span>' : esc(f.calidad)}</td><td>${f.pendiente ? '' : esc(f.seguridad)}</td><td>${f.pendiente && f.sid && !f.proyecto ? '<span class="suave">sin proyecto</span> ' : ''}${esc(f.pendiente && f.notas === PENDIENTE_TXT ? '' : f.notas)}${f.pendiente && !f.sid ? ' <span class="suave">sin sid: no editable</span>' : ''}</td>`}</tr>`;
   };
   return `${bloqueGastos(base)}<section class="tarjeta"><h2><span>${esc(b.ruta.split('/').pop())}</span><small>${hace(b.modificado)}</small></h2>
