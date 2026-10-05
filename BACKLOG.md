@@ -209,7 +209,7 @@ Resultado parcial (2026-10-05, Sonnet): `vigilar_prompt.mjs` (en `metodologia-cl
 - [x] [código] El hook detecta el prompt de arranque y avisa — `metodologia-claude-code/claude/hooks/vigilar_prompt.mjs` (`UserPromptSubmit`): parsear «Sesión SX de <ruta>», «rama `x`», «worktree `y`»; reutilizar `seccion` de `tablero/backlog.mjs` y la lectura de eventos de `eventos_agentes.mjs`/`oficina.mjs`; todo local, < 1 s; salida `additionalContext` «⚠️ Este prompt parece de otra sesión: <motivos>. Antes de tocar nada, pregunta al usuario si es el correcto»; nunca bloquea; registra en `~/.claude/session-metrics/vigilar_prompt.jsonl`
 - [x] [config] Instalar el hook (pide permiso de Eduardo) — copiar a `~/.claude/hooks/vigilar_prompt.mjs` y añadirlo en `~/.claude/settings.json` → `UserPromptSubmit`, junto a `eventos_agentes.mjs` (timeout 5)
 - [x] [docs] Regla de respuesta — `~/.claude/CLAUDE.md` global y su copia en `metodologia-claude-code`: «si llega el aviso de prompt de otra sesión, la primera respuesta es la pregunta, sin herramientas»
-- [ ] [verificación] Prueba real — en una ventana nueva, pegar el prompt de S58 (ya hecha): debe salir el aviso y la pregunta; pegar el de S62: sin aviso. Anotar en «Resultado:»
+- [ ] [verificación] (pendiente de Eduardo, la prueba la hace él) Prueba real — en una ventana nueva, pegar el prompt de S58 (ya hecha): debe salir el aviso y la pregunta; pegar el de S62: sin aviso. Anotar en «Resultado:»
 
 Prompt:
 ```text
