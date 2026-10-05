@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `trello-vista-previa` · plan de eficiencia hecho, solo análisis (sin código): `../PLAN_EFICIENCIA.md` con Partes 1–3 y H16 (E0–E6) abajo. **Pendiente: aprobación del usuario (E0).** Scripts del análisis en `../analisis/` (`analizar.mjs`, `b.mjs`, `c.mjs`, `e.mjs`; `node analizar.mjs AAAA-MM-DD`).
+- Para retomar (2026-10-04): Se midió con los registros de hoy dónde se va la ventana de uso. Lo que más pesa es navegar el backlog con comandos sueltos y leer archivos completos; también se descubrió que la statusline ya recibe el porcentaje usado de las ventanas de 5 horas y semanal. El plan está escrito y falta que lo apruebes o ajustes antes de empezar a implementarlo.
 - 2026-10-04 · rama `trello-vista-previa` (sale de `develop`) · sesión de cierre de pendientes, solo backlog (sin código). PR #10 mergeado por el usuario; abierto PR #11 `develop` → `main`. Cerradas con el usuario: S36 y S38 (probadas a mano en el navegador), S20 (confirmada en S24b), S24b «actualizar PR #9» (superada), S5 (Trello probado con Squalo: lectura, importar y primera sincronía solo trayendo). Queda abierta a propósito la mejora opcional del reinicio (S24b). Fallos de la prueba con Trello → nuevo **H15** (S41 conector, S42 vista, S43 cierre). Ojo: `squalo-app` quedó en `sincronizar` contra el tablero del equipo; desde la segunda sincronía las ~25 casillas propias vendrían marcadas para crearse en Trello (lo cubre S42). Siguiente: **S41** (Sonnet).
 - Para retomar (2026-10-04): Se cerró todo lo pendiente salvo las notas y una mejora opcional del servidor; el bloque grande ya está en `develop` y hay un PR abierto para pasarlo a `main`. Trello funciona con tu tablero de Squalo, pero la prueba dejó tres arreglos y dos mejoras: aceptar la URL completa del tablero, saber qué tarjetas son tuyas, poder seleccionar todo en la vista previa, avisar antes de crear tarjetas en un tablero del equipo y corregir el texto del botón de importar. Por ahí se sigue. Cuidado al sincronizar Squalo: revisa la vista previa antes de aplicar.
 - 2026-10-04 · rama `integraciones-vista` · S40 hecha (cierre H11–H14), PR #10 abierto → `develop`, tests en verde (170 pasan, 2 omitidos). Prueba real en EAP10 (modo `participar`, ítem #12): asignar, quitar y cambiar estado OK; el ítem se devolvió a New y sin asignar. Hallazgo: Azure reasigna al cambiar el estado → `participar()` recalcula `mio` también en `/estado`. `proyectos.json`: `ado` de EAP10 quedó en `participar`. 5 notas respondidas (quedan abiertas: mobile, «vincularlo con todo», chat del plan, optimizar vistas). Sin sesión siguiente definida.
@@ -59,6 +61,41 @@
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H16 — Eficiencia de uso de Claude Code
+Historia: Como usuario con plan Team, quiero gastar menos de las ventanas de 5 h y semanal, para hacer más sesiones con el mismo límite.
+Plan completo y datos: `../PLAN_EFICIENCIA.md`. Rama `eficiencia` desde `develop`. Plugins/MCP: ninguno.
+
+### E0 — Aprobación (usuario, sin modelo)
+- [ ] Revisar `PLAN_EFICIENCIA.md`: aprobar/quitar candidatas de la Parte 1 y confirmar orden E1–E6.
+
+### E1 — Extractor de backlog (Sonnet)
+- [ ] Test primero `backlog.test.mjs`: `seccion S4b` devuelve solo esa sección con nº de línea; `marcar S4b 2` cambia `[ ]`→`[x]` solo en esa casilla; sección inexistente → código 1. Verlo fallar y anotar cuántos.
+- [ ] `backlog.mjs seccion|marcar` reutilizando el árbol de `generar.mjs` (`estructura`, ~línea 365).
+- [ ] Prompt de arranque (plantilla en `generar.mjs`) y `~/.claude/skills/relevo/SKILL.md` usan `backlog.mjs seccion`.
+
+### E2 — Hooks de lectura (Sonnet)
+- [ ] Test primero con entradas JSON de hook: Read sin limit de archivo >300 líneas → bloqueo con sugerencia `grep -n '^#'`; Read de `tool-results` sin limit → bloqueo; `cat archivo` completo por Bash → bloqueo; Read con offset/limit → pasa.
+- [ ] `~/.claude/hooks/acotar_lectura.mjs` (PreToolUse Read|Bash) + aviso PostToolUse si el resultado de Bash ≥2k tokens; alta en `~/.claude/settings.json`.
+
+### E3 — Reglas y poda (Sonnet)
+- [ ] `/context` antes: anotar tokens de skills y total inicial.
+- [ ] `~/.claude/CLAUDE.md`: no releer archivos ya leídos (si cambiaron, solo el rango); «Fable solo escalación»; generalizar la línea de salidas largas.
+- [ ] Apagar plugin session-report y las skills sincronizadas que se puedan; `/context` después y anotar diferencia.
+- [ ] `registrar_sesion.sh` guarda `effort.level` en la fila.
+
+### E4 — Tablero, datos (Opus)
+- [ ] Test primero `metricas_jsonl.test.mjs` con fixture: llamadas, prompts, ctxFinal, ctxMax, tool results >5k.
+- [ ] `metricas_jsonl.mjs`; `registrar_sesion.sh` lo usa y guarda `% 5 h/7 d` (`rate_limits`) al inicio y fin.
+- [ ] Tarea desde el primer prompt (`Sesión (S\w+) de (BACKLOG\S*)`), no `session_name` (se hereda tras `/clear`).
+- [ ] Badge «modelo ≠ plan» comparando `prompts[].modelo` de `estructura` con `model.id` de la foto.
+
+### E5 — Tablero, vistas (Sonnet)
+- [ ] Test primero en `generar.test.mjs`: umbrales de color (llamadas/prompt <15/15–30/>30; ctx <100k/100–130k/>130k), estimación «quedan ~N sesiones tipo X».
+- [ ] `plantilla.html`: columnas a/b, panel de límites con calibración por ventana, tabla costo por tipo de tarea.
+
+### E6 — Repo de metodología (Sonnet)
+- [ ] Llevar a `metodologia-claude-code` en orden: CLAUDE.md, relevo, `settings.base.json` (+ hooks nuevos), mod `panel-tablero` y tests, README (tablero, S0/Sn/SNb), rutas únicas. `scripts/escanear.sh` y PR.
 
 ## H15 — Trello de verdad y vista previa más rápida
 
