@@ -262,12 +262,13 @@ Después: **S58b**, luego **S59**
 
 ### S58b — Oficina: verla con una sesión real · **Sonnet** · rama `oficina-agentes` · ~20k
 Se espera: En Metodología › Oficina se ve a un agente leyendo en el estante, escribiendo en el escritorio, un `buscador` entrando por la puerta y el globo al pedir permiso; lo que se vea mal queda corregido.
-- [ ] [verificación] Mirarla en el navegador con una sesión real — `node generar.mjs --servir` en el worktree, abrir Metodología › Oficina, y en otra sesión leer, editar, lanzar un `buscador` y pedir un permiso; ajustar posiciones/tamaños en `plantilla.html` (sección «Oficina») si algo se solapa
-- [ ] [test] Si se corrige algo, ajustar el test «oficina (S58)» — `servidor.test.mjs`; `node --test 2>&1 | tail -40` en verde
+- [x] [verificación] Mirarla en el navegador con una sesión real — `node generar.mjs --servir` en el worktree, abrir Metodología › Oficina, y en otra sesión leer, editar, lanzar un `buscador` y pedir un permiso; ajustar posiciones/tamaños en `plantilla.html` (sección «Oficina») si algo se solapa
+- [x] [test] Si se corrige algo, ajustar el test «oficina (S58)» — `servidor.test.mjs`; `node --test 2>&1 | tail -40` en verde → no hizo falta tocarlo; suite 360 pasan, 2 omitidos
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S58b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S58b BACKLOG.md`). Rama `oficina-agentes` (worktree `../.wt-oficina`; copia `proyectos.json` del tablero si falta). Interactiva, no -p. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
+Resultado: Vista con eventos simulados (Chrome headless, 1280 y 390 px). Corregido: personajes y etiquetas se apilaban con 11–13 agentes → etiqueta solo con icono (nombre en `title` y en la lista móvil), zonas propias para esperando/pensando/quieto. Móvil: lista correcta. Añadido: `/api/metodologia` tarda ~18 s (la vista queda en «Leyendo…»), pendiente para S59. No se vio con otra sesión en vivo ni la entrada por la puerta.
 Después: **S59**
 
 ### S59 — Cierre de H18–H20 · **Sonnet**, con Eduardo · ~40k

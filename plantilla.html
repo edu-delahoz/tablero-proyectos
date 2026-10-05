@@ -1960,7 +1960,7 @@ if (editable()) {
 
 // ---------- Oficina (S58): escena animada con GET /api/oficina (solo con la pestaña visible) ----------
 const ICONO_OFICINA = { leyendo: '📖', escribiendo: '✍️', ejecutando: '⌨️', buscando: '🔎', esperando: '⏳', pensando: '💭', quieto: '💤' };
-const LUGAR_OFICINA = { leyendo: 6, buscando: 12, escribiendo: 46, ejecutando: 72, esperando: 30, pensando: 30, quieto: 30 };
+const LUGAR_OFICINA = { leyendo: 6, buscando: 12, escribiendo: 46, ejecutando: 72, esperando: 20, pensando: 56, quieto: 34 };
 function htmlOficina(datos, nuevos) {
   const agentes = (datos && datos.agentes) || [];
   const ocupados = {};
@@ -1968,8 +1968,8 @@ function htmlOficina(datos, nuevos) {
   const nombre = (a) => `${a.tipo || (a.principal ? 'principal' : 'agente')}${a.proyecto ? ' · ' + a.proyecto : ''}`;
   const personajes = agentes.map((a) => {
     const n = ocupados[a.accion] = (ocupados[a.accion] || 0) + 1;
-    const x = (LUGAR_OFICINA[a.accion] ?? 30) + (n - 1) * 5, y = 8 + ((n - 1) % 2) * 14;
-    return `<div class="personaje ${esc(a.accion)}${nuevos && nuevos.has(llave(a)) ? ' entra' : ''}" data-key="${esc(llave(a))}" style="left:${x}%;bottom:${y}px" title="${esc(nombre(a))}">${a.accion === 'esperando' ? '<span class="globo">…</span>' : ''}<span class="cuerpo"></span><span class="pies"></span><span class="etq">${ICONO_OFICINA[a.accion] || ''} ${esc(nombre(a))}</span></div>`;
+    const x = Math.min((LUGAR_OFICINA[a.accion] ?? 30) + ((n - 1) >> 1) * 9, 84), y = 8 + ((n - 1) % 2) * 14;
+    return `<div class="personaje ${esc(a.accion)}${nuevos && nuevos.has(llave(a)) ? ' entra' : ''}" data-key="${esc(llave(a))}" style="left:${x}%;bottom:${y}px" title="${esc(nombre(a))}">${a.accion === 'esperando' ? '<span class="globo">…</span>' : ''}<span class="cuerpo"></span><span class="pies"></span><span class="etq">${ICONO_OFICINA[a.accion] || ''}</span></div>`;
   }).join('');
   const lista = agentes.map((a) => `<li>${ICONO_OFICINA[a.accion] || ''} <b>${esc(nombre(a))}</b> — ${esc(a.accion)}${a.archivo ? ' · ' + esc(a.archivo) : ''}</li>`).join('');
   return `<section class="tarjeta meta oficina"><h2><span>Oficina</span><small>${agentes.length} agente(s) trabajando</small></h2>
