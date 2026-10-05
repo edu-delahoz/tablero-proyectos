@@ -1,6 +1,8 @@
 # Backlog — Oficina pixel
 
 ## Estado
+- 2026-10-05 · rama `oficina-pixel` · PR #23 (→ develop) abierto pero con **conflicto** · S-OF4 hecha en código (salas plegables por proyecto; `vigilar_prompt.mjs` añadido al grafo desde `settings.json`); suite 375 pasan / 0 fallan / 2 omitidos. Eduardo reporta que el verificador de prompt equivocado **sigue sin aparecer** en «Metodología viva» → **S-OF5**. El PR develop → main espera a que #23 se fusione (hoy develop = main).
+- Para retomar (2026-10-05, S-OF4): La oficina ya muestra por defecto solo la sala del proyecto actual y las demás se despliegan con un clic. El PR hacia develop tiene un conflicto que hay que resolver, y el aviso de «prompt de otra sesión» todavía no se ve en la vista de la metodología aunque la API lo devuelve: hay que averiguar por qué.
 - 2026-10-05 · rama `oficina-pixel` (sin PR) · S-OF3 hecha salvo la prueba con sesiones vivas, que pasó a ajustes: casillas que se encimaban arregladas (`distribuirOficina` bloquea también la casilla de arriba y abajo); suite 374 pasan / 0 fallan / 2 omitidos. Eduardo pidió dos cambios → **S-OF4** (salas plegables por proyecto, `vigilar_prompt.mjs` ausente de «Metodología viva», y los PRs a develop y a main, ya autorizados). Trampa: el servidor del tablero (puerto 47321) hay que reiniciarlo para ver cambios de `oficina.mjs`.
 - Para retomar (2026-10-05, S-OF3): Ya nadie se encima en la Oficina y las pruebas pasan. Al mirarla con sesiones reales salieron dos ajustes: que por defecto solo se vea la sala del proyecto actual (las demás plegadas y expandibles) y que el verificador de prompt equivocado aparezca en la lista de piezas de la Sesión. Después de eso se abren los dos PRs.
 - 2026-10-05 · rama `oficina-pixel` (sale de `develop`, sin PR) · S-OF1 hecha: datos de la oficina (placa, apariencia, salas y casillas sin solapes) con pruebas; suite 371 pasan / 0 fallan / 2 omitidos. Backlog propio a petición de Eduardo: no va en `BACKLOG.md` (solo S-OF3 marcará allí la casilla de H23). Trampa: el hito debe llamarse `H<número>` (`H1`), con `H-OF1` el validador lo toma por sesión. Siguiente: **S-OF2**. Plan: `~/.claude/plans/quiero-que-planes-una-snazzy-salamander.md`.
@@ -95,4 +97,16 @@ Resultado: PR #23 (oficina-pixel → develop) abierto; develop → main no se pu
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S-OF4 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG_OFICINA.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S-OF4 BACKLOG_OFICINA.md`), rama `oficina-pixel`. Primeras casillas: los dos tests (salas plegables e inventario con `vigilar_prompt.mjs`), verlos fallar, luego el código. Al final reinicia el tablero, corre la suite y abre los PRs oficina-pixel → develop y develop → main (Eduardo ya los autorizó). Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+### S-OF5 — Conflicto del PR #23 y hook de prompt que no aparece · **Sonnet** · rama `oficina-pixel` · ~35k · plugins: ninguno
+Se espera: El PR #23 queda sin conflicto y listo para fusionar, y el verificador de prompt equivocado (`vigilar_prompt.mjs`) se ve en la etapa Sesión de «Metodología viva» en el navegador. Se comprueba con la suite en verde, `gh api repos/edu-delahoz/tablero-proyectos/pulls/23 --jq .mergeable` y viendo la pestaña.
+- [ ] [test] El hook aparece en la vista, verlo fallar — `servidor.test.mjs`/`metodologia.test.mjs`: con el `settings.json` real de Eduardo (copia mínima en fixtures) la etapa «sesion» de `GET /api/metodologia` y el HTML de la pestaña incluyen `hook:vigilar_prompt.mjs`; averiguar por qué no se ve aunque la API lo devuelve activo (¿caché del navegador/servidor viejo, la vista filtra por catálogo, el nodo no cabe en la etapa, o la ruta del repo `TABLERO_METODOLOGIA_REPO` cambia el origen?)
+- [ ] [código] Arreglar la causa — `metodologia.mjs` y/o `plantilla.html` (render de etapas), según lo que muestre el test; reiniciar el servidor (puerto 47321) y mirar la pestaña en el navegador
+- [ ] [código] Resolver el conflicto de #23 — `git fetch && git merge origin/develop` en `oficina-pixel` (ver qué archivos chocan, probablemente `BACKLOG.md`/`plantilla.html`/`generar.mjs`), conservar ambos lados, suite completa y `node verificar_backlog.mjs "$PWD" --formato`; push
+- [ ] [doc] Tras fusionar #23 (lo hace Eduardo o pide permiso), abrir develop → main por REST (`gh api repos/edu-delahoz/tablero-proyectos/pulls -f base=main -f head=develop …`)
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S-OF5 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG_OFICINA.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S-OF5 BACKLOG_OFICINA.md`), rama `oficina-pixel`. Primera casilla: el test que muestra que `vigilar_prompt.mjs` no aparece en la vista, verlo fallar; luego arreglar la causa, resolver el conflicto del PR #23 con develop y reiniciar el tablero. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
