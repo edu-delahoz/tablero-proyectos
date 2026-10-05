@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `lectura-backlog` · investigación de solo lectura en la ventana de `metodologia-claude`, tras pegar por error el prompt de S58 (sin código ni tests). Hallazgos: S60 está integrada en `develop` (PR #13), pero `oficina-agentes` no la contiene; su re-medición no tenía casilla en S59; E2 sigue abierta (hook a bloqueo tras 7 días); `metodologia-claude-code` `oficina-agentes` está subida sin PR (decisión de Eduardo); `gh` GraphQL estaba limitado. Definidas **S61** (merge + re-medir) y **H22/S62** (alerta de prompt equivocado). Orden: S59b (otra ventana, `.wt-oficina`) → S61 → S62. Plan: `~/.claude/plans/pasted-content-id-0d9f-tuve-un-valiant-sedgewick.md`.
+- Para retomar (2026-10-05): La optimización de la metodología no se perdió. La lectura del backlog de un tirón ya está hecha y fusionada; solo falta llevarla a la rama de la oficina y volver a medir en un par de días. Además se añadió un aviso para cuando se pegue el prompt de otra sesión. Primero hay que terminar el cierre de la oficina en la otra ventana. Nada roto.
 - 2026-10-05 · rama `oficina-agentes` · S59b hecha: Tablero y Estudio revisados a ojo (1200 y 390 px, sin fallos), PR #14 `kanban-sesiones`, #15 `estudio-plan`, #16 `oficina-agentes` abiertos hacia `develop` por API REST (`gh pr create` usa GraphQL y estaba limitado). Sin cambios de código. Falta: probar a mano y mergear en orden.
 - Para retomar (2026-10-05, S59b): las tres vistas nuevas se ven bien a escritorio y móvil y los tres PR están abiertos. Falta que Eduardo pruebe a mano el chat «Estudiar» y la Oficina con una sesión viva (no se pudo ver en la revisión) y luego mergear los PR en orden, uno a uno. Nada roto.
 - 2026-10-05 · rama `oficina-agentes` (sin PR) · S59 hecha en parte, suite en verde (361 pasan, 2 omitidos; `probar.sh` 20/20; formato OK). `/api/metodologia` ya no llama a `fresco()`/`construir` (que pedía PRs a `gh`, ~15 s): `proyectosMetodologia()` lee backlogs/notas/bitácora del disco (`generar.mjs` ~1619) y responde en 14 ms. Test nuevo en `servidor.test.mjs` (en el entorno de test ya pasaba sin el cambio: no hay red). Falta → **S59b**.
@@ -150,6 +152,37 @@ Resultado (2026-10-05, Sonnet): `backlog.mjs` ahora tiene `estado`, `arranque <c
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S60 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S60 BACKLOG.md`) y trabaja solo esa sesión, en la rama `lectura-backlog` (sale de `kanban-sesiones`). Tests primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+### S61 — Integrar S60 en la oficina y re-medir la lectura · **Sonnet** · rama `oficina-agentes` (worktree `../.wt-oficina`) · ~30k
+Se espera: La rama de la oficina ya tiene el extractor completo y su backlog incluye H21 y H22, con el «Estado» de las dos líneas sin perder nada. Queda programada la re-medición de «Bash sobre BACKLOG». Se comprueba con `git merge-base --is-ancestor lectura-backlog oficina-agentes`, la suite en verde y `node backlog.mjs arranque S61 BACKLOG.md` funcionando dentro del worktree.
+- [ ] [test] Antes de tocar nada, el worktree está limpio y S59b cerrada — en `../.wt-oficina`, `git status` sin cambios (la otra ventana dejó un `[x]` en S59b sin commit: si sigue así, parar y preguntar a Eduardo)
+- [ ] [código] La oficina trae el extractor y H21/H22 — `git merge lectura-backlog` en `oficina-agentes`; resolver a mano el bloque «## Estado» de `BACKLOG.md` conservando las líneas de S58–S59b y las de S60/investigación; `grep -c arranque backlog.mjs` > 0
+- [ ] [test] Suite y formato en verde tras el merge — `node --test 2>&1 | tail -20` (copiar `proyectos.json` del checkout principal si falta: trampa de S58), `node verificar_backlog.mjs --formato`
+- [ ] [verificación] Re-medir la lectura del backlog — `node generar.mjs --auditoria <2026-10-07 o posterior>`: objetivo «Bash sobre BACKLOG» ≤ 40 llamadas / ≤ 40k; anotar cifras en «Resultado:» (si aún no hay 2 días de uso, dejarla `[-] → S61b` con la fecha)
+- [ ] [docs] Fecha de E2 en el Estado — el hook `acotar_lectura` pasa a bloqueo cuando haya 7 días de `~/.claude/session-metrics/acotar_lectura.jsonl` (ver la casilla abierta de E2): anotar la fecha concreta
+- [ ] [docs] PRs pendientes, solo con permiso de Eduardo — tablero `oficina-agentes → develop` y `metodologia-claude-code` `oficina-agentes → develop` (GraphQL de `gh` puede estar limitado: usar REST `gh api repos/…/pulls`)
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S61 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S61 BACKLOG.md` desde el checkout principal `tablero/`, rama `lectura-backlog`). Trabaja en el worktree `../.wt-oficina` (rama `oficina-agentes`): primero `git status`, debe estar limpio; si no, para y pregúntame. Luego `git merge lectura-backlog` y resuelve a mano el «Estado». Pregúntame antes de abrir PRs. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+## H22 — Alerta de prompt equivocado
+Historia: Como Eduardo, quiero que Claude me avise antes de empezar cuando pego en una ventana el prompt de otra sesión, para no perder el hilo ni trabajar dos veces lo mismo.
+Origen: 2026-10-05, en la ventana de `metodologia-claude` se pegó el prompt de S58, que ya estaba hecha y la llevaba otra ventana en `.wt-oficina`. La sesión se fue al backlog del tablero y se perdió el hilo de la optimización. Plan: `~/.claude/plans/pasted-content-id-0d9f-tuve-un-valiant-sedgewick.md`.
+
+### S62 — Hook que avisa si el prompt parece de otra sesión · **Sonnet** · rama `alerta-prompt` (sale de `oficina-agentes` tras S61) · ~45k
+Se espera: Al pegar un prompt de arranque («Sesión SX de <backlog>…») que no corresponde, Claude recibe un aviso con el motivo y lo primero que hace es preguntar, sin usar herramientas. Un prompt correcto no genera aviso. Se comprueba con `node --test vigilar_prompt.test.mjs` y a mano, pegando el prompt de una sesión ya cerrada.
+- [ ] [test] Matriz del aviso, verla fallar y anotar cuántos fallan — `vigilar_prompt.test.mjs` con backlogs y eventos de fixture: prompt correcto → sin aviso; sesión ya hecha (sin `[ ]` o con `Resultado:`) → aviso; otra sesión viva (eventos de la oficina, vigencia 30 min) con la misma SX, rama o worktree → aviso; backlog o worktree fuera del `cwd`, o rama inexistente → aviso; cambio de hilo (la transcripción ya trabajaba otra SY o plan, sin `/clear`) → aviso; prompt sin patrón de arranque → sin aviso
+- [ ] [código] El hook detecta el prompt de arranque y avisa — `metodologia-claude-code/claude/hooks/vigilar_prompt.mjs` (`UserPromptSubmit`): parsear «Sesión SX de <ruta>», «rama `x`», «worktree `y`»; reutilizar `seccion` de `tablero/backlog.mjs` y la lectura de eventos de `eventos_agentes.mjs`/`oficina.mjs`; todo local, < 1 s; salida `additionalContext` «⚠️ Este prompt parece de otra sesión: <motivos>. Antes de tocar nada, pregunta al usuario si es el correcto»; nunca bloquea; registra en `~/.claude/session-metrics/vigilar_prompt.jsonl`
+- [ ] [config] Instalar el hook (pide permiso de Eduardo) — copiar a `~/.claude/hooks/vigilar_prompt.mjs` y añadirlo en `~/.claude/settings.json` → `UserPromptSubmit`, junto a `eventos_agentes.mjs` (timeout 5)
+- [ ] [docs] Regla de respuesta — `~/.claude/CLAUDE.md` global y su copia en `metodologia-claude-code`: «si llega el aviso de prompt de otra sesión, la primera respuesta es la pregunta, sin herramientas»
+- [ ] [verificación] Prueba real — en una ventana nueva, pegar el prompt de S58 (ya hecha): debe salir el aviso y la pregunta; pegar el de S62: sin aviso. Anotar en «Resultado:»
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S62 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S62 BACKLOG.md`), en la rama `alerta-prompt` (sale de `oficina-agentes` una vez cerrada S61). Primera casilla: `vigilar_prompt.test.mjs`, verlo fallar y anotar cuántos fallan. Instalar el hook en settings.json pide mi permiso. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 
 ## H18 — Kanban por sesión y prompt a la vista
