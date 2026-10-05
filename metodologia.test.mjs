@@ -23,7 +23,7 @@ test('catálogo: mods, enlaces y hooks salen de instalar.sh y settings.base.json
   const ids = catalogoDe(INSTALAR, BASE).map((p) => p.id)
   for (const m of ['token-weather', 'guardia-produccion', 'guardia-ramas', 'estado-trabajo', 'servidores-locales', 'panel-tablero']) assert.ok(ids.includes(`mod:${m}`), m)
   for (const id of ['reglas', 'statusline', 'agente:buscador', 'skill:relevo', 'carpeta:metodologia', 'carpeta:tablero']) assert.ok(ids.includes(id), id)
-  for (const id of ['hook:vigilar_contexto.sh', 'hook:acotar_lectura.mjs', 'hook:registrar_sesion.sh', 'hook:resumen_semanal.sh', 'hook:generar.mjs --hook-inicio', 'hook:generar.mjs --silencioso', 'hook:verificar_backlog.mjs --hook']) assert.ok(ids.includes(id), id)
+  for (const id of ['hook:vigilar_contexto.sh', 'hook:acotar_lectura.mjs', 'hook:registrar_sesion.sh', 'hook:resumen_semanal.sh', 'hook:generar.mjs --hook-inicio', 'hook:generar.mjs --silencioso', 'hook:verificar_backlog.mjs --hook', 'hook:eventos_agentes.mjs']) assert.ok(ids.includes(id), id)
   for (const id of ['backlog', 'notas', 'bitacora']) assert.ok(ids.includes(id), id)
   assert.equal(new Set(ids).size, ids.length, 'sin duplicados (acotar_lectura está en Pre y Post)')
   const acotar = catalogoDe(INSTALAR, BASE).find((p) => p.id === 'hook:acotar_lectura.mjs')

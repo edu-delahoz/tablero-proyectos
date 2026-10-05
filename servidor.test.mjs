@@ -46,6 +46,9 @@ writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify({ env: { API
 process.env.TABLERO_CLAUDE_BIN = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'claude-falso.mjs')
 const REGISTRO_CLAUDE = join(dir, 'claude-falso.log')
 process.env.CLAUDE_FALSO_REGISTRO = REGISTRO_CLAUDE
+// Oficina (S57): avisos del hook en el temporal, nunca ~/.claude/oficina.
+const EVENTOS = join(dir, 'oficina', 'eventos.jsonl')
+process.env.OFICINA_EVENTOS = EVENTOS
 
 const fuera = new Map([['E1', { id: 'E1', titulo: 'Desde afuera', hecha: false, columna: 'Todo', url: 'https://x/E1' }]])
 let n = 0
@@ -702,6 +705,32 @@ test('vista: «Crear backlog local desde Azure» con vista previa, «solo las m�
 test('vista: Resumen con el avance de la integración y botón «Mis tareas» en la cabecera', async () => {
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
   for (const marca of ['function avanceIntegracion', 'id="ir-mias"', 'data-ir-mias', 'Cerrados por semana', 'function pintarBotonMias']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
+test('/api/oficina (S57): agentes desde el hook y, sin hook, desde la transcripción; con proyecto y fuera de la huella', async () => {
+  const ahora = () => new Date().toISOString()
+  mkdirSync(dirname(EVENTOS), { recursive: true })
+  const ev = (o) => JSON.stringify({ t: ahora(), sid: 'of1', agente: 'principal', tipo: null, herramienta: null, archivo: null, cwd: '/prueba/sub', ...o }) + '\n'
+  writeFileSync(EVENTOS, ev({ evento: 'PreToolUse', herramienta: 'Read', archivo: 'BACKLOG_PRUEBA.md' }) + ev({ evento: 'SubagentStart', agente: 'ag1', tipo: 'buscador' }) + ev({ evento: 'PreToolUse', agente: 'ag1', tipo: 'buscador', herramienta: 'Grep' }))
+  const cola = join(TR, '-prueba', 'oooo1111-0000.jsonl')
+  writeFileSync(cola, JSON.stringify({ type: 'user', cwd: dir, timestamp: ahora(), message: { content: 'hola' } }) + '\n' + JSON.stringify({ type: 'assistant', cwd: dir, message: { content: [{ type: 'tool_use', id: 'u1', name: 'Edit', input: { file_path: join(dir, 'x.mjs'), old_string: 'SECRETO' } }] } }) + '\n')
+  const v = (await get('/api/version')).json.version
+  const r = await get('/api/oficina')
+  assert.equal(r.estado, 200)
+  const de = (sid, agente) => r.json.agentes.find((a) => a.sid === sid && a.agente === agente)
+  assert.equal(de('of1', 'principal').accion, 'leyendo')
+  assert.equal(de('of1', 'principal').proyecto, 'prueba', 'su cwd cae en la carpeta de transcripciones de «prueba» (-prueba-sub)')
+  assert.equal(de('of1', 'ag1').accion, 'buscando')
+  const t = de('oooo1111-0000', 'principal')
+  assert.equal(t?.fuente, 'transcripcion')
+  assert.equal(t.accion, 'escribiendo')
+  assert.equal(t.archivo, 'x.mjs')
+  assert.equal(t.proyecto, 'prueba', 'la carpeta de la transcripción manda sobre el cwd')
+  assert.ok(!JSON.stringify(r.json).includes('SECRETO'), 'nunca contenido')
+  writeFileSync(EVENTOS, readFileSync(EVENTOS, 'utf8') + ev({ evento: 'Stop' }))
+  assert.equal((await get('/api/oficina')).json.agentes.find((a) => a.sid === 'of1' && a.agente === 'principal').accion, 'quieto')
+  assert.equal((await get('/api/version')).json.version, v, 'la oficina no entra en la huella')
+  assert.equal((await get('/api/oficina', { host: `evil.com:${puerto}` })).estado, 403)
 })
 
 test('/api/sesiones: sesiones recientes por proyecto, barato, sin tocar la huella; /api/datos trae sesiones y kanban', async () => {

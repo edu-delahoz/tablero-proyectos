@@ -27,6 +27,7 @@ import { parsearBitacora, sidsPorProyecto, asociar, conFeatures, editarFila, has
 import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
 import { semaforoLlamadas, semaforoCtx, eficienciaDe } from './eficiencia.mjs'
 import { metodologia } from './metodologia.mjs'
+import { estadoOficina, VIGENCIA } from './oficina.mjs'
 import { MARCA_ESTUDIO, argsEstudio, promptEstudio, preguntaDe, lanzarEstudio, sesionValida, rutaGuia, anadirAGuia } from './estudio.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
@@ -34,6 +35,7 @@ const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
 const DATOS = process.env.TABLERO_DATOS || join(AQUI, 'datos')
 const PLANES = join(homedir(), '.claude', 'plans')
 const TRANSCRIPCIONES = process.env.TABLERO_TRANSCRIPCIONES || join(homedir(), '.claude', 'projects')
+const EVENTOS_OFICINA = process.env.OFICINA_EVENTOS || join(homedir(), '.claude', 'oficina', 'eventos.jsonl')
 const args = process.argv.slice(2)
 // Las apps de macOS y los hooks arrancan con un PATH mínimo: sin esto no encuentran gh ni git.
 process.env.PATH = ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':')
@@ -1323,6 +1325,15 @@ function resumenSesion(ruta, size) {
     foco: { claves: unicos(/\b[HS]\d+[a-z]?\b/g), backlogs: unicos(/[\w.-]+\.md\b/g) },
   }
 }
+function resumenCacheado(ruta, st) {
+  let c = cacheSesiones.get(ruta)
+  if (!c || c.mtime !== st.mtimeMs || c.size !== st.size) {
+    let r = null
+    try { r = resumenSesion(ruta, st.size) } catch {}
+    cacheSesiones.set(ruta, c = { mtime: st.mtimeMs, size: st.size, r })
+  }
+  return c
+}
 // → { [proyectoId]: [{ sid, titulo, rama, inicio, ultimo, activa, archivos, ultimoPrompt, foco }] }, más reciente primero.
 export function sesionesActivas(lista, dir = TRANSCRIPCIONES, { ahora = Date.now(), ventanaMs = 24 * 3600e3, activaMs = 5 * 60e3 } = {}) {
   const carpetas = existsSync(dir) ? readdirSync(dir) : []
@@ -1337,17 +1348,74 @@ export function sesionesActivas(lista, dir = TRANSCRIPCIONES, { ahora = Date.now
         const ruta = join(dir, d, f)
         const st = statSync(ruta, { throwIfNoEntry: false })
         if (!st || ahora - st.mtimeMs > ventanaMs) continue
-        let c = cacheSesiones.get(ruta)
-        if (!c || c.mtime !== st.mtimeMs || c.size !== st.size) {
-          let r = null
-          try { r = resumenSesion(ruta, st.size) } catch {}
-          cacheSesiones.set(ruta, c = { mtime: st.mtimeMs, size: st.size, r })
-        }
+        const c = resumenCacheado(ruta, st)
         if (c.r) res.push({ sid: f.slice(0, -6), ...c.r, ultimo: new Date(st.mtimeMs).toISOString(), activa: ahora - st.mtimeMs < activaMs, _m: st.mtimeMs })
       }
     }
     return [p.id, res.sort((a, b) => b._m - a._m).map(({ _m, ...s }) => s)]
   }))
+}
+
+// ---------- Oficina de agentes (S57): avisos del hook + colas de las transcripciones de respaldo ----------
+// Fuera de la huella: la escena la sondea con GET /api/oficina. Cola de 16 KB por .jsonl tocado en la vigencia del
+// principal (los del tutor del estudio no entran: resumenCacheado los descarta) y de sus <sid>/subagents/agent-*.jsonl.
+const TROZO_OFICINA = 16 * 1024
+const colaJsonl = (ruta, size, trozo = TROZO_OFICINA) => {
+  const fd = openSync(ruta, 'r')
+  try {
+    const largo = Math.min(size, trozo)
+    const buf = Buffer.alloc(largo)
+    return buf.toString('utf8', 0, readSync(fd, buf, 0, largo, size - largo)).split('\n').flatMap((l) => { try { return [JSON.parse(l)] } catch { return [] } })
+  } finally { closeSync(fd) }
+}
+// El hook lo recorta a 2000 líneas (~0,5 MB); se lee como mucho el último MB.
+function leerEventos(ruta = EVENTOS_OFICINA) {
+  const st = statSync(ruta, { throwIfNoEntry: false })
+  try { return st ? colaJsonl(ruta, st.size, 1024 * 1024) : [] } catch { return [] }
+}
+export function colasOficina(dir = TRANSCRIPCIONES, ahora = Date.now()) {
+  const colas = []
+  const reciente = (st) => st && ahora - st.mtimeMs <= VIGENCIA.principal
+  const cwdDe = (lineas) => lineas.findLast?.((o) => o?.cwd)?.cwd || null
+  for (const d of existsSync(dir) ? readdirSync(dir) : []) {
+    let archivos = []
+    try { archivos = readdirSync(join(dir, d)) } catch { continue }
+    for (const f of archivos) {
+      if (!f.endsWith('.jsonl')) continue
+      const ruta = join(dir, d, f), sid = f.slice(0, -6)
+      const st = statSync(ruta, { throwIfNoEntry: false })
+      const subdir = join(dir, d, sid, 'subagents')
+      const subs = existsSync(subdir) ? readdirSync(subdir).filter((x) => /^agent-.+\.jsonl$/.test(x)) : []
+      if (!reciente(st) && !subs.length) continue
+      if (st && !resumenCacheado(ruta, st).r) continue // vacío o del tutor del estudio
+      try {
+        if (reciente(st)) { const lineas = colaJsonl(ruta, st.size); colas.push({ sid, agente: 'principal', tipo: null, cwd: cwdDe(lineas), carpeta: d, mtime: st.mtimeMs, lineas }) }
+        for (const x of subs) {
+          const sr = join(subdir, x), sst = statSync(sr, { throwIfNoEntry: false })
+          if (!reciente(sst)) continue
+          let tipo = null
+          try { tipo = JSON.parse(readFileSync(sr.replace(/\.jsonl$/, '.meta.json'), 'utf8')).agentType || null } catch {}
+          const lineas = colaJsonl(sr, sst.size)
+          colas.push({ sid, agente: x.slice(6, -6), tipo, cwd: cwdDe(lineas), carpeta: d, mtime: sst.mtimeMs, lineas })
+        }
+      } catch {}
+    }
+  }
+  return colas
+}
+// Proyecto de un agente: el de su carpeta de transcripciones o el que contiene su cwd (docs o repo).
+const carpetaDeCwd = (cwd) => cwd.replace(/[^a-zA-Z0-9]/g, '-')
+function proyectoDe(lista, cwd, carpeta) {
+  const c = carpeta || (cwd ? carpetaDeCwd(cwd) : null)
+  const dentro = (r) => r && cwd && (cwd === r || cwd.startsWith(r.endsWith(sep) ? r : r + sep))
+  return (lista.find((p) => p.transcripciones && c && (c === p.transcripciones || c.startsWith(`${p.transcripciones}-`)))
+    || lista.find((p) => [p.repo, ...(p.docs || [])].some(dentro)))?.id || null
+}
+export function oficina(lista, { eventos = leerEventos(), dir = TRANSCRIPCIONES, ahora = Date.now() } = {}) {
+  const colas = colasOficina(dir, ahora)
+  const carpetas = new Map(colas.map((c) => [`${c.sid}\u0000${c.agente}`, c.carpeta]))
+  const { agentes } = estadoOficina(eventos, colas, ahora)
+  return { agentes: agentes.map((a) => ({ ...a, proyecto: proyectoDe(lista, a.cwd, carpetas.get(`${a.sid}\u0000${a.agente}`)) })) }
 }
 
 // Rama de una sección: la de su título, la del hito, o «Rama `x`» en el texto bajo el título del hito.
@@ -1610,6 +1678,7 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
       if (req.method === 'GET' && ruta === '/api/version') return enviar(res, 200, { version: huella(), codigo })
       if (req.method === 'GET' && ruta === '/api/datos') return enviar(res, 200, (await fresco(true)).datos)
       if (req.method === 'GET' && ruta === '/api/metodologia') return enviar(res, 200, metodologia({ home: HOME, repo: METODOLOGIA_REPO, transcripciones: TRANSCRIPCIONES, proyectos: proyectosMetodologia((await fresco()).datos.proyectos) }))
+      if (req.method === 'GET' && ruta === '/api/oficina') return enviar(res, 200, oficina(proyectos))
       // Barato (sondeo cada 5 s): solo cabeza/cola de los .jsonl recientes y columnas sobre los datos ya construidos.
       if (req.method === 'GET' && ruta === '/api/sesiones') {
         const sesiones = sesionesActivas(proyectos)
