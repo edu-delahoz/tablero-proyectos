@@ -11,7 +11,7 @@
 {"t":"2026-10-05T11:58:30Z","sid":"s1","agente":"principal","tipo":null,"evento":"PreToolUse","herramienta":"Edit","archivo":"generar.mjs","cwd":"/Users/x/demo"}
 {"t":"2026-10-05T11:58:40Z","sid":"s1","agente":"a1","tipo":"buscador","evento":"PreToolUse","herramienta":"Read","archivo":"oficina.mjs","cwd":"/Users/x/demo"}
 {"t":"2026-10-05T11:59:00Z","sid":"s2","agente":"principal","tipo":null,"evento":"PreToolUse","herramienta":"Bash","archivo":null,"cwd":"/Users/x/demo-api"}
-{"t":"2026-10-05T11:59:05Z","sid":"s2","agente":"principal","tipo":null,"evento":"Notification:permission_prompt","herramienta":null,"archivo":null,"cwd":"/Users/x/demo-api"}
+{"t":"2026-10-05T11:59:05Z","sid":"s2","agente":"principal","tipo":null,"evento":"PermissionRequest","herramienta":"Bash","archivo":null,"cwd":"/Users/x/demo-api"}
 {"t":"2026-10-05T11:50:00Z","sid":"s3","agente":"principal","tipo":null,"evento":"PreToolUse","herramienta":"Bash","archivo":null,"cwd":"/Users/x/demo"}
 {"t":"2026-10-05T11:50:30Z","sid":"s3","agente":"principal","tipo":null,"evento":"Stop","herramienta":null,"archivo":null,"cwd":"/Users/x/demo"}
 {"t":"2026-10-05T11:55:00Z","sid":"s4","agente":"principal","tipo":null,"evento":"PreToolUse","herramienta":"Read","archivo":"a.md","cwd":"/Users/x/demo"}
@@ -19,3 +19,6 @@
 {"t":"2026-10-05T10:00:00Z","sid":"s5","agente":"principal","tipo":null,"evento":"PreToolUse","herramienta":"Read","archivo":"viejo.md","cwd":"/Users/x/demo"}
 {"t":"2026-10-05T11:40:00Z","sid":"s6","agente":"a3","tipo":"Explore","evento":"PreToolUse","herramienta":"Glob","archivo":null,"cwd":"/Users/x/demo"}
 {"t":"2026-10-05T11:59:30Z","sid":"s6","agente":"principal","tipo":null,"evento":"PostToolUse","herramienta":"Bash","archivo":null,"cwd":"/Users/x/demo"}
+{"t":"2026-10-05T11:59:40Z","sid":"s10","agente":"principal","tipo":null,"evento":"PreToolUse","herramienta":"Agent","archivo":null,"cwd":"/Users/x/demo-api"}
+{"t":"2026-10-05T11:59:45Z","sid":"s10","agente":"a7","tipo":"general-purpose","evento":"PermissionRequest","herramienta":"Bash","archivo":null,"cwd":"/Users/x/demo-api"}
+{"t":"2026-10-05T11:59:50Z","sid":"s10","agente":"principal","tipo":null,"evento":"Notification:permission_prompt","herramienta":null,"archivo":null,"cwd":"/Users/x/demo-api"}

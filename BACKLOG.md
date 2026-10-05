@@ -236,7 +236,7 @@ Resultado: Hook instalado en ~/.claude/settings.json (10 eventos, respaldo 20261
 
 ### S57c — Oficina: aviso de permiso real · **Sonnet** · rama `oficina-agentes` · ~15k
 Se espera: Sabemos qué evento llega al pedir un permiso y `/api/oficina` muestra «esperando» en ese caso.
-- [ ] [verificación] Aviso de permiso real — en una sesión interactiva (no `-p`) pedir un Bash que pida permiso y leer `tail ~/.claude/oficina/eventos.jsonl`: anotar si llega `Notification:permission_prompt`, `PermissionRequest` o ambos y si un subagente trae `agent_id`; ajustar `aplicar()` en `oficina.mjs` y su test si difiere
+- [x] [verificación] Aviso de permiso real — en una sesión interactiva (no `-p`) pedir un Bash que pida permiso y leer `tail ~/.claude/oficina/eventos.jsonl`: anotar si llega `Notification:permission_prompt`, `PermissionRequest` o ambos y si un subagente trae `agent_id`; ajustar `aplicar()` en `oficina.mjs` y su test si difiere → medido el 2026-10-05: llegan `PermissionRequest` (con `agente`/`tipo` del subagente si lo pide él) y después `Notification:permission_prompt` siempre como `principal` y sin herramienta; `aplicar()` ya no marca al principal con el Notification (test: fixture s10)
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S57c de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S57c BACKLOG.md`). Rama `oficina-agentes`. Interactiva, no -p. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.

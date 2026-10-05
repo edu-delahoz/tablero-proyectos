@@ -25,7 +25,7 @@ function aplicar(a, e) {
     case 'PreToolUse': return fija(accionDe(e.herramienta), e.herramienta || null, e.archivo || null)
     case 'PermissionRequest': return fija('esperando', e.herramienta || a.herramienta, e.archivo || a.archivo)
     case 'Notification':
-      if (tipoAviso === 'permission_prompt') return fija('esperando', a.herramienta, a.archivo)
+      // permission_prompt llega siempre como «principal», aunque pida el subagente; ya lo marcó PermissionRequest.
       if (tipoAviso === 'idle_prompt') return fija('quieto')
       return a
     case 'Stop': case 'SessionStart': return fija('quieto')

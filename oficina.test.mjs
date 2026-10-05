@@ -45,8 +45,11 @@ test('estadoOficina: SubagentStop saca al subagente; permiso → esperando; Stop
   const r = estadoOficina(EVENTOS, [], AHORA)
   assert.equal(de(r, 's1', 'a2'), undefined, 'SubagentStop → sale por la puerta')
   const s2 = de(r, 's2', 'principal')
-  assert.equal(s2.accion, 'esperando', 'Notification de permiso → esperando')
+  assert.equal(s2.accion, 'esperando', 'PermissionRequest → esperando')
   assert.equal(s2.herramienta, 'Bash', 'espera aprobación para la herramienta en curso')
+  // Permiso real medido (S57c): lo pide el subagente (PermissionRequest con su agente) y el Notification llega como «principal».
+  assert.equal(de(r, 's10', 'a7').accion, 'esperando', 'el subagente es quien espera')
+  assert.equal(de(r, 's10', 'principal').accion, 'pensando', 'el Notification de permiso no marca al principal')
   assert.equal(de(r, 's3', 'principal').accion, 'quieto', 'Stop → quieto')
   assert.equal(de(r, 's4', 'principal'), undefined, 'SessionEnd → sale')
   assert.equal(de(r, 's5', 'principal'), undefined, 'sin avisos hace 2 h → fuera')
