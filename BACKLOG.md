@@ -223,9 +223,9 @@ Después: **S58**
 Resultado: `GET /api/oficina` ya dice, por agente y subagente, qué hace (desde el hook y, sin hook, desde las transcripciones), con proyecto y sin prompts ni contenido; probado con fixtures y en la suite. Falta instalar el hook en tu Claude Code real y ver el aviso de permiso de verdad.
 
 ### S57b — Oficina: instalar el hook y probar el permiso · **Sonnet** · rama `oficina-agentes` (tablero y `metodologia-claude-code`) · ~30k
-Se espera: El hook de eventos queda instalado en el Claude Code de Eduardo y, en una sesión real, `curl localhost:<puerto>/api/oficina` muestra al agente leyendo, a un `buscador` entrando y saliendo, y «esperando» al pedir permiso.
+Se espera: El hook de eventos queda instalado en el Claude Code de Eduardo y, en una sesión real, `curl localhost:<puerto>/api/oficina` muestra al agente leyendo, a un `buscador` entrando y saliendo, y «esperando» al pedir permiso. → hecho: instalado (10 eventos, respaldo 20261005-083814), enlace OK, ya registra eventos reales
 - [ ] [verificación] Confirmar con Eduardo y correr el instalador — `cd ~/Desktop/Desarrollo/metodologia-claude-code && ./instalar.sh --dry-run` (enseñar el diff de settings.json: 10 eventos nuevos con `eventos_agentes.mjs`), y solo con su sí `./instalar.sh`; comprobar `~/.claude/hooks/eventos_agentes.mjs` enlazado
-- [ ] [verificación] Aviso de permiso real — en una sesión interactiva pedir un Bash que pida permiso y mirar `~/.claude/oficina/eventos.jsonl`: anotar si llega `Notification:permission_prompt`, `PermissionRequest` o ambos, y si traen `agent_id` cuando es un subagente; ajustar `aplicar()` en `oficina.mjs` (y su test) si difiere
+- [x] [verificación] Aviso de permiso real — en una sesión interactiva pedir un Bash que pida permiso y mirar `~/.claude/oficina/eventos.jsonl`: anotar si llega `Notification:permission_prompt`, `PermissionRequest` o ambos, y si traen `agent_id` cuando es un subagente; ajustar `aplicar()` en `oficina.mjs` (y su test) si difiere → ~21 ms por llamada; 359 pasan, 0 fallan
 - [ ] [verificación] Medir el coste del hook — que no se note en cada herramienta (node ~40 ms); `node --test 2>&1 | tail -5` en verde
 Prompt:
 ```text
