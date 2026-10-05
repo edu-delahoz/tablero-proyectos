@@ -145,9 +145,9 @@ Se espera: El panel de la terminal muestra la sesión con cualquier clave, su «
 
 ### S48 — Reglas y skills · **Sonnet** · rama `formato-backlog` (repo `metodologia-claude-code`) · ~40k
 Se espera: Toda sesión que planee o haga relevo escribe en el formato y deja el «Se espera» de la siguiente.
-- [ ] [doc] Regla corta en CLAUDE.md — `~/.claude/CLAUDE.md` y `claude/CLAUDE.md`: «formato en FORMATO_BACKLOG.md; Se espera obligatorio; casilla = llano — técnico»
-- [ ] [doc] Skills — `plugins/metodologia/skills/planear/SKILL.md`, `claude/skills/relevo/SKILL.md` (y `~/.claude/skills/relevo`): Se espera de la siguiente, `Prompt:`, correr `verificar_backlog.mjs --formato`
-- [ ] [doc] Plantilla única de prompt — `metodologia/PROMPTS.md`
+- [x] [doc] Regla corta en CLAUDE.md — `~/.claude/CLAUDE.md` y `claude/CLAUDE.md`: «formato en FORMATO_BACKLOG.md; Se espera obligatorio; casilla = llano — técnico»
+- [x] [doc] Skills — `plugins/metodologia/skills/planear/SKILL.md`, `claude/skills/relevo/SKILL.md` (y `~/.claude/skills/relevo`): Se espera de la siguiente, `Prompt:`, correr `verificar_backlog.mjs --formato`
+- [x] [doc] Plantilla única de prompt — `metodologia/PROMPTS.md`
 
 ### S49 — Migrar secciones abiertas · **Sonnet** · rama `formato-backlog` · ~50k
 Se espera: `verificar_backlog.mjs --formato` sale limpio en las secciones abiertas de los 5 proyectos y lo cerrado no se tocó.
