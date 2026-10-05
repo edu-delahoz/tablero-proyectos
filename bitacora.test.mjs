@@ -5,7 +5,7 @@ import { readFileSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parsearBitacora, editarFila, sidsPorProyecto, asociar, escaparCelda, desescaparCelda, celdas, analizarContexto, agregar, semanaISO, normalizarModelo, ramaDeTranscripcion, ErrorBitacora } from './bitacora.mjs'
+import { parsearBitacora, editarFila, sidsPorProyecto, asociar, escaparCelda, desescaparCelda, celdas, analizarContexto, agregar, semanaISO, normalizarModelo, ramaDeTranscripcion, featureDe, conFeatures, ErrorBitacora } from './bitacora.mjs'
 
 const BIT = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'BITACORA.md'), 'utf8')
 const lineasDistintas = (a, b) => { const x = a.split('\n'), y = b.split('\n'); assert.equal(x.length, y.length); return x.flatMap((l, i) => l === y[i] ? [] : [i]) }
@@ -117,6 +117,50 @@ test('rama por sesión: primer gitBranch no vacío en las primeras líneas; sin 
   assert.equal(ramaDeTranscripcion(rutas.get('bbbb2222')), 'notas-tablero')
 })
 
+test('E5b: rama de la sesión = la más usada (ignorando develop/main/HEAD si hay otra); empate → la primera', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tablero-tr5b-'))
+  const escribir = (n, ramas) => { const r = join(dir, n); writeFileSync(r, ['{"type":"summary"}', ...ramas.map((b) => `{"type":"user","gitBranch":"${b}"}`)].join('\n')); return r }
+  assert.equal(ramaDeTranscripcion(escribir('a.jsonl', ['h5-graficas', 'h5-consultas', 'h5-consultas', 'ci-optimizar', 'h5-consultas'])), 'h5-consultas')
+  assert.equal(ramaDeTranscripcion(escribir('b.jsonl', ['h3-personas', 'develop', 'develop', 'develop'])), 'h3-personas')
+  assert.equal(ramaDeTranscripcion(escribir('c.jsonl', ['develop', 'develop'])), 'develop')
+  // más de 50 líneas y 256 KB: antes solo se miraba el principio
+  assert.equal(ramaDeTranscripcion(escribir('d.jsonl', ['vieja', ...Array(80).fill('nueva')])), 'nueva')
+})
+
+test('E5b: featureDe — mapa explícito, prefijo hN-, tronco por la tarea, si no null', () => {
+  const mapa = { 'integraciones-vista': 'H11–H14' }
+  assert.equal(featureDe({ rama: 'h5-dashboard-e2e', proyecto: 'iep' }), 'iep · H5')
+  assert.equal(featureDe({ rama: 'h5-graficas-catalogo', proyecto: 'iep' }), 'iep · H5')
+  assert.equal(featureDe({ rama: 'H6_s0-migracion' }), 'H6')
+  assert.equal(featureDe({ rama: 'integraciones-vista', proyecto: 't' }, mapa), 'H11–H14')
+  assert.equal(featureDe({ rama: 'eficiencia', proyecto: 't' }, mapa), 'eficiencia')
+  assert.equal(featureDe({ rama: 'develop', proyecto: 'iep', tarea: 'BACKLOG_H5/S2' }), 'iep · H5')
+  assert.equal(featureDe({ rama: 'develop', proyecto: 'iep', tarea: 'Backlog de h6' }), 'iep · H6')
+  assert.equal(featureDe({ rama: 'HEAD', proyecto: 't', tarea: 'Tablero proyectos setup' }), null)
+  assert.equal(featureDe({ rama: null, tarea: 'BACKLOG_MVP/S2' }), null)
+  assert.equal(featureDe({ rama: 'main', tarea: 'BACKLOG_MVP/S2' }), null)
+})
+
+test('E5b: agregar por feature suma ramas hermanas, desglosa por rama, «sin rama» visible y el total cuadra', () => {
+  const proyectos = [{ id: 'iep' }, { id: 't', features: { 'integraciones-vista': 'H11–H14' } }]
+  const reg = conFeatures([
+    { fecha: '2026-10-01', costo: 2.84, minutos: 10, rama: 'h5-dashboard-e2e', proyecto: 'iep', tarea: 'x' },
+    { fecha: '2026-10-01', costo: 5.47, minutos: 20, rama: 'h5-graficas-catalogo', proyecto: 'iep', tarea: 'y' },
+    { fecha: '2026-10-02', costo: 1, minutos: 5, rama: 'develop', proyecto: 'iep', tarea: 'Backlog de h5' },
+    { fecha: '2026-10-02', costo: 4, minutos: 5, rama: 'integraciones-vista', proyecto: 't', tarea: 'z' },
+    { fecha: '2026-10-03', costo: 0.5, minutos: 1, rama: 'HEAD', proyecto: 't', tarea: 'setup' },
+    { fecha: '2026-10-03', costo: 0.4, minutos: 1, rama: null, proyecto: null, tarea: 'suelta' },
+    { fecha: '2026-10-03', costo: null, minutos: 1, rama: 'h5-x', proyecto: 'iep', tarea: 'sin costo' },
+  ], proyectos)
+  assert.equal(reg[3].feature, 'H11–H14')
+  const r = agregar(reg, { por: 'feature' })
+  assert.deepEqual(r.grupos.map((g) => [g.clave, g.costo, g.sesiones]), [['iep · H5', 9.31, 3], ['H11–H14', 4, 1], ['sin rama', 0.9, 2]])
+  assert.deepEqual(r.grupos[0].ramas.map((x) => [x.clave, x.costo, x.sesiones]), [['h5-graficas-catalogo', 5.47, 1], ['h5-dashboard-e2e', 2.84, 1], ['develop', 1, 1]])
+  assert.equal(r.excluidas, 1)
+  const total = reg.filter((f) => f.costo != null).reduce((a, f) => a + f.costo, 0)
+  assert.equal(Math.round(r.grupos.reduce((a, g) => a + g.costo, 0) * 100), Math.round(total * 100), 'nada excluido en silencio')
+})
+
 test('semanaISO y normalizarModelo', () => {
   assert.equal(semanaISO('2026-10-04'), '2026-W40')
   assert.equal(semanaISO('2026-01-01'), '2026-W01')
@@ -141,8 +185,8 @@ test('agregar: por día/semana/mes/rama/modelo; excluye costos «?» y fechas in
   assert.deepEqual(agregar(reg, { por: 'semana' }).grupos.map((g) => [g.clave, g.costo, g.sesiones]), [['2026-W40', 6.33, 5]])
   assert.deepEqual(agregar(reg, { por: 'mes' }).grupos.map((g) => [g.clave, g.sesiones]), [['2026-10', 5]])
   const rama = agregar(reg, { por: 'rama' })
-  assert.deepEqual(rama.grupos.map((g) => [g.clave, g.costo, g.sesiones]), [['a', 2.1, 2], ['b', 2.05, 1]])
-  assert.equal(rama.excluidas, 3)
+  assert.deepEqual(rama.grupos.map((g) => [g.clave, g.costo, g.sesiones]), [['sin rama', 2.18, 2], ['a', 2.1, 2], ['b', 2.05, 1]], 'E5b: sin rama no desaparece')
+  assert.equal(rama.excluidas, 1, 'solo el costo «?»')
   assert.deepEqual(agregar(reg, { por: 'modelo' }).grupos.map((g) => [g.clave, g.costo, g.sesiones]), [['Opus', 4.23, 3], ['Sonnet', 2.1, 2]])
   assert.throws(() => agregar(reg, { por: 'x' }))
 })

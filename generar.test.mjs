@@ -773,6 +773,12 @@ test('E5: costo por tipo — suma filas de la misma tarea, mediana, p90 y % de v
   assert.equal(t.find((x) => x.tipo === 'otro').n, 1)
 })
 
+test('E5b: plantilla.html — costo por feature con interruptor rama/feature, desglose y «sin rama», sin «otras»', () => {
+  const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
+  for (const txt of ['Costo por feature', 'Costo por rama', 'data-graf-ramas="${v}"', "[['feature', 'Feature'], ['rama', 'Rama']]", "'sin rama'", 'graf-desglose']) assert.ok(html.includes(txt), txt)
+  assert.ok(!html.includes('otras ('), 'sin corte top 10 + «otras»')
+})
+
 test('E5: plantilla.html muestra las advertencias y la calibración del panel de límites', () => {
   const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
   for (const txt of ['El % incluye uso fuera de Claude Code', '$ por 1 % se recalcula en cada ventana', 'Última ventana usada', 'sesiones tipo', 'Costo por tipo de tarea']) assert.ok(html.includes(txt), txt)

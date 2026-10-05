@@ -22,7 +22,7 @@ import { validarIntegracion, aplicarCambio, anadirProyecto, editarProyecto, escr
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
-import { parsearBitacora, sidsPorProyecto, asociar, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
+import { parsearBitacora, sidsPorProyecto, asociar, conFeatures, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
 import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
 import { semaforoLlamadas, semaforoCtx, eficienciaDe } from './eficiencia.mjs'
 
@@ -1067,6 +1067,7 @@ function leerBitacoras() {
   const metricas = leerMetricasSesion()
   return new Map(rutas.map((ruta) => {
     const bit = asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa, jsonl)
+    bit.registro = conFeatures(bit.registro, proyectos) // «Costo por feature»: hN- de la rama o `features` del proyecto
     // Columnas «llamadas/prompt» y «ctx final» (solo filas con <sid>.metricas.json) y panel de eficiencia.
     const porSid = new Map(metricas.map((m) => [String(m.sid).slice(0, 8), m]))
     for (const f of bit.registro) {

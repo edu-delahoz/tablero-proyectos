@@ -353,6 +353,8 @@ a.chip-ext:hover { border-color: var(--azul); }
 .graf-nota { margin: 4px 0 0; font-size: .85em; }
 .graf-ley { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; font-size: .9em; }
 .graf-ley i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.graf-scroll { max-height: 360px; overflow-y: auto; }
+.graf-desglose { margin-top: 6px; font-size: .9em; } .graf-desglose summary { cursor: pointer; } .graf-desglose ul { margin: 4px 0 6px 1.2em; padding: 0; }
 .graf-tabla { margin-top: 6px; font-size: .9em; } .graf-tabla summary { cursor: pointer; color: var(--suave); }
 #graf-tip { position: fixed; z-index: 50; pointer-events: none; white-space: pre; padding: 5px 8px; font-size: 12px; background: var(--panel); color: var(--texto); border: 1px solid var(--borde); box-shadow: 0 2px 8px #0003; }
 #graf-tip[hidden] { display: none; }
@@ -1431,17 +1433,22 @@ function agregarBit(registro, por) {
   let excluidas = 0;
   for (const f of registro) {
     const fecha = (String(f.fecha).match(/^\d{4}-\d{2}-\d{2}/) || [])[0];
-    const clave = tiempo ? (fecha && tiempo(fecha)) : por === 'rama' ? f.rama : modeloBase(f.modelo);
+    // Rama/feature: nada se excluye; lo que no tiene va a 'sin rama' (con sus filas, para verlas al expandir).
+    const clave = tiempo ? (fecha && tiempo(fecha)) : por === 'rama' ? f.rama || 'sin rama'
+      : por === 'feature' ? ('feature' in f ? f.feature : f.rama) || 'sin rama' : modeloBase(f.modelo);
     if (!clave || f.costo == null) { excluidas++; continue; }
-    const g = grupos.get(clave) || { clave, costo: 0, minutos: 0, sesiones: 0 };
+    const g = grupos.get(clave) || { clave, costo: 0, minutos: 0, sesiones: 0, ramas: new Map(), filas: [] };
     g.costo += f.costo; g.minutos += f.minutos ?? 0; g.sesiones++;
+    const r = g.ramas.get(f.rama || 'sin rama') || { clave: f.rama || 'sin rama', costo: 0, sesiones: 0 };
+    r.costo += f.costo; r.sesiones++; g.ramas.set(r.clave, r);
+    if (clave === 'sin rama') g.filas.push(f);
     grupos.set(clave, g);
   }
   const lista = [...grupos.values()];
   lista.sort(tiempo ? (a, b) => a.clave.localeCompare(b.clave) : (a, b) => b.costo - a.costo);
   return { grupos: lista, excluidas };
 }
-let bitGraf = { por: 'dia' };
+let bitGraf = { por: 'dia', ramas: 'feature' };
 const MODELO_COLOR = { Opus: 'var(--g1)', Sonnet: 'var(--g2)', Haiku: 'var(--g3)' }; // el color sigue a la entidad, no al rango
 const usd = (n) => `$${nf.format(n)}`;
 const dur = (m) => (m >= 60 ? `${nf.format(m / 60)} h` : `${nf.format(m)} min`);
@@ -1449,7 +1456,7 @@ const marca = (g, extra) => `data-tip="${esc(`${g.clave}\n${usd(g.costo)} · ${d
 function tablaGraf(titulo, grupos, total) {
   return `<details class="graf-tabla"><summary>Ver como tabla</summary><div class="bit-tabla"><table><caption class="sr">${esc(titulo)}</caption><thead><tr><th>Clave</th><th>Costo</th><th>Duración</th><th>Sesiones</th></tr></thead><tbody>${grupos.map((g) => `<tr><td>${esc(g.clave)}</td><td class="n">${usd(g.costo)}</td><td class="n">${dur(g.minutos)}</td><td class="n">${g.sesiones}</td></tr>`).join('')}</tbody></table></div></details>`;
 }
-const notaExcl = (n) => (n ? `<p class="suave graf-nota">${n} fila${n === 1 ? '' : 's'} sin dato (costo «?», fecha incompleta o sin rama) no se grafica${n === 1 ? '' : 'n'}.</p>` : '');
+const notaExcl = (n) => (n ? `<p class="suave graf-nota">${n} fila${n === 1 ? '' : 's'} sin dato (costo «?» o fecha incompleta) no se grafica${n === 1 ? '' : 'n'}.</p>` : '');
 function grafTiempo(base) {
   const por = bitGraf.por, tope = { dia: 30, semana: 16, mes: 12 }[por];
   const { grupos: todos, excluidas } = agregarBit(base, por), grupos = todos.slice(-tope);
@@ -1481,14 +1488,21 @@ function grafBarrasH(titulo, grupos, excluidas, color, vacio) {
   }).join('');
   return `<div class="graf"><div class="graf-cab"><h3>${titulo}</h3></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${titulo}: ${grupos.map((g) => `${g.clave} ${usd(g.costo)}`).join(', ')}`)}">${barras}</svg>${notaExcl(excluidas)}${tablaGraf(titulo, grupos)}</div>`;
 }
+// «Costo por feature»: todas las barras (sin corte), interruptor feature/rama y desglose por rama al expandir.
 function grafRamas(base) {
-  const { grupos, excluidas } = agregarBit(base, 'rama');
-  let lista = grupos;
-  if (grupos.length > 10) {
-    const resto = grupos.slice(10);
-    lista = [...grupos.slice(0, 10), { clave: `otras (${resto.length})`, costo: resto.reduce((a, g) => a + g.costo, 0), minutos: resto.reduce((a, g) => a + g.minutos, 0), sesiones: resto.reduce((a, g) => a + g.sesiones, 0), otras: true }];
-  }
-  return grafBarrasH('Costo por feature (rama)', lista, excluidas, (g) => (g.otras ? 'var(--suave)' : 'var(--acento)'), 'Ninguna sesión con rama conocida.');
+  const por = bitGraf.ramas;
+  const { grupos, excluidas } = agregarBit(base, por);
+  const radios = [['feature', 'Feature'], ['rama', 'Rama']].map(([v, l]) => `<label><input type="radio" name="graf-ramas" data-graf-ramas="${v}"${v === por ? ' checked' : ''}> ${l}</label>`).join('');
+  const titulo = por === 'feature' ? 'Costo por feature' : 'Costo por rama';
+  const graf = grafBarrasH(titulo, grupos, excluidas, (g) => (g.clave === 'sin rama' ? 'var(--suave)' : 'var(--acento)'), 'Sin sesiones con costo.')
+    .replace(`<h3>${titulo}</h3></div>`, `<h3>${titulo}</h3><span class="graf-sel" role="radiogroup" aria-label="Agrupar por">${radios}</span></div>`)
+    .replace(/<svg[\s\S]*?<\/svg>/, (s) => `<div class="graf-scroll">${s}</div>`);
+  const detalle = (g) => g.clave === 'sin rama'
+    ? g.filas.map((f) => `<li>${esc(String(f.fecha).slice(0, 10))} · ${esc(f.tarea)}${f.proyecto ? ` <span class="suave">(${esc(f.proyecto)})</span>` : ''} — ${usd(f.costo)}</li>`).join('')
+    : [...g.ramas.values()].sort((a, b) => b.costo - a.costo).map((r) => `<li>${esc(r.clave)} — ${usd(Math.round(r.costo * 100) / 100)} · ${r.sesiones} ses.</li>`).join('');
+  const desglose = grupos.filter((g) => g.clave === 'sin rama' || (por === 'feature' && g.ramas.size > 1));
+  const total = grupos.reduce((a, g) => a + g.costo, 0);
+  return graf.replace(/<\/div>$/, `<p class="suave graf-nota">${grupos.length} ${por === 'feature' ? 'features' : 'ramas'} · ${usd(Math.round(total * 100) / 100)} en total</p>${desglose.length ? `<div class="graf-desglose">${desglose.map((g) => `<details><summary>${esc(g.clave)} — ${usd(Math.round(g.costo * 100) / 100)} · ${g.sesiones} ses.</summary><ul>${detalle(g)}</ul></details>`).join('')}</div>` : ''}</div>`);
 }
 function grafModelos(base) {
   const { grupos, excluidas } = agregarBit(base, 'modelo');
@@ -2165,6 +2179,7 @@ document.addEventListener('change', (e) => {
   if (r.dataset?.estadoItem !== undefined) { pendItem.clave = claveItem(r.dataset.proyecto, r.dataset.integracion, r.dataset.item); pendItem.accion = 'estado'; pendItem.estado = r.value; pendItem.ocupado = false; pintar(); document.querySelector('[data-confirmar-item]')?.focus(); return; }
   if (r.dataset?.integFiltro) { const id = r.dataset.integFiltro; filtroInteg.set(id, r.value); pintar(); document.querySelector(`[data-integ-filtro="${CSS.escape(id)}"][value="${r.value}"]`)?.focus(); return; }
   if ('soloFav' in (r.dataset || {})) { soloFav = r.checked; pintar(); $('[data-solo-fav]')?.focus(); return; }
+  if (r.dataset?.grafRamas) { bitGraf.ramas = r.dataset.grafRamas; pintar(); $(`[data-graf-ramas=${r.dataset.grafRamas}]`)?.focus(); return; }
   if (r.dataset?.grafPor) { bitGraf.por = r.dataset.grafPor; pintar(); $(`[data-graf-por=${r.dataset.grafPor}]`)?.focus(); return; }
   if (r.dataset?.bitFiltro) { bitFiltro[r.dataset.bitFiltro] = r.checked; pintar(); $(`[data-bit-filtro=${r.dataset.bitFiltro}]`)?.focus(); return; }
   if (r.dataset?.bit && r.closest('tr')?.dataset.sid) bitBorrador.set(r.closest('tr').dataset.sid, { ...bitBorrador.get(r.closest('tr').dataset.sid), [r.dataset.bit]: r.value });
