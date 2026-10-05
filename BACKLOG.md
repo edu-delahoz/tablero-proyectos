@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `eficiencia` (basada en `trello-vista-previa` por ff-only, porque `develop` no tenía H16) · E1 hecha, tests en verde (175 pasan). `backlog.mjs seccion|marcar` con `backlog.test.mjs` (fallaban 5 antes); README y `~/.claude/skills/relevo/SKILL.md` lo usan. No existía plantilla de prompt en `generar.mjs` (solo la coletilla en `plantilla.html`). Siguiente: **E2**.
+- Para retomar (2026-10-04): Ya existe una herramienta para leer solo la sección del backlog que toca y marcar casillas sin cargar el archivo entero, y el cierre de sesión la usa. Todo pasa. Lo que sigue son los avisos que bloquean lecturas demasiado grandes.
 - 2026-10-04 · rama `trello-vista-previa` · plan de eficiencia hecho, solo análisis (sin código): `../PLAN_EFICIENCIA.md` con Partes 1–3 y H16 (E0–E6) abajo. **Pendiente: aprobación del usuario (E0).** Scripts del análisis en `../analisis/` (`analizar.mjs`, `b.mjs`, `c.mjs`, `e.mjs`; `node analizar.mjs AAAA-MM-DD`).
 - Para retomar (2026-10-04): Se midió con los registros de hoy dónde se va la ventana de uso. Lo que más pesa es navegar el backlog con comandos sueltos y leer archivos completos; también se descubrió que la statusline ya recibe el porcentaje usado de las ventanas de 5 horas y semanal. El plan está escrito y falta que lo apruebes o ajustes antes de empezar a implementarlo.
 - 2026-10-04 · rama `trello-vista-previa` (sale de `develop`) · sesión de cierre de pendientes, solo backlog (sin código). PR #10 mergeado por el usuario; abierto PR #11 `develop` → `main`. Cerradas con el usuario: S36 y S38 (probadas a mano en el navegador), S20 (confirmada en S24b), S24b «actualizar PR #9» (superada), S5 (Trello probado con Squalo: lectura, importar y primera sincronía solo trayendo). Queda abierta a propósito la mejora opcional del reinicio (S24b). Fallos de la prueba con Trello → nuevo **H15** (S41 conector, S42 vista, S43 cierre). Ojo: `squalo-app` quedó en `sincronizar` contra el tablero del equipo; desde la segunda sincronía las ~25 casillas propias vendrían marcadas para crearse en Trello (lo cubre S42). Siguiente: **S41** (Sonnet).
@@ -70,9 +72,9 @@ Plan completo y datos: `../PLAN_EFICIENCIA.md`. Rama `eficiencia` desde `develop
 - [ ] Revisar `PLAN_EFICIENCIA.md`: aprobar/quitar candidatas de la Parte 1 y confirmar orden E1–E6.
 
 ### E1 — Extractor de backlog (Sonnet)
-- [ ] Test primero `backlog.test.mjs`: `seccion S4b` devuelve solo esa sección con nº de línea; `marcar S4b 2` cambia `[ ]`→`[x]` solo en esa casilla; sección inexistente → código 1. Verlo fallar y anotar cuántos.
-- [ ] `backlog.mjs seccion|marcar` reutilizando el árbol de `generar.mjs` (`estructura`, ~línea 365).
-- [ ] Prompt de arranque (plantilla en `generar.mjs`) y `~/.claude/skills/relevo/SKILL.md` usan `backlog.mjs seccion`.
+- [x] Test primero `backlog.test.mjs`: `seccion S4b` devuelve solo esa sección con nº de línea; `marcar S4b 2` cambia `[ ]`→`[x]` solo en esa casilla; sección inexistente → código 1. Verlo fallar y anotar cuántos.
+- [x] `backlog.mjs seccion|marcar` reutilizando el árbol de `generar.mjs` (`estructura`, ~línea 365).
+- [x] Prompt de arranque (plantilla en `generar.mjs`) y `~/.claude/skills/relevo/SKILL.md` usan `backlog.mjs seccion`.
 
 ### E2 — Hooks de lectura (Sonnet)
 - [ ] Test primero con entradas JSON de hook: Read sin limit de archivo >300 líneas → bloqueo con sugerencia `grep -n '^#'`; Read de `tool-results` sin limit → bloqueo; `cat archivo` completo por Bash → bloqueo; Read con offset/limit → pasa.

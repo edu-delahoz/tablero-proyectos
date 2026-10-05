@@ -28,6 +28,12 @@ Cada proyecto tiene estas pestañas:
   tarjetas por columna y el botón **Sincronizar** con vista previa. En el Mapa, cada casilla vinculada
   lleva un chip (`GH ↗`) y la barra de estado avisa «⇄ N cambios por sincronizar».
 
+### Leer y marcar una sección sin cargar el backlog
+
+`node backlog.mjs seccion <clave> [archivo]` imprime solo esa sección (`S4b`, `E1`, `H16`) con su nº de línea;
+`node backlog.mjs marcar <clave> <n> [archivo]` pasa a `[x]` su casilla n (en orden, anidadas incluidas).
+Sin archivo usa `BACKLOG.md` del directorio actual; clave inexistente → código 1.
+
 ### Para retomar y «Qué se busca» (convenciones del backlog)
 
 - **`- Para retomar (AAAA-MM-DD): …`** en `## Estado`: 2–4 frases en lenguaje natural (sin claves, commits
