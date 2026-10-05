@@ -5,6 +5,8 @@
 //                                           o «Resultado» sin rellenar (exit 2 → Claude ve el motivo).
 //   node verificar_backlog.mjs [carpeta]  → lista los desajustes del proyecto (PR mergeado con casillas
 //                                           abiertas, hito padre ↔ sub-backlog). Exit 1 si hay alguno.
+//   node verificar_backlog.mjs --formato [carpeta] → lo que no cumple FORMATO_BACKLOG.md en las sesiones abiertas
+//                                           (sin «Se espera», casilla sin « — », sin prompt). Exit 1 si hay algo.
 // Escape legítimo: marcar la casilla `[-]` con nota («→ pasa a S5b») si se movió o descartó.
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -12,6 +14,7 @@ import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { bloqueosDeRama, desajustes, describir } from './coherencia.mjs'
+import { avisosFormato } from './formato.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
@@ -83,8 +86,27 @@ function revisar(cwd) {
   process.exitCode = 1
 }
 
+// Sin proyecto en proyectos.json, revisa los BACKLOG*.md de la propia carpeta.
+function formato(cwd) {
+  const p = proyectoDe(cwd, cargarProyectos())
+  const backlogs = p ? leerBacklogs(p) : leerBacklogs({ docs: [cwd] })
+  if (!backlogs.length) { console.error(`Sin backlogs en ${cwd}`); process.exitCode = 1; return }
+  let n = 0
+  for (const b of backlogs) {
+    for (const a of avisosFormato(b.contenido)) {
+      n++
+      console.log(`${b.ruta}:${a.linea} ${a.clave}: ${a.motivo}${a.texto ? ` — «${a.texto.slice(0, 70)}»` : ''}`)
+    }
+  }
+  if (!n) { console.log(`${p?.nombre || cwd}: las sesiones abiertas cumplen el formato.`); return }
+  console.log(`${n} aviso(s) de formato (ver metodologia/FORMATO_BACKLOG.md).`)
+  process.exitCode = 1
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const args = process.argv.slice(2)
+  const carpeta = expandir(args.find((a) => !a.startsWith('--')) || process.cwd())
   if (args.includes('--hook')) hook()
-  else revisar(expandir(args[0] || process.cwd()))
+  else if (args.includes('--formato')) formato(carpeta)
+  else revisar(carpeta)
 }

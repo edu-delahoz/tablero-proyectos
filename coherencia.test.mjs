@@ -118,3 +118,22 @@ Después: **S7** dentro de código no cuenta
   const d = desajustes([{ archivo: 'BACKLOG.md', ruta: '/x', contenido: t }]).filter((x) => x.tipo === 'sesion-sin-casillas')
   assert.deepEqual(d.map((x) => x.clave).sort(), ['S3c', 'S4'])
 })
+
+test('bloqueosDeRama: en un backlog con el formato nuevo, no se abre PR de una sesión sin «Se espera» (S45)', () => {
+  const nuevo = `# Backlog
+## H9 — Informes
+### S1 — Exportar · **Opus** · rama \`pdf\`
+Se espera: baja el PDF; se comprueba con el test.
+- [x] Generar — \`informe.mjs\`
+#### S1b — Pie · **Sonnet** · rama \`pdf\`
+- [x] Pie — \`informe.mjs\`
+### S-CI2 — Higiene · **Sonnet** · rama \`ci\`
+- [x] Fijar SHA — \`ci.yml\`
+`
+  const b = [{ archivo: 'BACKLOG.md', ruta: 'B', contenido: nuevo }]
+  assert.deepEqual(bloqueosDeRama(b, 'pdf', 'crear').map((x) => [x.clave, x.motivo]), [['S1b', '«Se espera» sin escribir']])
+  assert.deepEqual(bloqueosDeRama(b, 'ci', 'crear').map((x) => [x.clave, x.motivo]), [['S-CI2', '«Se espera» sin escribir']])
+  assert.deepEqual(bloqueosDeRama(b, 'ci', 'merge'), [])
+  // Un backlog legado (sin ninguna línea «Se espera:») no se bloquea por esto.
+  assert.deepEqual(bloqueosDeRama(bl(H4, MVP('')), 'h4-lista', 'crear'), [])
+})

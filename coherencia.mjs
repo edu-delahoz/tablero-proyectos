@@ -6,9 +6,10 @@
 // Jerarquía: un PLAN saca un BACKLOG (hitos «## H4 — …») y cada hito puede tener su
 // sub-backlog BACKLOG_H4.md (sesiones «## S1 — … · rama `x`»).
 
-const RE_TITULO = /^(#{2,3})\s+(.+?)\s*#*\s*$/
+const RE_TITULO = /^(#{2,4})\s+(.+?)\s*#*\s*$/
 const RE_CASILLA = /^\s*[-*] \[([ xX~-])\]\s?(.*)$/
 const RE_CERCA = /^\s*(```|~~~)/
+const RE_SE_ESPERA = /^\s*(?:[-*]\s+)?\**Se espera\s*:/i
 const RE_CERRADO = /✅|\b(CERRADO|COMPLETO|TERMINADO)\b/
 const RE_RESULTADO_VACIO = /^\s*[-*]\s+\*\*Resultado[^*]*\*\*:?\s*(_?\((rellenar|pendiente)\)_?|…|\.\.\.)?\s*$/i
 // Casillas que por naturaleza se marcan DESPUÉS de abrir el PR.
@@ -28,7 +29,7 @@ export function secciones(texto) {
     const titulo = m[2]
     out.push({
       nivel: m[1].length, titulo, linea: i + 1,
-      clave: (sinMd(titulo).match(/^([HS]\d+[a-z]?)\b/) || [])[1] || null,
+      clave: (sinMd(titulo).match(/^([A-Z][A-Z0-9-]*\d+[a-z]?)(?![A-Za-z0-9])/) || [])[1] || null,
       rama: /sin rama/i.test(titulo) ? null : (titulo.match(/rama\s+`([^`]+)`/i) || [])[1] || null,
       cerrado: RE_CERRADO.test(titulo),
     })
@@ -36,12 +37,15 @@ export function secciones(texto) {
   out.forEach((s, k) => {
     const fin = out.slice(k + 1).find((o) => o.nivel <= s.nivel)
     const cuerpo = lineas.slice(s.linea, fin ? fin.linea - 1 : lineas.length)
-    let enCerca = false
+    let enCerca = false, propio = true
     s.casillas = []
+    s.seEspera = false
     s.resultadoVacio = false
     for (const l of cuerpo) {
       if (RE_CERCA.test(l)) { enCerca = !enCerca; continue }
       if (enCerca) continue
+      if (RE_TITULO.test(l)) propio = false // lo que sigue es de una sub-sesión
+      if (propio && RE_SE_ESPERA.test(l)) s.seEspera = true
       const c = l.match(RE_CASILLA)
       if (c) s.casillas.push({ marca: c[1].toLowerCase(), texto: sinMd(c[2]).slice(0, 140) })
       if (RE_RESULTADO_VACIO.test(l)) s.resultadoVacio = true
@@ -123,13 +127,16 @@ export function sesionesSinCasillas(texto) {
 
 // Qué impide abrir (modo 'crear') o mergear (modo 'merge') el PR de una rama.
 // 'crear' tolera las casillas de PR/commit/CI (se marcan después) pero exige «Resultado» relleno.
+// Al abrir el PR, un backlog que ya usa el formato nuevo (alguna línea «Se espera:») exige «Se espera» en cada sesión.
 export function bloqueosDeRama(backlogs, rama, modo = 'crear') {
   const out = []
   for (const b of backlogs.filter((x) => !/^PLAN/i.test(x.archivo))) {
+    const formatoNuevo = /^\s*(?:[-*]\s+)?\**Se espera\s*:/im.test(b.contenido)
     for (const s of secciones(b.contenido)) {
       if (s.rama !== rama) continue
       const abiertas = s.abiertas.filter((c) => modo === 'merge' || !RE_CASILLA_DE_PR.test(c.texto))
       if (abiertas.length) out.push({ archivo: b.archivo, ruta: b.ruta, clave: s.clave, titulo: sinMd(s.titulo), motivo: 'casillas abiertas', detalle: abiertas.map((c) => c.texto) })
+      if (modo === 'crear' && formatoNuevo && s.clave && !s.seEspera) out.push({ archivo: b.archivo, ruta: b.ruta, clave: s.clave, titulo: sinMd(s.titulo), motivo: '«Se espera» sin escribir', detalle: [] })
       if (s.resultadoVacio) out.push({ archivo: b.archivo, ruta: b.ruta, clave: s.clave, titulo: sinMd(s.titulo), motivo: '«Resultado» sin rellenar', detalle: [] })
     }
   }

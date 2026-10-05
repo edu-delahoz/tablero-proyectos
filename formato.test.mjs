@@ -44,3 +44,33 @@ for (const f of EJEMPLOS) {
     }
   }
 }
+
+// ---------- Linter del formato (S45): `formato.mjs` puro, lo usa `verificar_backlog.mjs --formato` ----------
+test('avisosFormato: sesión abierta sin «Se espera», casilla abierta sin « — » y sin prompt; lo cerrado no avisa', async () => {
+  const { avisosFormato } = await import('./formato.mjs')
+  const md = `# Backlog
+## H1 — Hito
+### S1 — Cerrada sin nada
+- [x] vieja
+### S2 — Abierta legada (Sonnet)
+- [x] hecha sin raya
+- [ ] **Test primero** con \`a.mjs\` — algo
+### S3 — Abierta en formato · **Opus**
+Se espera: queda X; se comprueba con Y.
+- [ ] Hacer X — \`x.mjs\`
+Prompt:
+\`\`\`text
+Sesión S3.
+\`\`\`
+`
+  const avisos = avisosFormato(md)
+  assert.deepEqual(avisos.map((a) => [a.clave, a.motivo]), [
+    ['S2', 'sin «Se espera»'],
+    ['S2', 'casilla sin « — » (llano — técnico)'],
+    ['S2', 'sin prompt'],
+  ])
+  assert.equal(avisos[1].linea, 7)
+  assert.match(avisos[1].texto, /Test primero/)
+  const canonico = readFileSync(join(DIR, 'canonico.md'), 'utf8')
+  assert.deepEqual(avisosFormato(canonico).map((a) => a.motivo), ['sin prompt', 'sin prompt'])
+})

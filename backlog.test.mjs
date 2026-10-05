@@ -66,3 +66,27 @@ test('CLI: seccion y marcar; inexistente → código 1', () => {
   assert.equal(run('marcar', 'S4b', '9', f).status, 1)
   assert.equal(run('marcar', 'S99', '1', f).status, 1)
 })
+
+test('seccion: claves generales (E5b, S-CI1b) y sub-sesiones «####» dentro de su sesión (S45)', () => {
+  const md = `# Backlog
+
+## H16 — Eficiencia
+### E5b — Costo por feature (Opus; sigue a E5)
+- [ ] una
+#### E5c — Auditoría · **Sonnet**
+- [ ] dos
+
+## CI — optimización (S-CI1) — ✅ CERRADA
+### S-CI1b — verificación post-merge (Sonnet, ~10k; plugins/MCP: ninguno)
+- [x] mergear
+### S-CI2 — higiene
+- [ ] fijar SHA
+`
+  const e5b = seccion(md, 'E5b')
+  assert.equal(e5b.linea, 4)
+  assert.match(e5b.texto, /#### E5c[\s\S]*- \[ \] dos/)
+  assert.equal(seccion(md, 'E5c').texto, '#### E5c — Auditoría · **Sonnet**\n- [ ] dos')
+  assert.equal(seccion(md, 'S-CI1b').texto, '### S-CI1b — verificación post-merge (Sonnet, ~10k; plugins/MCP: ninguno)\n- [x] mergear')
+  assert.equal(seccion(md, 'S-CI1'), null)
+  assert.equal(marcar(md, 'E5b', 2).linea, 7)
+})

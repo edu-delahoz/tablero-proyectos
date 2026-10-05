@@ -531,12 +531,14 @@ test('hechosRetomar: rama, siguiente, commits, PR y última sesión de Claude (f
   assert.deepEqual(vacio, { ultimaActividad: null, diasSinActividad: null, rama: null, siguiente: null, pendientesSiguiente: 0, ultimoCommit: null, prsAbiertos: 0, commitsSinSubir: 0, ultimaSesionClaude: null })
 })
 
-test('plantillaBacklog: trae «Para retomar» en Estado e «Historia:» en S1, sin romper «estás aquí»', () => {
+test('plantillaBacklog: formato nuevo — «Para retomar» en Estado, «Historia:» en H1, «Se espera» en S1, sin romper «estás aquí»', () => {
   const t = plantillaB('Demo', '2026-10-04')
   assert.match(t, /^- Para retomar \(2026-10-04\): .+/m)
   assert.ok(retomarDe(t.match(/## Estado\n([\s\S]*?)\n## /)[1]))
   const arbol = estructura(t)
-  assert.ok(porClave(arbol, 'S1').historia)
+  assert.ok(porClave(arbol, 'H1').historia)
+  assert.ok(porClave(arbol, 'S1').seEspera)
+  assert.ok(porClave(arbol, 'S1').tareas[0].llano)
   assert.equal(estasAqui(arbol, t.match(/## Estado\n([\s\S]*?)\n## /)[1]), porClave(arbol, 'S1').id)
 })
 
