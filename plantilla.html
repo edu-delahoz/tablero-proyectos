@@ -2405,17 +2405,25 @@ function irRama(nombre) {
   if (barra) { medir(); if (window.ResizeObserver) new ResizeObserver(medir).observe(barra); }
 }
 
+// Si el servidor se recicló con código nuevo, la pestaña abierta sigue con el viejo: recargarla (sin pisar una edición).
+function decidirCodigo(previo, actual, editando) {
+  if (previo == null || actual == null || previo === actual) return 'igual';
+  return editando ? 'esperar' : 'recargar';
+}
 // Actualización en vivo (solo con el servidor local): sondea la huella barata y repinta si cambió.
 if (editable()) {
-  let version = null, ocupado = false;
+  let version = null, codigo = null, ocupado = false;
   const hayEdicion = () => editando || formInteg || quitandoInteg || document.querySelector('#contenido textarea:focus, #contenido input:focus, #contenido select:focus');
   const marcar = (v) => { if (enVivo !== v) { enVivo = v; pintarNavegacion(); } };
   const sondear = async () => {
     if (ocupado || document.hidden) return;
     ocupado = true;
     try {
-      const v = (await (await fetch('/api/version', { cache: 'no-store' })).json()).version;
+      const { version: v, codigo: c } = await (await fetch('/api/version', { cache: 'no-store' })).json();
       marcar(true);
+      const d = decidirCodigo(codigo, c, !!hayEdicion());
+      if (d === 'recargar') return location.reload();
+      if (d === 'igual' && c != null) codigo = c;
       if (version === null) version = v;
       else if (v !== version && !hayEdicion()) {
         const nuevos = await (await fetch('/api/datos', { cache: 'no-store' })).json();
