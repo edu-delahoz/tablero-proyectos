@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `oficina-agentes` (sin PR) · S59 hecha en parte, suite en verde (361 pasan, 2 omitidos; `probar.sh` 20/20; formato OK). `/api/metodologia` ya no llama a `fresco()`/`construir` (que pedía PRs a `gh`, ~15 s): `proyectosMetodologia()` lee backlogs/notas/bitácora del disco (`generar.mjs` ~1619) y responde en 14 ms. Test nuevo en `servidor.test.mjs` (en el entorno de test ya pasaba sin el cambio: no hay red). Falta → **S59b**.
+- Para retomar (2026-10-05, S59): la pestaña Metodología ya carga al instante; la lentitud venía de reconstruir todo el tablero con consultas a GitHub. Oficina se ve bien a escritorio y móvil. Falta mirar Tablero y Estudio y abrir los tres PR (GitHub tenía el límite de uso agotado). Nada roto.
 - 2026-10-05 · rama `oficina-agentes` (tablero y `metodologia-claude-code`, sin PR) · S57 hecha salvo instalar el hook en el settings real (→ S57b), suite en verde (359 pasan, 2 omitidos; los tests nuevos fallaban 8: 6 de `oficina.test.mjs` sin módulo, 1 de `servidor.test.mjs` `/api/oficina` 404, 1 de `metodologia.test.mjs` catálogo). Nuevo `oficina.mjs` (`accionDe`, `estadoOficina(eventos, colas, ahora)`, `VIGENCIA` 30 min principal / 10 min subagente); `generar.mjs`: `colasOficina` (cola de 16 KB de los .jsonl recientes y de `<sid>/subagents/agent-*.jsonl` con `agentType` del `.meta.json`), `proyectoDe` (carpeta de transcripciones, luego cwd dentro de repo/docs), `GET /api/oficina`, `resumenCacheado` extraído de `sesionesActivas`. Hook `claude/hooks/eventos_agentes.mjs` en metodologia-claude-code (+ `settings.base.json` en 10 eventos, `instalar.sh`, `desinstalar.sh`). Decisión: los eventos van a `~/.claude/oficina/eventos.jsonl` (`OFICINA_EVENTOS`), no a `~/.claude/tablero/` (que es un enlace al repo). Trampas: `Notification` no salta con `claude -p`; `--allowedTools` se come el prompt (va por stdin); Notification se codifica como `evento: "Notification:<tipo>"`. S57b hecha (hook instalado, ~21 ms, 359 verde); siguiente **S57c** (permiso real), luego **S58**.
 - 2026-10-05 · rama `oficina-agentes` (sin PR) · S58b hecha (vista en Chrome headless con eventos simulados, 1280 y 390 px), suite en verde (360 pasan, 2 omitidos). `plantilla.html`: etiqueta de personaje solo con icono, zonas propias para esperando/pensando/quieto. Trampa: `/api/metodologia` tarda ~18 s (la vista queda en «Leyendo…»). Siguiente: S59.
 - Para retomar (2026-10-05, S58b): la oficina se ve bien con muchos agentes (sin solapes) y en móvil sale la lista. Falta verla con una sesión viva (entrada por la puerta, movimiento) y la carga de Metodología tarda ~18 s. Sigue el cierre de H18–H20. Nada roto.
@@ -275,13 +277,23 @@ Después: **S59**
 
 ### S59 — Cierre de H18–H20 · **Sonnet**, con Eduardo · ~40k
 Se espera: Todo en verde, revisado a ojo en el navegador con datos reales y con PRs abiertos hacia `develop`; la nota del chat de estudio queda cerrada.
-- [ ] [rendimiento] Que Metodología cargue rápido (hoy ~18 s en «Leyendo…») — `/api/metodologia` en `generar.mjs` ~1680 / `metodologia.mjs`: medir qué lee (transcripciones) y cachear o acotar (añadido en S58b)
-- [ ] [test] Suite completa y formato — `node --test 2>&1 | tail -40`, `scripts/probar.sh`, `verificar_backlog.mjs --formato`
-- [ ] Revisar a ojo las tres vistas con datos reales — Tablero, Estudio y Oficina a 1200 y 390 px; anotar lo que falle como sesión nueva
-- [ ] PRs y nota — `kanban-sesiones`, `estudio-plan`, `oficina-agentes` → `develop`; marcar la nota en `../notas/NOTAS_TABLERO.md`
+- [x] [rendimiento] Que Metodología cargue rápido (hoy ~18 s en «Leyendo…») — `/api/metodologia` en `generar.mjs` ~1680 / `metodologia.mjs`: medir qué lee (transcripciones) y cachear o acotar (añadido en S58b)
+- [x] [test] Suite completa y formato — `node --test 2>&1 | tail -40`, `scripts/probar.sh`, `verificar_backlog.mjs --formato`
+- [-] Revisar a ojo las tres vistas con datos reales — Tablero, Estudio y Oficina a 1200 y 390 px; anotar lo que falle como sesión nueva (solo Oficina vista a 1200 y 390 px, bien; faltan Tablero y Estudio) → S59b
+- [-] PRs y nota — `kanban-sesiones`, `estudio-plan`, `oficina-agentes` → `develop`; marcar la nota en `../notas/NOTAS_TABLERO.md` → S59b
+Resultado (parcial): `/api/metodologia` ya no reconstruye todo el tablero (la lentitud era `construir` pidiendo PRs a `gh`, ~15 s; ahora 14 ms). Suite 361 pasan, 2 omitidos; `probar.sh` 20/20; formato OK. Pendiente: ojo a Tablero y Estudio, y los PR (no se abrieron: `gh` con límite de tasa agotado y es acción externa que confirma Eduardo).
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S59 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S59 BACKLOG.md`). Trabaja con Eduardo. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+### S59b — Continuación del cierre de H18–H20 · **Sonnet**, con Eduardo · ~30k
+Se espera: Tablero y Estudio revisados a ojo a 1200 y 390 px y los tres PR abiertos hacia `develop`; la nota del chat de estudio queda marcada.
+- [ ] [test] Ojo al Tablero y a Estudio con datos reales — Chrome headless a 1200 y 390 px (ver `shot.mjs` de la sesión anterior: CDP, `TABLERO_PUERTO=47399 node generar.mjs --servir`); anotar fallos como sesión nueva
+- [ ] [doc] PRs y nota — `kanban-sesiones`, `estudio-plan`, `oficina-agentes` → `develop` (confirmar con Eduardo; `gh` tenía el límite de tasa agotado: `gh api rate_limit`); marcar la nota en `../notas/NOTAS_TABLERO.md`
+Prompt:
+```text
+Modelo: Sonnet. Sesión S59b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S59b BACKLOG.md`) y trabaja solo esa sesión, en la rama `oficina-agentes` (worktree `../.wt-oficina`; copia `proyectos.json` del tablero si falta). Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 
 Cómo ejecutarlo: S53 → S54; S55 → S56 (el botón en el detalle del kanban solo si S54 ya está); S57 → S58; al final S59. `/clear` entre sesiones.

@@ -1140,3 +1140,10 @@ test('oficina (S58): conmutador Flujo|Oficina, un personaje por agente con su ac
   assert.match(ctx.htmlOficina({ agentes: [] }), /Nadie en la oficina/, 'oficina vacía')
   assert.ok(!ctx.htmlOficina({ agentes: [{ sid: 'x', agente: 'principal', accion: 'leyendo', archivo: '<b>x</b>' }] }).includes('<b>x'), 'escapa')
 })
+
+test('metodología (S59): GET /api/metodologia no reconstruye el tablero (sin sincronías ni red)', async () => {
+  const t0 = Date.now()
+  const r = await fetch(`http://127.0.0.1:${puerto}/api/metodologia`)
+  assert.equal(r.status, 200)
+  assert.ok(Date.now() - t0 < 1500, `tardó ${Date.now() - t0} ms`)
+})
