@@ -1110,3 +1110,33 @@ test('estudio (S56): el panel trae las acciones rápidas del servidor, pregunta 
   assert.ok(g.includes('Guía de estudio'), 'muestra el .md guardado')
   assert.match(ctx.panelEstudio({ ...est, pestana: 'guia', guia: null }), /Aún no guardaste nada/)
 })
+
+// Oficina (S58): la escena de «Metodología» con un personaje por agente.
+test('oficina (S58): conmutador Flujo|Oficina, un personaje por agente con su acción, globo al esperar, lista móvil y sin movimiento', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['data-meta-vista="flujo"', 'data-meta-vista="oficina"', "'/api/oficina'", 'document.hidden', 'function htmlOficina']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+  assert.match(html, /@media \(prefers-reduced-motion: reduce\)[^}]*\.oficina|@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.oficina/, 'iconos fijos con prefers-reduced-motion')
+  assert.match(html, /@media \(max-width: 700px\)[^@]*\.oficina-lista/, 'lista en ≤700px')
+  assert.ok(!/<(script|link|img)[^>]+(src|href)="https?:/.test(html.split('function htmlOficina')[1] || ''), 'sin recursos externos')
+  const ctx = { esc: (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]) }
+  vm.createContext(ctx)
+  for (const c of ['ICONO_OFICINA', 'LUGAR_OFICINA']) vm.runInContext(html.match(new RegExp(`^const ${c} = .*$`, 'm'))[0], ctx)
+  vm.runInContext(funcionDe(html, 'htmlOficina'), ctx)
+  const ag = [
+    { sid: 's1', agente: 'principal', principal: true, accion: 'leyendo', archivo: 'BACKLOG.md', proyecto: 'prueba' },
+    { sid: 's1', agente: 'a1', tipo: 'buscador', principal: false, accion: 'buscando', proyecto: 'prueba' },
+    { sid: 's2', agente: 'principal', principal: true, accion: 'escribiendo', archivo: 'x.mjs', proyecto: null },
+    { sid: 's3', agente: 'principal', principal: true, accion: 'ejecutando', proyecto: 'otro' },
+    { sid: 's4', agente: 'principal', principal: true, accion: 'esperando', proyecto: 'otro' },
+    { sid: 's5', agente: 'principal', principal: true, accion: 'quieto', proyecto: null },
+  ]
+  const out = ctx.htmlOficina({ agentes: ag })
+  assert.equal((out.match(/class="personaje /g) || []).length, ag.length, 'un personaje por agente')
+  for (const a of ['leyendo', 'buscando', 'escribiendo', 'ejecutando', 'esperando', 'quieto']) assert.match(out, new RegExp(`class="personaje [^"]*\\b${a}\\b`), `clase ${a}`)
+  assert.equal((out.match(/class="globo"/g) || []).length, 1, 'globo solo en esperando')
+  assert.ok(out.includes('buscador') && out.includes('prueba'), 'etiqueta de tipo y proyecto')
+  assert.ok(out.includes('oficina-lista'), 'lista para móvil')
+  for (const f of ['estante', 'escritorio', 'terminal', 'puerta']) assert.ok(out.includes(`class="${f}`) || out.includes(` ${f}"`), `escena con ${f}`)
+  assert.match(ctx.htmlOficina({ agentes: [] }), /Nadie en la oficina/, 'oficina vacía')
+  assert.ok(!ctx.htmlOficina({ agentes: [{ sid: 'x', agente: 'principal', accion: 'leyendo', archivo: '<b>x</b>' }] }).includes('<b>x'), 'escapa')
+})

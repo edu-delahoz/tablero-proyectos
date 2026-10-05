@@ -2,6 +2,8 @@
 
 ## Estado
 - 2026-10-05 · rama `oficina-agentes` (tablero y `metodologia-claude-code`, sin PR) · S57 hecha salvo instalar el hook en el settings real (→ S57b), suite en verde (359 pasan, 2 omitidos; los tests nuevos fallaban 8: 6 de `oficina.test.mjs` sin módulo, 1 de `servidor.test.mjs` `/api/oficina` 404, 1 de `metodologia.test.mjs` catálogo). Nuevo `oficina.mjs` (`accionDe`, `estadoOficina(eventos, colas, ahora)`, `VIGENCIA` 30 min principal / 10 min subagente); `generar.mjs`: `colasOficina` (cola de 16 KB de los .jsonl recientes y de `<sid>/subagents/agent-*.jsonl` con `agentType` del `.meta.json`), `proyectoDe` (carpeta de transcripciones, luego cwd dentro de repo/docs), `GET /api/oficina`, `resumenCacheado` extraído de `sesionesActivas`. Hook `claude/hooks/eventos_agentes.mjs` en metodologia-claude-code (+ `settings.base.json` en 10 eventos, `instalar.sh`, `desinstalar.sh`). Decisión: los eventos van a `~/.claude/oficina/eventos.jsonl` (`OFICINA_EVENTOS`), no a `~/.claude/tablero/` (que es un enlace al repo). Trampas: `Notification` no salta con `claude -p`; `--allowedTools` se come el prompt (va por stdin); Notification se codifica como `evento: "Notification:<tipo>"`. S57b hecha (hook instalado, ~21 ms, 359 verde); siguiente **S57c** (permiso real), luego **S58**.
+- 2026-10-05 · rama `oficina-agentes` (sin PR) · S58 hecha salvo mirarla en el navegador (→ S58b), suite en verde (360 pasan, 2 omitidos; el test nuevo fallaba 1 de 1). `plantilla.html`: `htmlOficina` + CSS `.oficina`, conmutador `data-meta-vista` Flujo|Oficina, `sondearOficina` cada 1,5 s (solo pestaña visible, parcha el DOM para que caminen). Trampa: el worktree `.wt-oficina` no trae `proyectos.json` (ignorado por git); sin copiarlo falla 1 test de `auditoria.test.mjs`.
+- Para retomar (2026-10-05, S58): la oficina ya tiene su escena animada en la pestaña Metodología (Flujo | Oficina) y la suite pasa. Falta mirarla en el navegador con una sesión real (lee, edita, lanza un buscador, pide permiso) y pulir lo que se vea mal. Nada roto.
 - Para retomar (2026-10-05, S57c): la oficina ya distingue bien quién espera un permiso (el subagente, no el principal); los datos de S57 están completos y verificados con eventos reales. Sigue la escena animada (S58). Queda un worktree `../.wt-oficina` con esta rama, sin limpiar a propósito.
 - Para retomar (2026-10-05, S57b): el hook de la oficina ya está instalado y registra eventos reales; solo falta comprobar, en una sesión interactiva, qué aviso llega al pedir un permiso.
 - Para retomar (2026-10-05): El tablero ya sabe qué hace en este momento cada Claude y cada subagente (leyendo, escribiendo, ejecutando, buscando, esperando tu permiso, pensando o quieto), a partir de un aviso que guarda solo el nombre de la herramienta y del archivo, nunca lo que escribes. Falta instalar ese aviso en tu Claude Code (pide tu permiso) y comprobar con una sesión real el globo de «esperando aprobación»; después viene la escena animada. Nada roto.
@@ -247,13 +249,24 @@ Después: **S58**
 
 ### S58 — Oficina: escena animada · **Sonnet** · rama `oficina-agentes` · ~70k
 Se espera: En «Metodología», el conmutador «Flujo | Oficina» muestra una escena donde cada agente es un personaje que camina al estante al leer, teclea al escribir, usa la consola con Bash y muestra un globo al esperar aprobación; los subagentes entran y salen por la puerta.
-- [ ] [test] Render de la escena, verlo fallar — `servidor.test.mjs`: un personaje por agente del fixture con su clase de acción (`leyendo`, `escribiendo`, `esperando`…), globo en esperando, lista en ≤700px, iconos fijos con `prefers-reduced-motion`
-- [ ] Escena pixel-art — `plantilla.html`: SVG/CSS sin recursos externos (estante, escritorio con computador, terminal, puerta), personaje con etiqueta de tipo y proyecto, animaciones CSS
-- [ ] Sondeo en vivo — `plantilla.html`: `GET /api/oficina` cada 1,5 s solo con la pestaña visible
-- [ ] Mirarla en el navegador con una sesión real — que lee, edita, lanza un `buscador` y pide permiso; `node --test 2>&1 | tail -40` en verde
+- [x] [test] Render de la escena, verlo fallar — `servidor.test.mjs`: un personaje por agente del fixture con su clase de acción (`leyendo`, `escribiendo`, `esperando`…), globo en esperando, lista en ≤700px, iconos fijos con `prefers-reduced-motion` → fallaba 1 de 1 (el test agrupa todas las comprobaciones); ahora pasa
+- [x] Escena pixel-art — `plantilla.html`: SVG/CSS sin recursos externos (estante, escritorio con computador, terminal, puerta), personaje con etiqueta de tipo y proyecto, animaciones CSS → `htmlOficina` + CSS `.oficina`; entra por la puerta con `entrar`; la salida no se anima (el personaje simplemente desaparece)
+- [x] Sondeo en vivo — `plantilla.html`: `GET /api/oficina` cada 1,5 s solo con la pestaña visible → `sondearOficina`; parcha el DOM sin repintar si no cambian los agentes (así caminan con `transition`)
+- [-] [verificación] Mirarla en el navegador con una sesión real → S58b
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S58 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S58 BACKLOG.md`). Rama `oficina-agentes`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Resultado: La escena existe (conmutador Flujo | Oficina, personajes por agente, globo al esperar, lista en móvil, iconos fijos sin movimiento) y la suite pasa; falta verla con una sesión real (S58b).
+Después: **S58b**, luego **S59**
+
+### S58b — Oficina: verla con una sesión real · **Sonnet** · rama `oficina-agentes` · ~20k
+Se espera: En Metodología › Oficina se ve a un agente leyendo en el estante, escribiendo en el escritorio, un `buscador` entrando por la puerta y el globo al pedir permiso; lo que se vea mal queda corregido.
+- [ ] [verificación] Mirarla en el navegador con una sesión real — `node generar.mjs --servir` en el worktree, abrir Metodología › Oficina, y en otra sesión leer, editar, lanzar un `buscador` y pedir un permiso; ajustar posiciones/tamaños en `plantilla.html` (sección «Oficina») si algo se solapa
+- [ ] [test] Si se corrige algo, ajustar el test «oficina (S58)» — `servidor.test.mjs`; `node --test 2>&1 | tail -40` en verde
+Prompt:
+```text
+Modelo: Sonnet. Sesión S58b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S58b BACKLOG.md`). Rama `oficina-agentes` (worktree `../.wt-oficina`; copia `proyectos.json` del tablero si falta). Interactiva, no -p. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 Después: **S59**
 

@@ -118,6 +118,35 @@ details summary { cursor: pointer; }
 .vacio { color: var(--suave); padding: 20px; text-align: center; }
 .hash { font-size: .85em; }
 
+/* ---------- Oficina (S58): escena de agentes, CSS puro sin recursos externos ---------- */
+.meta-vistas { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.oficina-escena { position: relative; height: 230px; max-width: 880px; overflow: hidden; border: 1px solid var(--borde); border-radius: var(--radio); background: linear-gradient(var(--panel) 0 72%, color-mix(in srgb, var(--borde) 70%, var(--panel)) 72%); }
+.oficina .estante { position: absolute; left: 2%; top: 14px; width: 22%; height: 96px; border: 3px solid var(--borde); background: repeating-linear-gradient(90deg, #c0504d 0 6px, #4f81bd 6px 11px, #9bbb59 11px 18px, #f79646 18px 22px), var(--panel); background-size: 100% 30%; background-repeat: repeat-x; background-position: 0 4px, 0 0; }
+.oficina .escritorio { position: absolute; left: 40%; top: 118px; width: 22%; height: 10px; background: #8b5a2b; box-shadow: 0 10px 0 -3px #6b4423; }
+.oficina .escritorio::before { content: ''; position: absolute; left: 30%; bottom: 10px; width: 36%; height: 26px; border: 3px solid var(--texto, #333); background: #8fd3ff; }
+.oficina .terminal { position: absolute; left: 68%; top: 56px; width: 16%; height: 62px; border: 3px solid var(--texto, #333); background: #101418; color: #5eea8a; font: 11px/1.2 var(--mono); padding: 4px 6px; }
+.oficina .terminal::after { content: '$ _'; animation: parpadeo 1s steps(2) infinite; }
+.oficina .puerta { position: absolute; right: 1.5%; top: 40px; width: 7%; height: 100px; border: 3px solid #6b4423; background: #a9743a; }
+.oficina .puerta::after { content: ''; position: absolute; right: 5px; top: 48px; width: 5px; height: 5px; border-radius: 50%; background: #f1c40f; }
+.personaje { position: absolute; width: 34px; height: 54px; font: 10px var(--mono); text-align: center; transition: left 1.2s linear, bottom 1.2s linear; }
+.personaje.entra { animation: entrar 1.4s ease-out; }
+.personaje .cuerpo { width: 16px; height: 16px; margin: 0 auto; background: var(--acento); box-shadow: 0 -11px 0 -2px #f5cba7, -5px 4px 0 -3px var(--acento), 5px 4px 0 -3px var(--acento); }
+.personaje .pies { display: block; width: 14px; height: 10px; margin: 0 auto; background: linear-gradient(90deg, #333 0 5px, transparent 5px 9px, #333 9px); animation: paso .5s steps(2) infinite; }
+.personaje.escribiendo .pies, .personaje.ejecutando .pies, .personaje.quieto .pies, .personaje.esperando .pies { animation: none; }
+.personaje.escribiendo .cuerpo { animation: teclea .25s steps(2) infinite; }
+.personaje.leyendo .cuerpo, .personaje.buscando .cuerpo, .personaje.pensando .cuerpo { animation: rebote 1s ease-in-out infinite; }
+.personaje .etq { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); white-space: nowrap; background: var(--panel); border: 1px solid var(--borde); border-radius: 3px; padding: 0 3px; color: var(--texto, inherit); }
+.personaje .globo { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); background: #fff8c5; color: #333; border: 2px solid #333; border-radius: 8px; padding: 0 5px; animation: rebote 1s ease-in-out infinite; }
+.oficina-lista { display: none; list-style: none; padding: 0; margin: 8px 0 0; }
+.oficina-vacia { color: var(--suave); }
+@keyframes parpadeo { 50% { opacity: 0; } }
+@keyframes paso { 50% { transform: scaleX(.6); } }
+@keyframes teclea { 50% { transform: translateY(2px); } }
+@keyframes rebote { 50% { transform: translateY(-3px); } }
+@keyframes entrar { from { left: 92%; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .oficina *, .oficina *::after { animation: none !important; transition: none !important; } }
+@media (max-width: 700px) { .oficina-escena { display: none; } .oficina-lista { display: block; } .oficina-lista li { margin-bottom: 6px; } }
+
 /* ---------- Barra de archivos + conmutador ---------- */
 .archivos { display: flex; gap: 0; overflow-x: auto; border-bottom: 1px solid var(--borde); margin-bottom: 12px; }
 .archivos button { flex: none; background: none; border: 0; border-bottom: 2px solid transparent; padding: 7px 12px; cursor: pointer; color: var(--suave); white-space: nowrap; font-size: .85em; }
@@ -1929,6 +1958,49 @@ if (editable()) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sondearSesiones(); });
 }
 
+// ---------- Oficina (S58): escena animada con GET /api/oficina (solo con la pestaña visible) ----------
+const ICONO_OFICINA = { leyendo: '📖', escribiendo: '✍️', ejecutando: '⌨️', buscando: '🔎', esperando: '⏳', pensando: '💭', quieto: '💤' };
+const LUGAR_OFICINA = { leyendo: 6, buscando: 12, escribiendo: 46, ejecutando: 72, esperando: 30, pensando: 30, quieto: 30 };
+function htmlOficina(datos, nuevos) {
+  const agentes = (datos && datos.agentes) || [];
+  const ocupados = {};
+  const llave = (a) => `${a.sid}/${a.agente}`;
+  const nombre = (a) => `${a.tipo || (a.principal ? 'principal' : 'agente')}${a.proyecto ? ' · ' + a.proyecto : ''}`;
+  const personajes = agentes.map((a) => {
+    const n = ocupados[a.accion] = (ocupados[a.accion] || 0) + 1;
+    const x = (LUGAR_OFICINA[a.accion] ?? 30) + (n - 1) * 5, y = 8 + ((n - 1) % 2) * 14;
+    return `<div class="personaje ${esc(a.accion)}${nuevos && nuevos.has(llave(a)) ? ' entra' : ''}" data-key="${esc(llave(a))}" style="left:${x}%;bottom:${y}px" title="${esc(nombre(a))}">${a.accion === 'esperando' ? '<span class="globo">…</span>' : ''}<span class="cuerpo"></span><span class="pies"></span><span class="etq">${ICONO_OFICINA[a.accion] || ''} ${esc(nombre(a))}</span></div>`;
+  }).join('');
+  const lista = agentes.map((a) => `<li>${ICONO_OFICINA[a.accion] || ''} <b>${esc(nombre(a))}</b> — ${esc(a.accion)}${a.archivo ? ' · ' + esc(a.archivo) : ''}</li>`).join('');
+  return `<section class="tarjeta meta oficina"><h2><span>Oficina</span><small>${agentes.length} agente(s) trabajando</small></h2>
+    ${agentes.length ? '' : '<p class="oficina-vacia">Nadie en la oficina: no hay sesiones de Claude Code activas.</p>'}
+    <div class="oficina-escena" role="img" aria-label="Oficina con ${agentes.length} agente(s)"><div class="estante"></div><div class="escritorio"></div><div class="terminal"></div><div class="puerta"></div>${personajes}</div>
+    <ul class="oficina-lista" aria-label="Agentes">${lista}</ul></section>`;
+}
+let OFICINA = null, metaVista = 'flujo', oficinaOcupada = false;
+const llavesOficina = (d) => ((d && d.agentes) || []).map((a) => `${a.sid}/${a.agente}`);
+async function sondearOficina() {
+  if (document.hidden || pestana !== 'metodologia' || metaVista !== 'oficina' || oficinaOcupada) return;
+  oficinaOcupada = true;
+  try {
+    const nuevo = await (await fetch('/api/oficina', { cache: 'no-store' })).json();
+    const antes = llavesOficina(OFICINA), ahora = llavesOficina(nuevo), previa = OFICINA;
+    OFICINA = nuevo;
+    if (pestana !== 'metodologia' || metaVista !== 'oficina') return;
+    const escena = document.querySelector('.oficina-escena');
+    if (!previa || !escena || antes.join() !== ahora.join()) { oficinaNuevos = new Set(ahora.filter((k) => !antes.includes(k))); pintar(); return; }
+    const t = document.createElement('template'); t.innerHTML = htmlOficina(nuevo);
+    t.content.querySelectorAll('.personaje').forEach((n) => {
+      const el = escena.querySelector(`.personaje[data-key="${CSS.escape(n.dataset.key)}"]`);
+      if (el) { el.className = n.className; el.style.cssText = n.style.cssText; el.innerHTML = n.innerHTML; }
+    });
+    const lista = document.querySelector('.oficina-lista'); if (lista) lista.innerHTML = t.content.querySelector('.oficina-lista').innerHTML;
+  } catch {} finally { oficinaOcupada = false; }
+}
+let oficinaNuevos = null;
+setInterval(sondearOficina, 1500);
+document.addEventListener('visibilitychange', sondearOficina);
+
 // ---------- Metodología viva (S51): flujo con el estado real de cada pieza (GET /api/metodologia) ----------
 let META = null, metaSel = null, metaCargando = false;
 async function cargarMeta() {
@@ -1971,7 +2043,10 @@ function htmlMetodologia(g, sel) {
 }
 function vistaMetodologia() {
   if (!META) { cargarMeta(); return '<p class="suave">Leyendo la metodología instalada…</p>'; }
-  return htmlMetodologia(META, metaSel);
+  const conm = `<div class="meta-vistas"><div class="conmutador" role="group" aria-label="Vista de metodología">
+    <button data-meta-vista="flujo" aria-pressed="${metaVista === 'flujo'}">Flujo</button><button data-meta-vista="oficina" aria-pressed="${metaVista === 'oficina'}">Oficina</button></div></div>`;
+  if (metaVista === 'oficina') { const n = oficinaNuevos; oficinaNuevos = null; if (!OFICINA) sondearOficina(); return conm + htmlOficina(OFICINA || { agentes: [] }, n); }
+  return conm + htmlMetodologia(META, metaSel);
 }
 
 const VISTAS = {
@@ -2364,6 +2439,8 @@ document.addEventListener('keydown', (e) => {
   if (mt && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); metaSel = mt.dataset.meta; pintar(); }
 });
 document.addEventListener('click', (e) => {
+  const mv = e.target.closest('[data-meta-vista]');
+  if (mv) { metaVista = mv.dataset.metaVista; pintar(); return; }
   const mt = e.target.closest('[data-meta]');
   if (mt) { metaSel = mt.dataset.meta; pintar(); return; }
   const b = e.target.closest('button');
