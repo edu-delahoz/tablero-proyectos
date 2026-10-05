@@ -35,6 +35,11 @@ process.env.TABLERO_DATOS = join(dir, 'datos')
 // Credenciales: siempre un archivo del temporal, nunca ~/.config/tablero.
 const CRED = join(dir, 'config', 'credenciales.json')
 process.env.TABLERO_CREDENCIALES = CRED
+// Metodología (S50): repo de mentira y un settings.json con un secreto en el home temporal.
+process.env.TABLERO_METODOLOGIA_REPO = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'metodologia', 'repo')
+mkdirSync(join(dir, '.claude', 'hooks'), { recursive: true })
+writeFileSync(join(dir, '.claude', 'hooks', 'vigilar_contexto.sh'), '')
+writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify({ env: { API_KEY: 'sk-SECRETO-SRV' }, hooks: { PostToolUse: [{ hooks: [{ type: 'command', command: '~/.claude/hooks/vigilar_contexto.sh' }] }] } }))
 
 const fuera = new Map([['E1', { id: 'E1', titulo: 'Desde afuera', hecha: false, columna: 'Todo', url: 'https://x/E1' }]])
 let n = 0
@@ -812,4 +817,19 @@ test('vista del formato: la casilla legada (sin « — ») se muestra como hoy',
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
   assert.ok(/function casillaFormato[\s\S]{0,600}if \(!f\) return inline\(/.test(html), 'casillaFormato debe devolver el texto de siempre si no hay « — »')
   assert.ok(html.includes('class="prompt-siguiente"'), 'el prompt siguiente va en un sitio fijo')
+})
+
+test('metodología (S50): GET /api/metodologia da el grafo sin secretos ni rutas del home', async () => {
+  const r = await fetch(`http://127.0.0.1:${puerto}/api/metodologia`)
+  assert.equal(r.status, 200)
+  const t = await r.text()
+  const g = JSON.parse(t)
+  assert.ok(g.etapas.length === 6 && g.piezas.length > 15)
+  assert.equal(g.piezas.find((p) => p.id === 'hook:vigilar_contexto.sh').estado, 'activa')
+  assert.ok(g.proyectos.some((p) => p.id === 'prueba' && p.conectado), '«prueba» tiene sesiones en TABLERO_TRANSCRIPCIONES')
+  assert.ok(g.piezas.find((p) => p.id === 'bitacora').proyectos.includes('prueba'))
+  assert.doesNotMatch(t, /SECRETO|API_KEY/)
+  assert.ok(!t.includes(dir), 'rutas del home con ~')
+  const ajeno = await new Promise((ok, mal) => request({ host: '127.0.0.1', port: puerto, path: '/api/metodologia', headers: { host: `evil.com:${puerto}` } }, (x) => { x.resume(); ok(x.statusCode) }).on('error', mal).end())
+  assert.equal(ajeno, 403)
 })

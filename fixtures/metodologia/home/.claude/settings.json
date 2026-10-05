@@ -1,0 +1,14 @@
+{
+  "statusLine": { "type": "command", "command": "~/.claude/statusline.sh" },
+  "env": {
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/panel-tablero",
+    "GITHUB_TOKEN": "ghp_SECRETO_DE_PRUEBA_123"
+  },
+  "hooks": {
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/vigilar_contexto.sh" }] }],
+    "SessionEnd": [{ "hooks": [
+      { "type": "command", "command": "$HOME/otra/carpeta/registrar_sesion.sh" },
+      { "type": "command", "command": "node \"$HOME/.claude/tablero/generar.mjs\" --silencioso" }
+    ] }]
+  }
+}

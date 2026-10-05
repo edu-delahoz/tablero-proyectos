@@ -217,6 +217,13 @@ Id inexistente → 404, no valida → 400, `mtime` viejo → 409; `previa: true`
 (repo, git, github, docs, backlog, sesiones de Claude, notas, integraciones; sin llamadas de red nuevas) y
 `editable` (los campos editables tal como están en `proyectos.json`, para precargar el formulario).
 
+**Metodología viva.** `GET /api/metodologia` (`metodologia.mjs`) devuelve `{ etapas, aristas, piezas, proyectos }`:
+el catálogo sale de `instalar.sh` y `claude/settings.base.json` del repo `metodologia-claude-code`
+(`TABLERO_METODOLOGIA_REPO` lo cambia) y cada pieza (mod, hook, skill, agente, reglas, carpeta, backlog, notas,
+bitácora) trae `estado` `activa | instalada | falta` (con `motivo`) mirando `~/.claude` (`TABLERO_HOME`) y qué
+proyectos conectados (con sesiones de Claude) la usan. Las etapas van `ok | parcial | falta`. Nunca expone el
+contenido de `settings.json`; las rutas salen con `~`.
+
 **Crear backlog.** `POST /api/backlog/crear` `{ proyecto, archivo?, carpeta? }` crea `archivo`
 (por defecto `BACKLOG.md`) con una plantilla mínima (título, `## Estado`, `## S1` con una casilla) en la
 primera carpeta `docs` del proyecto, o en `carpeta` si es una de ellas. Nunca sobrescribe (existe → 409);

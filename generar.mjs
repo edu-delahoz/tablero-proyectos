@@ -26,6 +26,7 @@ import { auditoriaDe } from './auditoria.mjs'
 import { parsearBitacora, sidsPorProyecto, asociar, conFeatures, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
 import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
 import { semaforoLlamadas, semaforoCtx, eficienciaDe } from './eficiencia.mjs'
+import { metodologia } from './metodologia.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
@@ -1489,6 +1490,12 @@ export function huellaCodigo(dir = AQUI) {
   return CODIGO.map((f) => statSync(join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0).join(':')
 }
 const CODIGO_ARRANQUE = huellaCodigo()
+// Metodología viva (S50): repo con instalar.sh; los proyectos aportan sesiones, backlogs, notas y bitácora.
+const METODOLOGIA_REPO = process.env.TABLERO_METODOLOGIA_REPO || join(AQUI, '..', '..', 'metodologia-claude-code')
+const proyectosMetodologia = (vista) => proyectos.map((p) => {
+  const v = vista.find((x) => x.id === p.id)
+  return { id: p.id, nombre: p.nombre, transcripciones: p.transcripciones || (p.repo ? transcripcionesDe(p.repo) : null), backlogs: v?.backlogs?.length || 0, notas: v?.notas?.ruta, bitacora: v?.bitacora?.ruta }
+})
 const local = (dir) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(dir)
 // Manejador HTTP (exportado para los tests: puerto y adaptadores inyectables).
 export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alUsar = () => {}, codigo = CODIGO_ARRANQUE, alSalir = () => {} } = {}) {
@@ -1541,6 +1548,7 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
       if (req.method === 'GET' && ruta === '/api/ping') return enviar(res, 200, { tablero: true })
       if (req.method === 'GET' && ruta === '/api/version') return enviar(res, 200, { version: huella(), codigo })
       if (req.method === 'GET' && ruta === '/api/datos') return enviar(res, 200, (await fresco(true)).datos)
+      if (req.method === 'GET' && ruta === '/api/metodologia') return enviar(res, 200, metodologia({ home: HOME, repo: METODOLOGIA_REPO, transcripciones: TRANSCRIPCIONES, proyectos: proyectosMetodologia((await fresco()).datos.proyectos) }))
       // Barato (sondeo cada 5 s): solo cabeza/cola de los .jsonl recientes y columnas sobre los datos ya construidos.
       if (req.method === 'GET' && ruta === '/api/sesiones') {
         const sesiones = sesionesActivas(proyectos)

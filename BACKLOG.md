@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `formato-backlog` (sin PR) · S50 hecha, suite en verde (330 pasan, 2 omitidos; los 9 nuevos fallaban 9 de 9). `metodologia.mjs`: `catalogoDe(instalar.sh, settings.base.json)` (mods de `PLUGINS_REPO`, enlaces `ln -sfn`, hooks por script + primer flag), `grafoMetodologia` (estado por tipo: mod por `CLAUDE_CODE_PLUGIN_DIRS`, hook por comando en `settings.json` + archivo existente, resto por ruta en `~/.claude`; proyectos conectados = con sesiones), `metodologia({home, repo})`. `GET /api/metodologia` en `generar.mjs` (`TABLERO_METODOLOGIA_REPO`, `TABLERO_HOME`). Fixtures en `fixtures/metodologia/{home,repo,docs}` (`repo/instalar.sh` es copia del real: si cambia el instalador, actualizarla). Trampa: el `settings.json` real llama a los hooks por rutas de `~/Desktop/...`, no `~/.claude/...`; por eso el hook se reconoce por nombre de script y se comprueba la ruta que aparece en el comando. `fetch` no deja cambiar `Host`: para probar 403 usar `http.request`. Siguiente: **S51** (Sonnet).
+- Para retomar (2026-10-05): El tablero ya sabe qué piezas de la metodología están instaladas, activas o faltan en tu máquina y qué proyectos las usan, y lo entrega por la API sin mostrar secretos. En tu instalación real faltan los enlaces de la carpeta de metodología y del tablero dentro de `~/.claude`. Lo siguiente es dibujar la pestaña «Metodología» con esos datos. Nada roto.
 - 2026-10-05 · rama `formato-backlog` (sin PR) · S49 hecha, suite en verde (321 pasan, 2 omitidos): `verificar_backlog.mjs --formato` pasó de 81 avisos a 0 en tablero, IEP (`BACKLOG_H7.md` S2b–S7), EAP10 y Squalo; solo se migró lo abierto. Costo: S41 +1 %, S42 +8 %, S50/IEP S3 +60 % por traer `Prompt:` nuevo (juzgar en S52). Respaldo del IEP en `~/.claude/jobs/d8faa79c/tmp/BACKLOG_H7.antes.md` (no es repo git). Siguiente: **S50** (Opus).
 - Para retomar (2026-10-05): los backlogs abiertos de los proyectos ya están en el formato nuevo y el linter sale limpio. Falta la parte de «metodología viva»: primero los datos del grafo de piezas y luego su pestaña en el tablero. Nada roto.
 - 2026-10-05 · rama `formato-backlog` (tablero y `metodologia-claude-code`, sin PR) · S48 hecha: reglas y skills con el formato; `probar.sh` 20/20 (fallaban 4 de 4 al escribirlas). Siguiente: **S49** (Sonnet).
@@ -167,19 +169,22 @@ Resultado: `verificar_backlog.mjs --formato` pasó de 81 avisos (tablero 24, IEP
 
 ### S50 — Metodología viva: datos · **Opus** · rama `formato-backlog` · ~70k
 Se espera: `/api/metodologia` devuelve el grafo de piezas (hooks, skills, mods, agentes, scripts, notas, bitácora, backlog) con estado instalada/activa/falta y qué proyectos de `proyectos.json` usan cada una.
-- [ ] [test] Un hogar de mentira con piezas instaladas y faltantes, verlo fallar — `metodologia.test.mjs` + `fixtures/metodologia/home/`: pieza instalada, pieza que falta, hook en `settings.json`, proyecto conectado y no conectado
-- [ ] Armar el grafo de piezas — `metodologia.mjs` (puro; catálogo esperado desde `metodologia-claude-code/instalar.sh`) y endpoint en `generar.mjs` sin exponer secretos
+- [x] [test] Un hogar de mentira con piezas instaladas y faltantes, verlo fallar — `metodologia.test.mjs` + `fixtures/metodologia/home/`: pieza instalada, pieza que falta, hook en `settings.json`, proyecto conectado y no conectado
+- [x] Armar el grafo de piezas — `metodologia.mjs` (puro; catálogo esperado desde `metodologia-claude-code/instalar.sh`) y endpoint en `generar.mjs` sin exponer secretos
 
 Prompt:
 ```text
 Modelo: Opus. Sesión S50 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S50 BACKLOG.md`). Rama `formato-backlog`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
+Resultado: Cumplido. `GET /api/metodologia` da `{ etapas (6, ok|parcial|falta), aristas, piezas (22: 6 mods, 7 hooks, reglas, statusline, buscador, relevo, carpetas metodologia/tablero, backlog, notas, bitácora), proyectos (conectado = tiene sesiones) }`, cada pieza con `estado` activa|instalada|falta, `motivo`, `descripcion`, `ruta` con `~` y `proyectos`. Tests escritos primero: fallaban 9 de 9 (8 de `metodologia.test.mjs`, 1 de `servidor.test.mjs`); suite 330 pasan, 2 omitidos. Contra el `~/.claude` real: falta `carpeta:metodologia` y `carpeta:tablero` (no enlazadas), `estado-trabajo` y `servidores-locales` instaladas sin activar; sin secretos en la salida.
+
 Después: **S51**
 
 ### S51 — Metodología viva: vista · **Sonnet** · rama `formato-backlog` · ~60k
 Se espera: Pestaña «Metodología» con el flujo Planear → Sesión (hooks) → Relevo → Backlog → Tablero/Bitácora, cada nodo en verde/ámbar/rojo y al tocarlo qué hace y qué proyectos lo usan; en móvil, lista vertical.
 - [ ] [test] La pestaña pinta los nodos del fixture, verlo fallar — `servidor.test.mjs`
 - [ ] Dibujar el flujo con estados — `plantilla.html`, SVG en línea con los colores del tablero
+- [ ] [test] Usar los datos que ya hay (añadido en S50) — `servidor.test.mjs` ya apunta `TABLERO_METODOLOGIA_REPO` a `fixtures/metodologia/repo` y deja un `settings.json` en el home temporal; la vista pide `GET /api/metodologia` (no viene en `/api/datos`): estado `activa`=verde, `instalada`=ámbar, `falta`=rojo con `motivo`
 
 Prompt:
 ```text
