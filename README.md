@@ -131,6 +131,19 @@ o padre cerrado con hijo abierto).
 
 - A mano: `node verificar_backlog.mjs <carpeta del repo>` (exit 1 si hay desajustes).
 
+## Auditoría del gasto
+
+```bash
+node generar.mjs --auditoria 2026-10-04            # el día en hora local
+node generar.mjs --auditoria 2026-10-04 --utc      # cortado en UTC (como las cifras de PLAN_EFICIENCIA)
+node generar.mjs --auditoria 2026-10-04 --modelos  # añade Opus frente a Sonnet (lee ../BITACORA.md; --bitacora <ruta>)
+```
+
+Lee `~/.claude/projects/*/*.jsonl` (`auditoria.mjs`, que reutiliza `metricas_jsonl.mjs`) e imprime:
+composición del gasto (entrada ×1, escritura de caché ×2, lectura de caché ×0,1, salida ×5),
+tool results >5k, Bash con `sed -n/grep/awk` sobre `BACKLOG*`, `cat` completos y Read sin límite.
+`--modelos`: en la bitácora, Sn de ejecución de Opus 5.x y Sonnet 5.x (effort medio por defecto) con n, tasa Snb/Sn y costo mediano por tarea. Sustituye a `../analisis/*.mjs`.
+
 ## Servidor local
 
 ```sh

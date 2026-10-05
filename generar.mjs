@@ -1761,12 +1761,25 @@ function hookInicio() {
   process.stdout.write(lineas.join('\n') + '\n')
 }
 
+// `--auditoria <AAAA-MM-DD> [--modelos]` (auditoria.mjs): gasto del día desde las transcripciones; con --modelos, Opus frente a Sonnet en la bitácora.
+async function auditoriaCli() {
+  const { auditar, leerTranscripciones, textoAuditoria, porModelo, textoModelos } = await import('./auditoria.mjs')
+  const dia = args[args.indexOf('--auditoria') + 1]
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia || '')) { console.error('Uso: tablero --auditoria <AAAA-MM-DD> [--modelos]'); process.exitCode = 1; return }
+  console.log(textoAuditoria(auditar(leerTranscripciones(dia), { dia, utc: args.includes('--utc') }), dia))
+  if (args.includes('--modelos')) {
+    const i = args.indexOf('--bitacora'), b = i >= 0 ? args[i + 1] : join(AQUI, '..', 'BITACORA.md')
+    console.log('\n' + (existsSync(b) ? textoModelos(porModelo(readFileSync(b, 'utf8'))) : 'Sin BITACORA.md en ' + b))
+  }
+}
+
 // Solo corre al ejecutarse como programa (los tests importan el parser sin generar nada).
 let esPrincipal = false
 try { esPrincipal = realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)) } catch {}
 if (!esPrincipal) { /* importado */ }
 else if (!existsSync(CONFIG) && (console.error('Falta proyectos.json: copia proyectos.ejemplo.json a proyectos.json y edítalo (ver README.md).'), true)) process.exitCode = 1
 else if (['--tareas', '--asignarme', '--estado'].some((f) => args.includes(f))) await tareasCli()
+else if (args.includes('--auditoria')) await auditoriaCli()
 else if (args.includes('--hook-inicio')) hookInicio()
 else if (args.includes('--servir')) servir()
 else if (args.includes('--probar-conexiones')) await probarConexiones()

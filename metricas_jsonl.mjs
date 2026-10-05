@@ -43,7 +43,7 @@ export function modeloPlanDe(tarea, backlogs) {
 }
 
 // Tokens estimados como caracteres/4; una imagen, 1600 (mismo criterio que ../analisis).
-const tokens = (c) => Array.isArray(c)
+export const tokens = (c) => Array.isArray(c)
   ? c.reduce((a, b) => a + (b?.type === 'image' ? 1600 : tokens(b?.text ?? b)), 0)
   : Math.round((typeof c === 'string' ? c : JSON.stringify(c ?? '')).length / 4)
 const esPrompt = (l, t) => !l.isMeta && typeof t === 'string' && t.trim() && !t.startsWith('<')
