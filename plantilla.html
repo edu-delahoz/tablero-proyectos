@@ -80,6 +80,13 @@ main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; 
 .fila { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--borde); font-size: .93em; min-width: 0; }
 .fila:first-child { border-top: 0; }
 .fila > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.etq-formato { display: inline-block; padding: 0 6px; margin-right: 4px; border: 1px solid var(--borde); border-radius: var(--radio); font: 600 11px/1.6 var(--mono); color: var(--acento); white-space: nowrap; }
+.espera-resultado { display: grid; gap: 8px; margin: 8px 0; }
+.espera-resultado p { margin: 2px 0 0; }
+.llano { overflow-wrap: anywhere; }
+details.tecnico { display: inline; }
+details.tecnico > summary { display: inline; cursor: pointer; font-size: .8em; margin-left: 4px; }
+ul.tareas.falta details.tecnico[open] { display: block; }
 .etq { display: inline-block; padding: 1px 7px; border-radius: var(--radio); font: 600 12px/1.6 var(--mono); white-space: nowrap; }
 .MERGED { background: color-mix(in srgb, var(--morado) 18%, transparent); color: var(--morado); }
 .OPEN { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
@@ -582,9 +589,26 @@ function chipsExternos(marcas) {
       : `<span class="chip-ext perdido" title="${integ?.items.length ? `Ya no está en ${esc(integ.nombre)}` : 'Sin datos de la integración'}">${esc(txt)}</span>`;
   }).join('');
 }
+// Formato de backlog: «[tipo] llano — técnico». Sin « — » (o con código/más de 12 palabras antes) se muestra como siempre.
+function partesFormato(texto) {
+  const m = String(texto).match(/^(?:\[(fix|test|doc|refactor)\]\s+)?(.+?)\s+—\s+(.+)$/);
+  if (!m || m[2].includes('`') || m[2].trim().split(/\s+/).length > 12) return null;
+  return { tipo: m[1] || null, llano: m[2].trim(), tecnico: m[3].trim() };
+}
+function casillaFormato(texto) {
+  const f = partesFormato(texto);
+  if (!f) return inline(texto);
+  return `${f.tipo ? `<span class="etq-formato" title="Tipo de tarea">${esc(f.tipo)}</span> ` : ''}<span class="llano">${inline(f.llano)}</span><details class="tecnico"><summary class="suave">técnico</summary>${inline(f.tecnico)}</details>`;
+}
+// «Se espera» (lo que se pide) frente a «Resultado» (lo que quedó), en llano.
+function bloqueEspera(s) {
+  if (!s || (!s.seEspera && !s.resultado)) return '';
+  return `<div class="espera-resultado">${s.seEspera ? `<div class="espera"><div class="rotulo">Se espera</div><p>${inline(s.seEspera)}</p></div>` : ''}${s.resultado ? `<div class="resultado"><div class="rotulo">Resultado</div><p>${inline(s.resultado)}</p></div>` : ''}</div>`;
+}
+const etiquetasFormato = (hito, aqui, tarea) => `<div class="chips-proy">${hito?.titulo ? `<span class="etq-formato" title="Épica (hito)">Épica</span>` : ''}${hito?.historia ? `<span class="etq-formato" title="Historia de usuario">Historia</span>` : ''}${aqui?.clave ? `<span class="etq-formato" title="Sesión ${esc(aqui.clave)}">Sesión ${esc(aqui.clave)}</span>` : ''}${tarea ? `<span class="etq-formato" title="Tarea en curso">Tarea</span>` : ''}</div>`;
 function tarea(t) {
   const c = corto(t.texto);
-  return `<li class="tarea${t.hecha ? ' hecha' : ''}"><span class="casilla" aria-hidden="true">${CASILLA()[t.hecha ? 1 : 0]}</span><span class="texto"${c !== t.texto ? ` title="${esc(plano(t.texto))}"` : ''}><span class="sr">${t.hecha ? 'Hecha' : 'Pendiente'}: </span>${inline(c)}${chipsExternos(t.marcas)}</span>${t.hijas.length ? `<ul class="tareas">${t.hijas.map(tarea).join('')}</ul>` : ''}</li>`;
+  return `<li class="tarea${t.hecha ? ' hecha' : ''}"><span class="casilla" aria-hidden="true">${CASILLA()[t.hecha ? 1 : 0]}</span><span class="texto"${c !== t.texto ? ` title="${esc(plano(t.texto))}"` : ''}><span class="sr">${t.hecha ? 'Hecha' : 'Pendiente'}: </span>${c === t.texto ? casillaFormato(t.texto) : inline(c)}${chipsExternos(t.marcas)}</span>${t.hijas.length ? `<ul class="tareas">${t.hijas.map(tarea).join('')}</ul>` : ''}</li>`;
 }
 function chips(meta = {}) {
   const pr = meta.rama && prsDeRama(meta.rama)[0];
@@ -1944,12 +1968,14 @@ function tarjetaEnCurso(p, compacta = false) {
   return `<section class="tarjeta en-curso" aria-label="Plan en curso">
     <h2><span>${c.completo ? `✓ ${esc(titulo)} completo` : `▶ En curso · ${esc(titulo)}`}</span><small>${plan ? hace(plan.modificado) : hace(b.modificado)}</small></h2>
     <div class="chips-proy">${compacta ? `<span class="etq">${esc(p.nombre)}</span>` : ''}${c.rama ? `<span class="etq" title="Rama">⎇ ${esc(c.rama)}</span>` : ''}${plan ? `<span class="etq" title="${esc(plan.nombre)}">Plan${c.planDe ? ` (de ${esc(c.planDe)})` : ''}: ${esc(corto(plan.titulo.replace(/^Plan\s*[:—–-]\s*/i, ''), 60))}</span>` : ''}${chips({ modelo: aqui.meta?.modelo || destacado?.modelo })}</div>
+    ${etiquetasFormato(hito, aqui, tarea)}
     ${queSeBusca(hito, plan, compacta)}
+    ${compacta ? '' : bloqueEspera(aqui)}
     ${segmentos(b, sesiones, c.completo || siguiente ? null : aqui.id)}
     <div>${barra(hito.hechas, hito.total, 20)}</div>
     <div class="suave">${hechas}/${sesiones.length} sesiones${siguiente?.total ? ` · ${esc(siguiente.clave)} ${siguiente.hechas}/${siguiente.total}` : ''}${tarea ? ` · ${tarea.hechas}/${tarea.total} casillas de la tarea` : ''} · ${hito.hechas}/${hito.total} tareas${gasto ? ` · ${usd(gasto.costo)} en la rama (${gasto.sesionesTotal} ses.)` : ''}</div>
-    ${!compacta && falta.length ? `<div class="rotulo">Falta${siguiente && tarea?.abiertas.length ? ` · ${esc(siguiente.clave)} — ${esc(corto(siguiente.titulo.replace(/\s*\([^()]*\)\s*$/, ''), 60))}` : ''}</div><ul class="tareas falta">${falta.map((t) => `<li>${CASILLA()[0]} ${esc(corto(plano(t), 240))}</li>`).join('')}</ul>${c.falta.length > falta.length ? `<div class="suave">… y ${c.falta.length - falta.length} más</div>` : ''}` : ''}
-    ${destacado ? `<div class="rotulo">${siguiente ? 'Siguiente sesión' : 'Siguiente prompt'} · ${esc(destacado.clave)}</div>${promptsHtml([destacado])}` : ''}
+    ${!compacta && falta.length ? `<div class="rotulo">Falta${siguiente && tarea?.abiertas.length ? ` · ${esc(siguiente.clave)} — ${esc(corto(siguiente.titulo.replace(/\s*\([^()]*\)\s*$/, ''), 60))}` : ''}</div><ul class="tareas falta">${falta.map((t) => `<li>${CASILLA()[0]} ${casillaFormato(corto(plano(t), 240))}</li>`).join('')}</ul>${c.falta.length > falta.length ? `<div class="suave">… y ${c.falta.length - falta.length} más</div>` : ''}` : ''}
+    ${destacado ? `<div class="prompt-siguiente"><div class="rotulo">${siguiente ? 'Siguiente sesión' : 'Siguiente prompt'} · ${esc(destacado.clave)}</div>${promptsHtml([destacado])}</div>` : ''}
     ${resto.length ? `<details class="grupo"><summary class="rotulo">Otros prompts (${resto.length})</summary>${promptsHtml(resto)}</details>` : ''}
     <p>${botones}</p></section>`;
 }

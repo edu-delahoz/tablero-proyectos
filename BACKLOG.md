@@ -127,8 +127,10 @@ Después: **S46**
 
 ### S46 — Vista del formato · **Sonnet** · rama `formato-backlog` · ~60k
 Se espera: En Resumen y En curso se lee la línea en llano de cada tarea, «Se espera» frente a «Resultado», las etiquetas Épica/HU/Tarea/tipo y el prompt siguiente en un sitio fijo con botón copiar.
-- [ ] [test] Casos de render — `servidor.test.mjs`: llano visible, técnico desplegable, prompt siguiente presente; verlos fallar
-- [ ] Pintarlo — `plantilla.html`; si una casilla legada no tiene « — », se muestra como hoy
+- [x] [test] Casos de render — `servidor.test.mjs`: llano visible, técnico desplegable, prompt siguiente presente; fallaban 2 de 2 al escribirlos
+- [x] Pintarlo — `plantilla.html`; si una casilla legada no tiene « — », se muestra como hoy
+Resultado: En «En curso» y en las casillas del backlog se lee el llano con el técnico plegado, el tipo como etiqueta, «Se espera» y «Resultado» lado a lado, etiquetas Épica/Historia/Sesión/Tarea y el prompt siguiente en un bloque fijo con copiar. La casilla sin « — » se ve como antes. Suite 321 pasan, 2 omitidos. Límite: el «técnico» dentro de «Falta» queda recortado a 2 líneas por el estilo existente.
+Después: **S47**
 
 ### S47 — Mods alineados · **Sonnet** · rama `formato-backlog` (repo `metodologia-claude-code`) · ~50k
 Se espera: El panel de la terminal muestra la sesión con cualquier clave, su «Se espera» y el prompt siguiente; las pruebas del mod de S44 en verde.

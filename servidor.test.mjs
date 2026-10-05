@@ -802,3 +802,14 @@ test('participar (S37): asignar y estado solo en «participar» (400 en lectura/
   assert.equal(readFileSync(BACKLOG, 'utf8'), antesMd)
   assert.ok(!existsSync(join(dir, 'datos', 'sync-part-ado.json')))
 })
+
+test('vista del formato: llano visible, técnico desplegable, «Se espera» frente a «Resultado», etiquetas y prompt siguiente', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['function casillaFormato', 'class="llano"', 'class="tecnico"', 'Se espera', 'Resultado', 'function bloqueEspera', 'class="etq-formato"', 'Épica', 'Historia', 'Tarea', 'data-copiar', 'bloqueEspera(']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
+test('vista del formato: la casilla legada (sin « — ») se muestra como hoy', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  assert.ok(/function casillaFormato[\s\S]{0,600}if \(!f\) return inline\(/.test(html), 'casillaFormato debe devolver el texto de siempre si no hay « — »')
+  assert.ok(html.includes('class="prompt-siguiente"'), 'el prompt siguiente va en un sitio fijo')
+})
