@@ -3,6 +3,8 @@
 ## Estado
 - 2026-10-05 · rama `oficina-pixel` (sale de `develop`, sin PR) · S-OF1 hecha: datos de la oficina (placa, apariencia, salas y casillas sin solapes) con pruebas; suite 371 pasan / 0 fallan / 2 omitidos. Backlog propio a petición de Eduardo: no va en `BACKLOG.md` (solo S-OF3 marcará allí la casilla de H23). Trampa: el hito debe llamarse `H<número>` (`H1`), con `H-OF1` el validador lo toma por sesión. Siguiente: **S-OF2**. Plan: `~/.claude/plans/quiero-que-planes-una-snazzy-salamander.md`.
 - 2026-10-05 · rama `oficina-pixel` (sin PR) · S-OF2 hecha en código: escena en canvas (salas, muebles, sprites recoloreados, caminar en «L» desde la puerta, globos «!»/«…», placas y tarjeta en HTML, lista móvil con mini-avatar); suite 373 pasan / 0 fallan / 2 omitidos. Falta verla en el navegador → **S-OF2b**. Decisiones: el servidor no manda `rama` por agente, la tarjeta la muestra solo si llega; placas debajo de los pies (si chocan, encima del globo) evitando cabezas; escala ×3 solo si no obliga a más filas que ×2. Trampa: la prueba de S58 en `servidor.test.mjs` evaluaba la escena vieja y hubo que adaptarla.
+- 2026-10-05 · rama `oficina-pixel` (sin PR) · S-OF2b hecha: vista en Chrome headless (1280 y 390 px) con 8 agentes simulados; arreglos en `colocarCapaOf` (placas que tapaban el nombre de sala y el globo «!»); suite 373 pasan / 0 fallan / 2 omitidos. Hallazgo para S-OF3: casillas contiguas en vertical enciman personajes (`oficina.mjs`). Siguiente: **S-OF3**.
+- Para retomar (2026-10-05, S-OF2b): La oficina pixel ya se miró en el navegador y se ve bien: salas, muebles, personajes que caminan, placas legibles y la lista en móvil. Falta que dos personajes no se pongan uno encima del otro en el sofá y probarla con sesiones reales antes del PR.
 - Para retomar (2026-10-05): La oficina ya se dibuja en pixel dentro de la pestaña Oficina: salas por proyecto con muebles, personajes que caminan a su sitio, placas con la sesión y, en móvil, una lista con mini-avatares. Todas las pruebas pasan, pero nadie la ha mirado aún en un navegador; lo siguiente es sacar capturas con agentes simulados y pulir lo que se vea mal, y después probarla con sesiones reales.
 - Para retomar (2026-10-05): El servidor ya entrega, para cada agente, su placa (la sesión SX), su personaje y una casilla propia dentro de la sala de su proyecto. Falta dibujarlo en pixel (S-OF2) y probarlo con sesiones vivas (S-OF3).
 
@@ -50,10 +52,12 @@ Después: **S-OF2b**
 
 ### S-OF2b — continuación: revisión a ojo de la oficina pixel · **Opus** · rama `oficina-pixel` · ~40k · plugins: ninguno
 Se espera: La oficina pixel se ve bien de verdad: en Chrome headless a 1280 px salen las salas con muebles y 8 personajes distintos con su placa legible y sin solapes, y a 390 px la lista con mini-avatares; lo que se vea mal queda arreglado en `plantilla.html` con la suite en verde.
-- [ ] [test] Capturas con datos simulados — servir el tablero con 8 agentes en 2 proyectos (como S58b: eventos simulados para `/api/oficina`) y sacar capturas Chrome headless a 1280 y 390 px; esperado: suelos distintos, escritorio con monitor, estante, terminal, sofá, planta y puerta por sala; placas sin taparse
-- [ ] [código] Corregir lo que se vea mal — `plantilla.html` (`dibujarSalaOf`, `colocarCapaOf`, sprites `PIE_OF`/`SENTADO_OF`): solo ajustes visuales, sin tocar `oficina.mjs`
-- [ ] [test] Movimiento y detalle — cambiar la acción de un agente en los eventos simulados y comprobar (dos capturas seguidas) que camina a su nueva casilla y que el «!» aparece al esperar; pasar el ratón por un personaje muestra la tarjeta
-- [ ] [test] Suite en verde — `node --test 2>&1 | tail -20`
+- [x] [test] Capturas con datos simulados — servir el tablero con 8 agentes en 2 proyectos (como S58b: eventos simulados para `/api/oficina`) y sacar capturas Chrome headless a 1280 y 390 px; esperado: suelos distintos, escritorio con monitor, estante, terminal, sofá, planta y puerta por sala; placas sin taparse
+- [x] [código] Corregir lo que se vea mal — `plantilla.html` (`dibujarSalaOf`, `colocarCapaOf`, sprites `PIE_OF`/`SENTADO_OF`): solo ajustes visuales, sin tocar `oficina.mjs`
+- [x] [test] Movimiento y detalle — cambiar la acción de un agente en los eventos simulados y comprobar (dos capturas seguidas) que camina a su nueva casilla y que el «!» aparece al esperar; pasar el ratón por un personaje muestra la tarjeta
+- [x] [test] Suite en verde — `node --test 2>&1 | tail -20`
+
+Resultado: Se ve como se esperaba. A 1280 px salen las dos salas (madera y baldosa) con escritorios y monitor, estante, terminal, sofá, planta, ventana y puerta, y 8 personajes distintos con su placa; a 390 px, la lista con mini-avatares. Al cambiar los eventos, los personajes caminan a su nueva casilla (uno a la terminal y otro al sofá) y la tarjeta sale al pasar el ratón. Arreglado en `colocarCapaOf`: una placa tapaba el nombre de la sala y otra tapaba el globo «!». Queda para S-OF3, en `oficina.mjs`: dos personajes en casillas de la misma columna y en filas seguidas se enciman (el sprite mide 24 px y la casilla 16), y el «!» parece del de arriba. Suite: 373 pasan / 0 fallan / 2 omitidos. Simulador y capturas: `node sim.mjs [0|1]` + `foto.mjs` en el scratchpad de la sesión (CDP sobre Chrome headless, puerto 47399, con `OFICINA_EVENTOS` y `TABLERO_TRANSCRIPCIONES`).
 
 Prompt:
 ```text
@@ -61,13 +65,15 @@ Modelo: Opus. Sesión S-OF2b de /Users/edudelahoz/Desktop/Desarrollo/metodologia
 ```
 Después: **S-OF3**
 
-### S-OF3 — Prueba con sesiones vivas y PR · **Sonnet** · rama `oficina-pixel` · ~25k · plugins: ninguno
-Se espera: Eduardo ve la Oficina con 2–3 sesiones reales (una lanza un buscador, otra pide permiso) y cada personaje se reconoce por su placa; lo que vea mal queda anotado aquí. Se comprueba con la suite en verde y el PR `oficina-pixel → develop` abierto con su permiso.
+### S-OF3 — Prueba con sesiones vivas y PR · **Sonnet** · rama `oficina-pixel` · ~40k · plugins: ninguno
+Se espera: Ningún personaje se encima con otro (prueba en `oficina.test.mjs`) y Eduardo ve la Oficina con 2–3 sesiones reales (una lanza un buscador, otra pide permiso) y cada personaje se reconoce por su placa; lo que vea mal queda anotado aquí. Se comprueba con la suite en verde y el PR `oficina-pixel → develop` abierto con su permiso.
+- [ ] [test] (añadido en S-OF2b) Nadie se encima, verlo fallar y anotar cuántos fallan — `oficina.test.mjs`: con 2 agentes en la zona sofá y 2 en terminal, `distribuirOficina` no deja dos casillas en la misma columna y filas contiguas (el sprite de pie mide 24 px, la casilla 16)
+- [ ] [código] (añadido en S-OF2b) Separar casillas — `oficina.mjs` (`distribuirOficina`/casillas de zona): saltar la fila contigua o desplazar de columna; mantener la estabilidad (solo se mueve quien cambia de zona)
 - [ ] [test] Suite completa en verde — `node --test 2>&1 | tail -20` y `node verificar_backlog.mjs "$PWD" --formato` limpio
 - [ ] [test] Prueba con sesiones vivas — Eduardo abre 2–3 sesiones (una con `buscador`, una pidiendo permiso); comprobar placas, salas, globo «!» y que nadie se encima; anotar aquí lo que falle como casillas «(añadido en S-OF3)»
 - [ ] [doc] PR con permiso de Eduardo — `oficina-pixel → develop` (si GraphQL de `gh` está limitado, REST `gh api repos/…/pulls`); al cerrar, marcar en `BACKLOG.md` la casilla de H23 «Oficina: aspecto gráfico» como hecha con referencia a este backlog
 
 Prompt:
 ```text
-Modelo: Sonnet. Sesión S-OF3 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG_OFICINA.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S-OF3 BACKLOG_OFICINA.md`), rama `oficina-pixel`. Corre la suite, acompáñame a mirar la Oficina con sesiones vivas y anota lo que falle; pregúntame antes de abrir el PR. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: Sonnet. Sesión S-OF3 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG_OFICINA.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S-OF3 BACKLOG_OFICINA.md`), rama `oficina-pixel`. Primera casilla: test de que nadie se encima en `oficina.test.mjs` (verlo fallar), luego el arreglo en `oficina.mjs`. Corre la suite, acompáñame a mirar la Oficina con sesiones vivas y anota lo que falle; pregúntame antes de abrir el PR. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```

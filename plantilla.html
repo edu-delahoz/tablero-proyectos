@@ -2130,6 +2130,10 @@ function colocarCapaOf(escena, disp, figuras) {
   const porK = new Map(figuras.map((f) => [llaveOficina(f.a), f]));
   const medidas = [...escena.querySelectorAll('.placa-oficina')].map((p) => ({ p, f: porK.get(p.dataset.key), w: p.offsetWidth, h: p.offsetHeight }));
   const puestas = figuras.map((f) => ({ x: (f.x + 4) * e, y: (f.y - 7) * e, w: 8 * e, h: 8 * e }));
+  // El globo «!»/«…» tampoco se tapa (lo dibuja globoOf en f.x+9, f.y-20, 11×11).
+  for (const f of figuras) if (f.a.accion === 'esperando' || f.a.accion === 'pensando') puestas.push({ x: (f.x + 9) * e, y: (f.y - 20) * e, w: 11 * e, h: 11 * e });
+  // El nombre de la sala también ocupa sitio: una placa encima de una figura de la fila de arriba lo tapaba.
+  escena.querySelectorAll('.oficina-sala-nombre:not([hidden])').forEach((n) => puestas.push({ x: n.offsetLeft, y: n.offsetTop, w: n.offsetWidth, h: n.offsetHeight }));
   const choca = (r) => puestas.some((q) => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h);
   medidas.sort((u, v) => (u.f ? u.f.y : 0) - (v.f ? v.f.y : 0));
   for (const { p, f, w, h } of medidas) {
