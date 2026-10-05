@@ -779,6 +779,11 @@ test('E5b: plantilla.html — costo por feature con interruptor rama/feature, de
   assert.ok(!html.includes('otras ('), 'sin corte top 10 + «otras»')
 })
 
+test('E5b: plantilla.html — el costo por feature muestra el tiempo total de cada feature y de sus ramas', () => {
+  const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
+  for (const txt of ['r.minutos += f.minutos ?? 0', "por === 'feature' ? (g) => `${usd(g.costo)} · ${dur(g.minutos)}`", 'de trabajo en total']) assert.ok(html.includes(txt), txt)
+})
+
 test('E5: plantilla.html muestra las advertencias y la calibración del panel de límites', () => {
   const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
   for (const txt of ['El % incluye uso fuera de Claude Code', '$ por 1 % se recalcula en cada ventana', 'Última ventana usada', 'sesiones tipo', 'Costo por tipo de tarea']) assert.ok(html.includes(txt), txt)

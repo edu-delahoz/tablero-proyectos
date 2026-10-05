@@ -1439,8 +1439,8 @@ function agregarBit(registro, por) {
     if (!clave || f.costo == null) { excluidas++; continue; }
     const g = grupos.get(clave) || { clave, costo: 0, minutos: 0, sesiones: 0, ramas: new Map(), filas: [] };
     g.costo += f.costo; g.minutos += f.minutos ?? 0; g.sesiones++;
-    const r = g.ramas.get(f.rama || 'sin rama') || { clave: f.rama || 'sin rama', costo: 0, sesiones: 0 };
-    r.costo += f.costo; r.sesiones++; g.ramas.set(r.clave, r);
+    const r = g.ramas.get(f.rama || 'sin rama') || { clave: f.rama || 'sin rama', costo: 0, minutos: 0, sesiones: 0 };
+    r.costo += f.costo; r.minutos += f.minutos ?? 0; r.sesiones++; g.ramas.set(r.clave, r);
     if (clave === 'sin rama') g.filas.push(f);
     grupos.set(clave, g);
   }
@@ -1478,13 +1478,14 @@ function grafTiempo(base) {
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${titulo}: ${grupos.length} periodos, total ${usd(total)}, máximo ${usd(max)}`)}">${marcas}${barras}</svg>
     <p class="suave graf-nota">Últimos ${grupos.length} · ${usd(total)} en total</p>${notaExcl(excluidas)}${tablaGraf(titulo, grupos)}</div>`;
 }
-function grafBarrasH(titulo, grupos, excluidas, color, vacio) {
+function grafBarrasH(titulo, grupos, excluidas, color, vacio, valor = (g) => usd(g.costo)) {
   if (!grupos.length) return `<div class="graf"><div class="graf-cab"><h3>${titulo}</h3></div><p class="suave">${vacio}</p>${notaExcl(excluidas)}</div>`;
-  const max = Math.max(...grupos.map((g) => g.costo)) || 1, fila = 22, W = 640, mi = 170, md = 70, H = grupos.length * fila + 4;
+  const md = Math.max(70, 8 + 6.5 * Math.max(...grupos.map((g) => valor(g).length))); // hueco a la derecha para la etiqueta
+  const max = Math.max(...grupos.map((g) => g.costo)) || 1, fila = 22, W = 640, mi = 170, H = grupos.length * fila + 4;
   const barras = grupos.map((g, i) => {
     const w = Math.max(2, (W - mi - md) * g.costo / max), yy = 2 + i * fila, r = Math.min(4, w / 2);
     const nombre = g.clave.length > 24 ? `${g.clave.slice(0, 23)}…` : g.clave;
-    return `<text x="${mi - 8}" y="${yy + 14}" text-anchor="end" class="eje">${esc(nombre)}</text><path class="barra" ${marca(g)} d="M${mi},${yy + 2}H${mi + w - r}Q${mi + w},${yy + 2} ${mi + w},${yy + 2 + r}V${yy + 14 - r}Q${mi + w},${yy + 14} ${mi + w - r},${yy + 14}H${mi}Z" fill="${color(g)}"/><text x="${mi + w + 6}" y="${yy + 13}" class="eje val">${usd(g.costo)}</text>`;
+    return `<text x="${mi - 8}" y="${yy + 14}" text-anchor="end" class="eje">${esc(nombre)}</text><path class="barra" ${marca(g)} d="M${mi},${yy + 2}H${mi + w - r}Q${mi + w},${yy + 2} ${mi + w},${yy + 2 + r}V${yy + 14 - r}Q${mi + w},${yy + 14} ${mi + w - r},${yy + 14}H${mi}Z" fill="${color(g)}"/><text x="${mi + w + 6}" y="${yy + 13}" class="eje val">${esc(valor(g))}</text>`;
   }).join('');
   return `<div class="graf"><div class="graf-cab"><h3>${titulo}</h3></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${titulo}: ${grupos.map((g) => `${g.clave} ${usd(g.costo)}`).join(', ')}`)}">${barras}</svg>${notaExcl(excluidas)}${tablaGraf(titulo, grupos)}</div>`;
 }
@@ -1494,15 +1495,17 @@ function grafRamas(base) {
   const { grupos, excluidas } = agregarBit(base, por);
   const radios = [['feature', 'Feature'], ['rama', 'Rama']].map(([v, l]) => `<label><input type="radio" name="graf-ramas" data-graf-ramas="${v}"${v === por ? ' checked' : ''}> ${l}</label>`).join('');
   const titulo = por === 'feature' ? 'Costo por feature' : 'Costo por rama';
-  const graf = grafBarrasH(titulo, grupos, excluidas, (g) => (g.clave === 'sin rama' ? 'var(--suave)' : 'var(--acento)'), 'Sin sesiones con costo.')
+  const graf = grafBarrasH(titulo, grupos, excluidas, (g) => (g.clave === 'sin rama' ? 'var(--suave)' : 'var(--acento)'), 'Sin sesiones con costo.',
+    // En feature se ve el tiempo total junto al costo; en rama la duración ya está en la tabla de la bitácora.
+    por === 'feature' ? (g) => `${usd(g.costo)} · ${dur(g.minutos)}` : undefined)
     .replace(`<h3>${titulo}</h3></div>`, `<h3>${titulo}</h3><span class="graf-sel" role="radiogroup" aria-label="Agrupar por">${radios}</span></div>`)
     .replace(/<svg[\s\S]*?<\/svg>/, (s) => `<div class="graf-scroll">${s}</div>`);
   const detalle = (g) => g.clave === 'sin rama'
     ? g.filas.map((f) => `<li>${esc(String(f.fecha).slice(0, 10))} · ${esc(f.tarea)}${f.proyecto ? ` <span class="suave">(${esc(f.proyecto)})</span>` : ''} — ${usd(f.costo)}</li>`).join('')
-    : [...g.ramas.values()].sort((a, b) => b.costo - a.costo).map((r) => `<li>${esc(r.clave)} — ${usd(Math.round(r.costo * 100) / 100)} · ${r.sesiones} ses.</li>`).join('');
+    : [...g.ramas.values()].sort((a, b) => b.costo - a.costo).map((r) => `<li>${esc(r.clave)} — ${usd(Math.round(r.costo * 100) / 100)} · ${dur(r.minutos)} · ${r.sesiones} ses.</li>`).join('');
   const desglose = grupos.filter((g) => g.clave === 'sin rama' || (por === 'feature' && g.ramas.size > 1));
-  const total = grupos.reduce((a, g) => a + g.costo, 0);
-  return graf.replace(/<\/div>$/, `<p class="suave graf-nota">${grupos.length} ${por === 'feature' ? 'features' : 'ramas'} · ${usd(Math.round(total * 100) / 100)} en total</p>${desglose.length ? `<div class="graf-desglose">${desglose.map((g) => `<details><summary>${esc(g.clave)} — ${usd(Math.round(g.costo * 100) / 100)} · ${g.sesiones} ses.</summary><ul>${detalle(g)}</ul></details>`).join('')}</div>` : ''}</div>`);
+  const total = grupos.reduce((a, g) => a + g.costo, 0), minutos = grupos.reduce((a, g) => a + g.minutos, 0);
+  return graf.replace(/<\/div>$/, `<p class="suave graf-nota">${grupos.length} ${por === 'feature' ? 'features' : 'ramas'} · ${usd(Math.round(total * 100) / 100)} y ${dur(minutos)} de trabajo en total</p>${desglose.length ? `<div class="graf-desglose">${desglose.map((g) => `<details><summary>${esc(g.clave)} — ${usd(Math.round(g.costo * 100) / 100)} · ${dur(g.minutos)} · ${g.sesiones} ses.</summary><ul>${detalle(g)}</ul></details>`).join('')}</div>` : ''}</div>`);
 }
 function grafModelos(base) {
   const { grupos, excluidas } = agregarBit(base, 'modelo');
