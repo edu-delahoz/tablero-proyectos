@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `formato-backlog` (sale de `eficiencia`) · plan de H17 hecho, solo análisis (sin código ni tests). H17 con S44–S52 y sus casillas abajo. Decisiones con Eduardo en la cabecera de H17. Siguiente: **S44** (Opus).
+- Para retomar (2026-10-05): Se planeó cómo unificar el formato de los backlogs para que el tablero y el panel de la terminal los muestren bien, con una línea en llano por tarea y lo que se espera de cada sesión, midiendo que no suba el costo. También se planeó una pestaña que dibuja la metodología completa con su estado real. Nada de código todavía; lo primero es escribir el contrato del formato y las pruebas que hoy fallan.
 - 2026-10-04 · rama `eficiencia` · E6 hecha, `scripts/probar.sh` del repo `metodologia-claude-code` en verde (16 pruebas; fallaban 14 al escribirlas), escáner limpio. PR https://github.com/edu-delahoz/metodologia-claude-code/pull/2 (rama `eficiencia` → `develop`, sin mergear). Llevado al repo: CLAUDE.md, skill relevo, `settings.base.json` (hooks verificar_backlog, generar --hook-inicio/--silencioso, acotar_lectura), `claude/hooks/acotar_lectura.mjs`, plugin `panel-tablero` (+ marketplace), README (tablero, S0/Sn/SNb, notas), rutas únicas `~/.claude/{hooks,metodologia,tablero}` (`instalar.sh` enlaza `~/.claude/tablero` a `TABLERO_DIR`, por defecto `../metodologia-claude/tablero`). No se probó `register.test.ts` de los plugins (no hay runner en el repo) ni se reinstaló en el `~/.claude` real. H16 completo.
 - Para retomar (2026-10-04): La metodología ya está en el repo `metodologia-claude-code` con una prueba de instalación y un PR abierto. Falta que Eduardo revise y mergee el PR; no se reinstaló en su `~/.claude` real. Con esto termina el hito de eficiencia.
 - 2026-10-04 · rama `eficiencia` · E5c hecha, tests en verde (212 pasan, 2 omitidos; fallaban 2 al escribirlos). Pestaña Bitácora: tarjeta «Auditoría» (selector de 7 días, composición del gasto, malos hábitos, Opus frente a Sonnet) con `auditoriaPanel`/`auditoriaDe` en `auditoria.mjs`; el panel renombra `tokens`→`volumen` y omite `entrada` por la guarda de «token» en /api/datos. Siguiente: **E6**.
@@ -85,6 +87,78 @@
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H17 — Formato único de backlog, mods alineados y vista «Metodología»
+Historia: Como Eduardo, quiero que todo plan o backlog siga un mismo formato con una línea en llano por tarea y «lo que se espera» de cada sesión, para que el tablero y el panel de la terminal lo muestren bien sin gastar más ni bajar la calidad.
+Origen: 3 notas de `../notas/NOTAS_METODOLOGIA.md` (2026-10-05). Plan: `~/.claude/plans/quiero-que-planes-estos-snazzy-raccoon.md`. Rama `formato-backlog` (desde `eficiencia`) en el tablero y en `metodologia-claude-code`. Plugins/MCP: ninguno.
+
+Hallazgos (2026-10-05): `~/.claude/mods/*` y `metodologia-claude-code/plugins/*` están iguales (solo rutas anonimizadas); el problema es que `panel-tablero` tiene parser propio (`hooks/register.tsx:180` `RE_SUB` solo `S\d+`). En el tablero `analizarTitulo` (`generar.mjs:330`) solo saca clave `[HS]\d+` y modelo `**X**` → E5b sale sin clave ni modelo. IEP usa sub-sesiones como viñetas en negrita y `S-CI1b (Sonnet, ~10k; …)`. No existe campo «Se espera» (sí `Historia:` por hito y «Resultado» al cerrar).
+
+Decisiones con Eduardo: mods → alinear `panel-tablero` (y `estado-trabajo` si lee backlog) al formato; jerarquía → mapear sin renombrar (Hito = Épica, `Historia:` = HU, sesión = unidad, casilla = Tarea) + tipo opcional `[fix] [test] [doc] [refactor]`, sin IDs nuevos; vista Metodología → viva, generada de la config real; migración → solo backlogs nuevos y secciones abiertas.
+
+Formato (contrato que S44 escribe en `metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`): título `### <CLAVE> — <título> · **<Modelo>** · rama \`x\` · ~Nk · plugins: …` con clave `[A-Z][A-Z0-9-]*\d+[a-z]?`; sub-sesiones con `####`; `Se espera:` obligatorio (1–2 frases en llano + cómo se comprueba, lo escribe quien define la sesión); casilla `- [ ] [tipo] <llano ≤ 12 palabras> — <técnico: archivo, qué, prueba>`; `Resultado:` al cerrar; `Prompt:` con bloque `text`; `Después: **SX**`.
+
+Costo y calidad: el formato no puede subir más de +10 % los tokens de una sección (`backlog.mjs seccion`). Línea base en S44; medición en S52 tras ≥ 8 sesiones. Si sube > 15 % o la calidad no mejora (casillas reabiertas, «→ SNb», tests rotos al cerrar, Resultado ≠ Se espera) → la línea en llano queda solo a nivel de sesión.
+
+### S44 — Contrato y tests transversales · **Opus** · rama `formato-backlog` · ~60k
+Se espera: El formato está escrito y hay pruebas que fallan contra los parsers actuales del tablero y del mod; queda anotada la línea base de costo.
+- [ ] [test] Ejemplos de cada formato que existe hoy — `fixtures/formato/`: `canonico.md`, `legado-tablero.md` (E5b «(Opus; sigue a E5)», S41 «· **Sonnet** ·»), `legado-iep.md` (viñetas `- **S3c — …**`, «Resultado S3c», «Prompt de arranque»), `legado-ci.md` (`S-CI1b (Sonnet, ~10k; …)`)
+- [ ] [test] Prueba que recorre todos los ejemplos — `formato.test.mjs` (glob de `fixtures/formato/`): clave, modelo, rama, Se espera, Resultado, prompt, llano, tipo, sub-sesiones, Después; verla fallar y anotar cuántas
+- [ ] [test] La misma prueba para el panel de la terminal — `metodologia-claude-code/plugins/panel-tablero/hooks/register.test.ts` leyendo `plugins/panel-tablero/fixtures/formato/` (copia); verla fallar
+- [ ] [doc] Escribir el contrato del formato — `metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`
+- [ ] Medir cuánto cuesta hoy — tokens medios por sección abierta (5 proyectos), llamadas/prompt y ctx final (`tablero --auditoria 2026-10-04`, `metricas_jsonl.mjs`); anotar en esta sección
+
+### S45 — Parser y linter del formato · **Opus** · rama `formato-backlog` · ~75k
+Se espera: `formato.test.mjs` en verde y la suite completa también (lo legado se ve igual); `verificar_backlog.mjs --formato` lista lo que falta.
+- [ ] Entender cualquier clave y los campos nuevos — `generar.mjs`: `analizarTitulo` (clave general, modelo entre paréntesis), `estructura()` guarda `seEspera`, `resultado`, `llano`/`tecnico`/`tipo` por tarea y el `Prompt:`; `RE_SUB` (`:491`) acepta `####` y clave general; `plantillaBacklog` (`:250`) en formato nuevo
+- [ ] Leer secciones con claves raras — `backlog.mjs` `ubicar`: `seccion E5b`, `seccion S-CI1b`; prueba en `backlog.test.mjs`
+- [ ] Avisar lo que no cumple el formato — nuevo `formato.mjs` (puro) + `verificar_backlog.mjs --formato [carpeta]`: sesión abierta sin «Se espera», casilla sin « — », sin prompt
+- [ ] No abrir PR sin «Se espera» — `coherencia.mjs` `bloqueosDeRama`; prueba en `coherencia.test.mjs`
+Después: **S46**
+
+### S46 — Vista del formato · **Sonnet** · rama `formato-backlog` · ~60k
+Se espera: En Resumen y En curso se lee la línea en llano de cada tarea, «Se espera» frente a «Resultado», las etiquetas Épica/HU/Tarea/tipo y el prompt siguiente en un sitio fijo con botón copiar.
+- [ ] [test] Casos de render — `servidor.test.mjs`: llano visible, técnico desplegable, prompt siguiente presente; verlos fallar
+- [ ] Pintarlo — `plantilla.html`; si una casilla legada no tiene « — », se muestra como hoy
+
+### S47 — Mods alineados · **Sonnet** · rama `formato-backlog` (repo `metodologia-claude-code`) · ~50k
+Se espera: El panel de la terminal muestra la sesión con cualquier clave, su «Se espera» y el prompt siguiente; las pruebas del mod de S44 en verde.
+- [ ] Panel con el formato nuevo — `plugins/panel-tablero/hooks/register.tsx`: `RE_SUB`/`RE_PEDIDA` con clave general y `####`; mostrar «Se espera»; avisar si falta
+- [ ] Revisar `estado-trabajo` — si lee backlog, mismo cambio y su prueba
+- [ ] Instalar — copiar a `~/.claude/mods/` sin pisar las rutas reales de `plugin.json`; `scripts/probar.sh` en verde
+
+### S48 — Reglas y skills · **Sonnet** · rama `formato-backlog` (repo `metodologia-claude-code`) · ~40k
+Se espera: Toda sesión que planee o haga relevo escribe en el formato y deja el «Se espera» de la siguiente.
+- [ ] [doc] Regla corta en CLAUDE.md — `~/.claude/CLAUDE.md` y `claude/CLAUDE.md`: «formato en FORMATO_BACKLOG.md; Se espera obligatorio; casilla = llano — técnico»
+- [ ] [doc] Skills — `plugins/metodologia/skills/planear/SKILL.md`, `claude/skills/relevo/SKILL.md` (y `~/.claude/skills/relevo`): Se espera de la siguiente, `Prompt:`, correr `verificar_backlog.mjs --formato`
+- [ ] [doc] Plantilla única de prompt — `metodologia/PROMPTS.md`
+
+### S49 — Migrar secciones abiertas · **Sonnet** · rama `formato-backlog` · ~50k
+Se espera: `verificar_backlog.mjs --formato` sale limpio en las secciones abiertas de los 5 proyectos y lo cerrado no se tocó.
+- [ ] Pasar al formato solo lo abierto — tablero, IEP (`BACKLOG_MVP.md` H4–H7), EAP10, Squalo; anotar tokens antes/después
+
+### S50 — Metodología viva: datos · **Opus** · rama `formato-backlog` · ~70k
+Se espera: `/api/metodologia` devuelve el grafo de piezas (hooks, skills, mods, agentes, scripts, notas, bitácora, backlog) con estado instalada/activa/falta y qué proyectos de `proyectos.json` usan cada una.
+- [ ] [test] Un `~/.claude` de mentira — `metodologia.test.mjs` + `fixtures/metodologia/home/`: pieza instalada, pieza que falta, hook en `settings.json`, proyecto conectado y no conectado; verla fallar
+- [ ] Armar el grafo — `metodologia.mjs` (puro; catálogo esperado desde `metodologia-claude-code/instalar.sh`) y endpoint en `generar.mjs` sin exponer secretos
+
+### S51 — Metodología viva: vista · **Sonnet** · rama `formato-backlog` · ~60k
+Se espera: Pestaña «Metodología» con el flujo Planear → Sesión (hooks) → Relevo → Backlog → Tablero/Bitácora, cada nodo en verde/ámbar/rojo y al tocarlo qué hace y qué proyectos lo usan; en móvil, lista vertical.
+- [ ] [test] La pestaña pinta los nodos del fixture — `servidor.test.mjs`; verla fallar
+- [ ] Dibujarla — `plantilla.html`, SVG en línea con los colores del tablero
+
+### S52 — Cierre y medición · **Sonnet**, con Eduardo (tras ≥ 8 sesiones con el formato) · ~40k
+Se espera: Decisión anotada de mantener o recortar la línea en llano según costo y calidad; PRs abiertos.
+- [ ] Todo en verde — suite completa, `scripts/probar.sh`, `verificar_backlog.mjs --formato` en los 5 proyectos
+- [ ] Comparar con la línea base de S44 — regla +10 % / +15 % de arriba; anotar la decisión
+- [ ] PRs y notas — `formato-backlog` → `develop` en ambos repos; responder la nota del prompt siguiente en `../notas/NOTAS_TABLERO.md`
+
+Cómo ejecutarlo: S44 → S45 → (S46, S47, S48, S49 en cualquier orden) → S52; S50 → S51 son independientes de S45–S49. `/clear` entre sesiones.
+
+Prompt de arranque (cambiar clave y modelo según la tabla de cada título):
+```text
+Modelo: <Opus|Sonnet>. Sesión <S44> de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion <S44> BACKLOG.md`). Rama `formato-backlog` en el tablero y en metodologia-claude-code (créala desde `eficiencia` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
 
 ## H16 — Eficiencia de uso de Claude Code
 Historia: Como usuario con plan Team, quiero gastar menos de las ventanas de 5 h y semanal, para hacer más sesiones con el mismo límite.
