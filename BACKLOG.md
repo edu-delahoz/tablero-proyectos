@@ -203,7 +203,7 @@ Modelo: Sonnet. Sesión S61 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-
 Historia: Como Eduardo, quiero que Claude me avise antes de empezar cuando pego en una ventana el prompt de otra sesión, para no perder el hilo ni trabajar dos veces lo mismo.
 Origen: 2026-10-05, en la ventana de `metodologia-claude` se pegó el prompt de S58, que ya estaba hecha y la llevaba otra ventana en `.wt-oficina`. La sesión se fue al backlog del tablero y se perdió el hilo de la optimización. Plan: `~/.claude/plans/pasted-content-id-0d9f-tuve-un-valiant-sedgewick.md`.
 
-### S61b — Re-medir la lectura del backlog · **Sonnet** · rama `develop` (sin código) · ~15k
+### S61b — Re-medir la lectura del backlog · **Sonnet** · sin rama (se anota en `develop`, sin código) · ~15k
 Se espera: Hay cifras reales de «Bash sobre BACKLOG» tras usar `arranque` unos días, anotadas frente al objetivo (≤ 40 llamadas / ≤ 40k). Se comprueba con `node generar.mjs --auditoria <fecha>` y el «Resultado:» de esta sección.
 - [ ] [verificación] Re-medir la lectura — desde 2026-10-07: `node generar.mjs --auditoria <fecha>`; anotar llamadas y tokens de «Bash sobre BACKLOG» en «Resultado:» y si se cumple el objetivo
 - [ ] [docs] Si no se cumple, queda una casilla con la causa — abrirla en el backlog indicando qué sesiones siguen leyendo con grep/sed, sin cambiar código
