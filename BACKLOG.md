@@ -143,6 +143,21 @@ Origen: pruebas a mano del 2026-10-05. Sin sesión definida aún: se planifica c
 - [ ] [mejora] Oficina: aspecto gráfico más trabajado (Eduardo la usará unos días y anotará problemas) — `plantilla.html` `htmlOficina`
 - [ ] [prueba] Probar las vistas nuevas en el móvil (pendiente de Eduardo; ver también la nota de experiencia full móvil)
 
+### S63 — Limpieza: cerrar en el backlog lo que ya está hecho · **Sonnet** · rama `limpieza-backlog` (sale de `develop`) · ~40k
+Se espera: El índice del backlog solo muestra abierto lo que de verdad falta; lo hecho queda `[x]` con su evidencia y lo que se movió o descartó queda `[-]` con nota. Se comprueba con `node backlog.mjs indice BACKLOG.md` y con `node verificar_backlog.mjs "$PWD"` y `--formato` sin avisos.
+- [ ] [revisión] Listar las casillas abiertas de los hitos viejos — `node backlog.mjs indice BACKLOG.md`; recorrer con `node backlog.mjs seccion <clave> BACKLOG.md` los hitos H8, H9, H12, H14, H16, H20 y S56 (sin grep/sed sobre el backlog)
+- [ ] [limpieza] Marcar como hecho lo que ya existe — `[x]`: por cada casilla, comprobar en el código (`grep -n` en `generar.mjs`/`plantilla.html`/tests) o en `git log --oneline -S` que existe; anotar la evidencia breve entre paréntesis; usar `node backlog.mjs marcar <clave> <n> BACKLOG.md`
+- [ ] [limpieza] Marcar lo que se movió o descartó — `[-] … → destino`: si otra sesión lo cubrió, nombrarla; si nadie lo hará, «descartado (motivo)»; lo dudoso se deja `[ ]` y se lista en «Resultado:» para preguntar a Eduardo
+- [ ] [limpieza] Cerrar hitos completos — si un hito queda sin casillas abiertas, su línea de avance o «Resultado:» lo dice
+- [ ] [verificación] Sin desajustes — `node verificar_backlog.mjs "$PWD"` y `node verificar_backlog.mjs "$PWD" --formato` limpios (salvo S61/S62, que no se tocan)
+
+No tocar S61, S62 ni H21/H22: son del repo de metodología y Eduardo las hace en otra sesión. No tocar código.
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S63 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S63 BACKLOG.md`), en la rama `limpieza-backlog` que sale de `develop`. Solo backlog, sin tocar código. No toques S61, S62, H21 ni H22. Si dudas de si algo está hecho, déjalo abierto y pregúntame al final. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
 ## H21 — Lectura exacta del backlog
 Historia: Como Eduardo, quiero que las sesiones lean el Estado y su sección del backlog de un tirón y que la auditoría no cuente eso como mal hábito, para gastar menos contexto sin perder calidad.
 Origen: tarjeta «Malos hábitos del día» (2026-10-05: «Bash sobre BACKLOG» 122 llamadas / 120k, frente a 586 / 613k el 04-10). Plan: `~/.claude/plans/quiero-que-me-respondas-vectorized-owl.md`. Plugins/MCP: ninguno.
