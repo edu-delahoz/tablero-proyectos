@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `kanban-sesiones` (sin PR) · S54 hecha salvo la revisión en navegador, suite en verde (338 pasan, 2 omitidos; los 3 tests nuevos fallaban 3 de 3). `plantilla.html`: `tarjetaSesion`, `panelSesion`, `botonPrompt`, `abrirSesion`, `marcarCasilla`, filtro de backlogs en cascada y aviso `.k-vacio`; se quitó «Mover a…»/arrastre de sesiones (los manejadores de arrastre quedan inertes). Siguiente: **S54b** (revisión visual) y **S55**.
+- Para retomar (2026-10-05): El Tablero ya dibuja una tarjeta por sesión con su línea en llano y, al tocarla, abre un panel con el prompt para copiar, lo que se espera, las casillas marcables, la rama/PR/CI y los commits; hay un botón «Prompt de SX» junto a «estás aquí». Falta mirarlo en el navegador con los datos del IEP en pantalla ancha y de móvil. Nada roto.
 - 2026-10-05 · rama `kanban-sesiones` (sin PR) · S53 hecha, suite en verde (335 pasan, 2 omitidos; los 5 nuevos fallaban 5 de 337). `generar.mjs`: `kanbanSesiones(b, p, sesionesClaude)` sobre `sesiones()` (hito `## H<n>` → `H<n>` del `#` → `b.padre.clave`; estado por-hacer/en-curso/en-prueba/hecho; `pr {numero,url,estado,ci}`), `resumenCi(statusCheckRollup)`, `principalDe(repo)`, `GET /api/sesion-detalle?proyecto&rama` (400 rama inválida, 404 sin repo). `p.kanban` y `/api/sesiones` (`{archivo,linea,clave,texto,estado}`) por sesión. Fixture `fixtures/kanban-mini/BACKLOG_H7.md`. Test transversal de rutas en `servidor.test.mjs` (regex sobre `crearManejador`; el helper `post` ahora omite Origin si se pasa `origin: ''`). Trampa para S54: `columnasKanban` queda exportada solo para su test; la vista (`tarjetasKanban`, «Mover a», arrastre) aún asume casillas: quitar arrastre y `KMARCA` por tarjeta, y decidir si se borra `columnasKanban`. Siguiente: **S54** (Sonnet).
 - Para retomar (2026-10-05): El servidor ya entrega una tarjeta por sesión con su hito correcto (el mini backlog H7 del IEP ya sale), su línea en llano, su prompt, su estado y la CI de su PR, y se pueden pedir los commits de su rama. La vista todavía dibuja las tarjetas a la antigua: lo siguiente es rehacerla (S54).
 - 2026-10-05 · rama `kanban-sesiones` (sale de `formato-backlog`, sin PR) · plan de H18–H20 hecho, solo análisis (sin código ni tests). Plan: `~/.claude/plans/quiero-que-planes-estos-luminous-parasol.md`; secciones S53–S59 con casillas abajo. Causa del kanban vacío con «H7 + BACKLOG_H7.md»: `columnasKanban` (`generar.mjs:1349`) toma el hito de la clave del `##`, y en el mini backlog las sesiones son `## S0…S7` → `hito: 'S2c'`. Siguiente: **S53** (Opus).
@@ -135,7 +137,7 @@ Se espera: En la pestaña Tablero cada tarjeta es una sesión con una línea en 
 - [x] Panel de detalle al tocar la tarjeta — `plantilla.html`: lateral (pantalla completa ≤700px), orden prompt → Se espera/Resultado → casillas marcables (`POST /api/guardar`) → rama/PR/CI → commits y archivos (`/api/sesion-detalle` al abrir) → costo/tiempo (reusar `gasto` de `enCurso`)
 - [x] Filtros en cascada — `plantilla.html`: elegir hito limita los backlogs; combinación vacía lo dice
 - [x] Prompt actual a la vista — `plantilla.html`: botón «⧉ Prompt de SX» junto a «❯ estás aquí» (`:727`, `:799`, tarjetas de `:1840`) y arriba en `tarjetaEnCurso` (`:2015`)
-- [ ] Mirarlo en el navegador con datos del IEP — 1200 y 390 px; `node --test 2>&1 | tail -40` en verde
+- [-] Mirarlo en el navegador con datos del IEP → S54b — 1200 y 390 px; `node --test 2>&1 | tail -40` en verde
 Resultado: parcial. Tarjeta, panel, cascada de filtros y «⧉ Prompt de SX» hechos; `node --test` 338 ok / 0 fallos. Sin revisar en navegador (1200/390 px) — queda esa casilla. Se quitó el arrastre y «Mover a…» de las sesiones (tests viejos ajustados); los manejadores de arrastre quedan inertes.
 Prompt:
 ```text
@@ -146,6 +148,17 @@ Después: **S55**
 ## H19 — Estudiar un plan con Claude
 Historia: Como Eduardo, quiero conversar con Claude sobre un plan que él hizo para que me saque lo técnico, me explique qué le pido en cada paso y me muestre cómo quedó el código, sin intentar mejorar el plan, para estudiarlo y entenderlo.
 Decisiones con Eduardo: motor = Claude Code local (`claude -p`, solo lectura, su suscripción); lo útil se guarda como guía `.md` en `datos/estudio/<proyecto>/<plan>.md` (no en `~/.claude/plans`, que el tablero lee como planes). Plugins/MCP: ninguno.
+
+
+### S54b — Kanban por sesión: revisión visual · **Sonnet** · rama `kanban-sesiones` · ~25k
+Se espera: El Tablero del IEP se ve bien a 1200 y 390 px: tarjetas legibles, panel lateral (pantalla completa en móvil), «Copiar» funciona y el botón «Prompt de SX» aparece. Se comprueba abriendo el tablero con el servidor y mirando ambas anchuras.
+- [ ] [doc] Mirarlo con datos del IEP — abrir el tablero local, pestaña Tablero del IEP, 1200 y 390 px; anotar lo que falle como casillas «(añadido en S54b)»
+- [ ] [fix] Corregir lo que se vea mal — `plantilla.html` CSS `.k-panel`, `.k-tarjeta.sesion`; `node --test 2>&1 | tail -40` en verde
+Prompt:
+```text
+Modelo: Sonnet. Sesión S54b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S54b BACKLOG.md`). Rama `kanban-sesiones`. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S55**
 
 ### S55 — Estudio: servidor · **Opus** · rama `estudio-plan` · ~70k
 Se espera: `POST /api/estudio` responde en streaming con un Claude de solo lectura que explica el plan elegido y puede seguir la conversación; las respuestas se guardan en la guía. Se comprueba con un `claude` falso en los tests, sin llamar al real.
