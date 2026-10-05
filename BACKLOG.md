@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `eficiencia` · E0/E0b hechas (solo texto, sin código ni tests): plan aprobado con 5 ajustes. Decisiones: umbral de Read/`cat` por tokens (~3k, bytes/4) medido sobre la ruta resuelta, nunca por patrón; E2 una semana en modo aviso con log `~/.claude/session-metrics/acotar_lectura.jsonl` y casilla diferida para pasar a bloqueo; experimento effort 2026-10-05→10-11 (Sonnet + effort medio en Sn; métricas tasa Snb y costo mediano por tarea vs 09-28→10-04; criterio propuesto −20 % costo y ≤+5 pts Snb); re-etiquetado de las 156 filas de la bitácora en E4; auditoría repetible separada de E4 como **E7** (no «E4b», la `b` es retrabajo y ensuciaría el experimento); panel de límites con advertencias y calibración visibles. `../PLAN_EFICIENCIA.md` no está bajo git (vive fuera del repo). Orden: E2 → E3 → E4 → E7 → E5 → E6. Siguiente: **E2**.
+- Para retomar (2026-10-04): El plan de eficiencia quedó aprobado con los ajustes del usuario y las casillas de las sesiones siguientes ya los reflejan. Lo próximo es el aviso de lecturas grandes, que la primera semana solo avisa y registra, sin bloquear. Nada roto.
 - 2026-10-04 · rama `eficiencia` (basada en `trello-vista-previa` por ff-only, porque `develop` no tenía H16) · E1 hecha, tests en verde (175 pasan). `backlog.mjs seccion|marcar` con `backlog.test.mjs` (fallaban 5 antes); README y `~/.claude/skills/relevo/SKILL.md` lo usan. No existía plantilla de prompt en `generar.mjs` (solo la coletilla en `plantilla.html`). Siguiente: **E2**.
 - Para retomar (2026-10-04): Ya existe una herramienta para leer solo la sección del backlog que toca y marcar casillas sin cargar el archivo entero, y el cierre de sesión la usa. Todo pasa. Lo que sigue son los avisos que bloquean lecturas demasiado grandes.
 - 2026-10-04 · rama `trello-vista-previa` · plan de eficiencia hecho, solo análisis (sin código): `../PLAN_EFICIENCIA.md` con Partes 1–3 y H16 (E0–E6) abajo. **Pendiente: aprobación del usuario (E0).** Scripts del análisis en `../analisis/` (`analizar.mjs`, `b.mjs`, `c.mjs`, `e.mjs`; `node analizar.mjs AAAA-MM-DD`).
@@ -69,7 +71,8 @@ Historia: Como usuario con plan Team, quiero gastar menos de las ventanas de 5 h
 Plan completo y datos: `../PLAN_EFICIENCIA.md`. Rama `eficiencia` desde `develop`. Plugins/MCP: ninguno.
 
 ### E0 — Aprobación (usuario, sin modelo)
-- [ ] Revisar `PLAN_EFICIENCIA.md`: aprobar/quitar candidatas de la Parte 1 y confirmar orden E1–E6.
+- [x] Revisar `PLAN_EFICIENCIA.md`: aprobar/quitar candidatas de la Parte 1 y confirmar orden E1–E6.
+- [x] E0b: aplicar los ajustes 1–5 del usuario al plan y a las casillas de E2–E5; nueva E7 (auditoría repetible) tras E4. (añadido en E0b)
 
 ### E1 — Extractor de backlog (Sonnet)
 - [x] Test primero `backlog.test.mjs`: `seccion S4b` devuelve solo esa sección con nº de línea; `marcar S4b 2` cambia `[ ]`→`[x]` solo en esa casilla; sección inexistente → código 1. Verlo fallar y anotar cuántos.
@@ -77,24 +80,36 @@ Plan completo y datos: `../PLAN_EFICIENCIA.md`. Rama `eficiencia` desde `develop
 - [x] Prompt de arranque (plantilla en `generar.mjs`) y `~/.claude/skills/relevo/SKILL.md` usan `backlog.mjs seccion`.
 
 ### E2 — Hooks de lectura (Sonnet)
-- [ ] Test primero con entradas JSON de hook: Read sin limit de archivo >300 líneas → bloqueo con sugerencia `grep -n '^#'`; Read de `tool-results` sin limit → bloqueo; `cat archivo` completo por Bash → bloqueo; Read con offset/limit → pasa.
-- [ ] `~/.claude/hooks/acotar_lectura.mjs` (PreToolUse Read|Bash) + aviso PostToolUse si el resultado de Bash ≥2k tokens; alta en `~/.claude/settings.json`.
+- [ ] Test primero `acotar_lectura.test.mjs` con entradas JSON de hook (umbral ~3k tokens = bytes/4): Read sin limit de archivo >3k tokens → aviso con sugerencia `grep -n '^#'` + línea en el log, sin bloqueo; Read de `tool-results` sin limit → aviso; Read con offset/limit → pasa sin log; `cat <ruta>` por Bash → resuelve la ruta, mide con `wc -lc` y avisa solo si supera el umbral; `cat` de archivo chico, `cat x | grep` o ruta no resoluble → pasa (nunca por patrón de texto solo); con `MODO=bloqueo` el primer caso bloquea. Verlo fallar y anotar cuántos.
+- [ ] `~/.claude/hooks/acotar_lectura.mjs` (PreToolUse Read|Bash), modo **aviso** la primera semana: deja pasar, sugiere rango y registra en `~/.claude/session-metrics/acotar_lectura.jsonl` `{fecha, sid, tool, archivo, lineas, tokens, habriaBloqueado}`; interruptor `MODO=aviso|bloqueo`. Aviso PostToolUse si el resultado de Bash ≥2k tokens. Alta en `~/.claude/settings.json`; anotar aquí la fecha de alta.
+- [ ] Tras 7 días desde el alta: revisar el log (falsos positivos, distribución de tokens y líneas), ajustar el umbral y pasar a `MODO=bloqueo`; anotar cifras en `PLAN_EFICIENCIA.md` (fila 1).
 
 ### E3 — Reglas y poda (Sonnet)
 - [ ] `/context` antes: anotar tokens de skills y total inicial.
 - [ ] `~/.claude/CLAUDE.md`: no releer archivos ya leídos (si cambiaron, solo el rango); «Fable solo escalación»; generalizar la línea de salidas largas.
 - [ ] Apagar plugin session-report y las skills sincronizadas que se puedan; `/context` después y anotar diferencia.
 - [ ] `registrar_sesion.sh` guarda `effort.level` en la fila.
+- [ ] Experimento 10c (`PLAN_EFICIENCIA.md` § Experimento 10c): inicio 2026-10-05, corte 2026-10-11 (si E3 cierra después, correr a la semana siguiente y anotar aquí las fechas reales). Sn de ejecución con Sonnet + effort medio. Al corte (necesita E4): tasa Snb/Sn y costo mediano por tarea contra 2026-09-28→10-04; resultados en esa sección del plan + lección en `BITACORA.md`.
 
 ### E4 — Tablero, datos (Opus)
-- [ ] Test primero `metricas_jsonl.test.mjs` con fixture: llamadas, prompts, ctxFinal, ctxMax, tool results >5k.
+- [ ] Test primero `metricas_jsonl.test.mjs` con fixture: llamadas, prompts, ctxFinal, ctxMax, tool results >5k; regex de tarea sobre prompts de ejemplo (`Sesión S4b de BACKLOG_H3.md` → `BACKLOG_H3/S4b`, sin coincidencia → `session_name`); `reetiquetar_bitacora` en `--dry-run` no escribe y cuenta las que salen de «otro».
 - [ ] `metricas_jsonl.mjs`; `registrar_sesion.sh` lo usa y guarda `% 5 h/7 d` (`rate_limits`) al inicio y fin.
-- [ ] Tarea desde el primer prompt (`Sesión (S\w+) de (BACKLOG\S*)`), no `session_name` (se hereda tras `/clear`).
+- [ ] Tarea desde el primer prompt (`Sesión (S\w+) de (BACKLOG\S*)`), no `session_name` (se hereda tras `/clear`). La regex vive en un solo sitio y la usan `registrar_sesion.sh` y el re-etiquetado.
+- [ ] `reetiquetar_bitacora.mjs [--dry-run]`: re-etiqueta las 156 filas históricas de `BITACORA.md` con la misma regex (primer prompt vía `asociar`/`sidsPorProyecto` de `bitacora.mjs`); `--dry-run` muestra antes/después por fila y cuántas salen de «otro». Correrlo en seco, revisar, aplicar y anotar aquí el conteo. E5 (tabla por tipo de tarea) depende de esto.
 - [ ] Badge «modelo ≠ plan» comparando `prompts[].modelo` de `estructura` con `model.id` de la foto.
 
+Después: **E7**.
+
+### E7 — Auditoría repetible (Sonnet; sigue a E4)
+- [ ] Test primero `auditoria.test.mjs` con fixture JSONL: composición del gasto (pesos entrada 1, escritura de caché 2, lectura 0,1, salida 5), tool results >5k, Bash sobre BACKLOG*, `cat` completos, Read sin límite. Verlo fallar y anotar cuántos.
+- [ ] `tablero/auditoria.mjs` portando `../analisis/analizar.mjs` (+ `b.mjs`, `c.mjs`, `e.mjs`) y reutilizando `metricas_jsonl.mjs`; `node generar.mjs --auditoria <AAAA-MM-DD>` (comando `tablero --auditoria`) imprime esas cinco secciones; README.
+- [ ] Correr `--auditoria 2026-10-04` y comprobar que cuadra con las cifras de `PLAN_EFICIENCIA.md` (±2 %); anotar diferencias.
+
+Después: **E5**.
+
 ### E5 — Tablero, vistas (Sonnet)
-- [ ] Test primero en `generar.test.mjs`: umbrales de color (llamadas/prompt <15/15–30/>30; ctx <100k/100–130k/>130k), estimación «quedan ~N sesiones tipo X».
-- [ ] `plantilla.html`: columnas a/b, panel de límites con calibración por ventana, tabla costo por tipo de tarea.
+- [ ] Test primero en `generar.test.mjs`: umbrales de color (llamadas/prompt <15/15–30/>30; ctx <100k/100–130k/>130k), estimación «quedan ~N sesiones tipo X»; el panel de límites renderiza «El % incluye uso fuera de Claude Code», «$ por 1 % se recalcula en cada ventana», la calibración vigente ($ por 1 %, 5 h y 7 d) y la fecha de la última ventana usada.
+- [ ] `plantilla.html`: columnas a/b, panel de límites con calibración por ventana y esas cuatro piezas visibles, tabla costo por tipo de tarea (sobre las tareas re-etiquetadas en E4).
 
 ### E6 — Repo de metodología (Sonnet)
 - [ ] Llevar a `metodologia-claude-code` en orden: CLAUDE.md, relevo, `settings.base.json` (+ hooks nuevos), mod `panel-tablero` y tests, README (tablero, S0/Sn/SNb), rutas únicas. `scripts/escanear.sh` y PR.
