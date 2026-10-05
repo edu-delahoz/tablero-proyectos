@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer, request } from 'node:http'
+import vm from 'node:vm'
 
 const dir = mkdtempSync(join(tmpdir(), 'tablero-srv-'))
 const BACKLOG = join(dir, 'BACKLOG_PRUEBA.md')
@@ -832,4 +833,36 @@ test('metodología (S50): GET /api/metodologia da el grafo sin secretos ni rutas
   assert.ok(!t.includes(dir), 'rutas del home con ~')
   const ajeno = await new Promise((ok, mal) => request({ host: '127.0.0.1', port: puerto, path: '/api/metodologia', headers: { host: `evil.com:${puerto}` } }, (x) => { x.resume(); ok(x.statusCode) }).on('error', mal).end())
   assert.equal(ajeno, 403)
+})
+
+// Metodología viva (S51): la pestaña dibuja el flujo con los datos de /api/metodologia.
+function funcionDe(html, nombre) {
+  const i = html.indexOf(`function ${nombre}(`)
+  assert.ok(i >= 0, `falta function ${nombre} en plantilla.html`)
+  const f = html.indexOf('\n}\n', i)
+  return html.slice(i, f + 2)
+}
+test('metodología (S51): la pestaña pinta un nodo por etapa con su estado y el detalle de la pieza', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  assert.ok(/\['metodologia', 'Metodolog[ií]a'\]/.test(html), 'pestaña «Metodología» en PESTANAS')
+  assert.ok(html.includes('/api/metodologia'), 'la vista pide /api/metodologia')
+  assert.ok(/metodologia:\s*vistaMetodologia/.test(html), 'registrada en VISTAS')
+  const g = await (await fetch(`http://127.0.0.1:${puerto}/api/metodologia`)).json()
+  const ctx = { esc: (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]) }
+  vm.createContext(ctx)
+  vm.runInContext(funcionDe(html, 'htmlMetodologia'), ctx)
+  const pieza = g.piezas.find((p) => p.id === 'bitacora')
+  const out = ctx.htmlMetodologia(g, pieza.id)
+  assert.match(out, /<svg/, 'flujo en SVG en línea')
+  for (const e of g.etapas) {
+    assert.ok(out.includes(`data-etapa="${e.id}"`), `nodo de la etapa ${e.id}`)
+    assert.match(out, new RegExp(`data-etapa="${e.id}"[^>]*class="[^"]*\\bnodo-${{ ok: 'verde', parcial: 'ambar', falta: 'rojo' }[e.estado]}\\b`), `${e.id} en ${e.estado}`)
+  }
+  assert.ok(out.includes(pieza.descripcion.slice(0, 20)), 'qué hace la pieza elegida')
+  assert.ok(out.includes('prueba'), 'proyectos que la usan')
+  for (const est of ['activa', 'instalada', 'falta']) {
+    const p = g.piezas.find((x) => x.estado === est)
+    if (p) assert.match(ctx.htmlMetodologia(g, p.id), new RegExp(`pieza-${{ activa: 'verde', instalada: 'ambar', falta: 'rojo' }[est]}`), `pieza ${est}`)
+  }
+  assert.match(out, /class="meta-lista"/, 'lista vertical para móvil')
 })

@@ -440,6 +440,18 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
 .k-pie { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-top: 4px; font-size: .85em; }
 .k-pie select { font: inherit; max-width: 100%; }
 .k-etq { padding: 0 5px; border: 1px solid var(--borde); font: .8em/1.5 var(--mono); color: var(--suave); }
+/* Metodología viva (S51) */
+.meta-flujo { width: 100%; max-width: 880px; height: auto; display: block; }
+.meta-flujo .flecha { stroke: var(--borde); stroke-width: 1.5; }
+.meta-flujo .nodo { cursor: pointer; } .meta-flujo .nodo rect { fill: var(--panel); stroke: currentColor; stroke-width: 1.5; } .meta-flujo .nodo.sel rect { stroke-width: 3; }
+.meta-flujo .nodo text { fill: var(--texto, currentColor); font: 13px var(--mono); } .meta-flujo .nodo text.sub { fill: var(--suave); font-size: 11px; }
+.nodo-verde, .pieza-verde { color: var(--ok); } .nodo-ambar, .pieza-ambar { color: var(--aviso); } .nodo-rojo, .pieza-rojo { color: var(--peligro); }
+.meta-lista { display: none; list-style: none; padding: 0; margin: 0; } .meta-piezas { list-style: none; padding: 0; margin: 10px 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.meta-lista button, .meta-pieza { font: inherit; color: inherit; background: none; border: 1px solid var(--borde); padding: 4px 8px; cursor: pointer; text-align: left; }
+.meta-lista .meta-etapa button { color: var(--texto, inherit); width: 100%; } .meta-lista .punto { color: currentColor; }
+.meta-pieza { color: var(--texto, inherit); } .meta-pieza .punto { color: currentColor; } .meta-pieza[aria-pressed="true"] { border-color: currentColor; }
+.meta-detalle { margin-top: 8px; } .aviso-meta { color: var(--aviso); }
+@media (max-width: 700px) { .meta-flujo { display: none; } .meta-lista { display: block; } .meta-lista li { margin-bottom: 6px; } .meta-lista button, .meta-pieza { min-height: 44px; } }
 @media (max-width: 700px) {
   .k-cols { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; padding-bottom: 6px; }
   .k-col { flex: 0 0 86%; scroll-snap-align: start; }
@@ -552,7 +564,7 @@ const acciones = (ruta) => `${botonEditar(ruta)}${enVSCode(ruta)}`;
 
 const PESTANAS = [
   ['resumen', 'Resumen'], ['tablero', 'Tablero'], ['backlogs', 'Backlogs'], ['planes', 'Planes'],
-  ['historial', 'Historial'], ['github', 'GitHub'], ['notas', 'Notas'], ['bitacora', 'Bitácora'], ['integraciones', 'Integraciones'],
+  ['historial', 'Historial'], ['github', 'GitHub'], ['notas', 'Notas'], ['bitacora', 'Bitácora'], ['integraciones', 'Integraciones'], ['metodologia', 'Metodología'],
 ];
 const porSincronizar = () => (P.integraciones || []).reduce((a, x) => a + (x.pendientes || 0), 0);
 
@@ -1761,8 +1773,54 @@ if (editable()) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sondearSesiones(); });
 }
 
+// ---------- Metodología viva (S51): flujo con el estado real de cada pieza (GET /api/metodologia) ----------
+let META = null, metaSel = null, metaCargando = false;
+async function cargarMeta() {
+  if (metaCargando) return;
+  metaCargando = true;
+  try { META = await (await fetch('/api/metodologia', { cache: 'no-store' })).json(); } catch { META = { etapas: [], piezas: [], proyectos: [], aristas: [], aviso: 'No pude leer /api/metodologia (¿abriste el tablero sin servidor?).' }; }
+  metaCargando = false;
+  if (pestana === 'metodologia') pintar();
+}
+function htmlMetodologia(g, sel) {
+  const COL = { ok: 'verde', parcial: 'ambar', falta: 'rojo' }, COLP = { activa: 'verde', instalada: 'ambar', falta: 'rojo' };
+  const TXT = { ok: 'todo activo', parcial: 'parcial', falta: 'falta algo' }, TXTP = { activa: 'activa', instalada: 'instalada, sin activar', falta: 'falta' };
+  const pieza = (g.piezas || []).find((p) => p.id === sel);
+  const etapaSel = pieza ? pieza.etapa : (g.etapas || []).some((e) => e.id === sel) ? sel : null;
+  // Posiciones: 4 etapas en fila; Tablero y Bitácora salen del Backlog, una encima de la otra.
+  const pos = {}; (g.etapas || []).forEach((e, i) => { pos[e.id] = i < 4 ? { x: 10 + i * 175, y: 55 } : { x: 10 + 4 * 175, y: i === 4 ? 10 : 100 }; });
+  const W = 150, H = 44;
+  const flechas = (g.aristas || []).filter(([a, b]) => pos[a] && pos[b]).map(([a, b]) => {
+    const x1 = pos[a].x + W, y1 = pos[a].y + H / 2, x2 = pos[b].x, y2 = pos[b].y + H / 2;
+    return `<path class="flecha" d="M${x1} ${y1} C${x1 + 12} ${y1} ${x2 - 12} ${y2} ${x2 - 3} ${y2}" fill="none"/>`;
+  }).join('');
+  const nodos = (g.etapas || []).map((e) => `<g data-etapa="${esc(e.id)}" class="nodo nodo-${COL[e.estado] || 'ambar'}${e.id === etapaSel ? ' sel' : ''}" data-meta="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(e.nombre)}: ${TXT[e.estado] || e.estado}">
+      <rect x="${pos[e.id].x}" y="${pos[e.id].y}" width="${W}" height="${H}" rx="3"/>
+      <text x="${pos[e.id].x + 10}" y="${pos[e.id].y + 19}">${esc(e.nombre)}</text>
+      <text class="sub" x="${pos[e.id].x + 10}" y="${pos[e.id].y + 35}">${TXT[e.estado] || ''} · ${e.piezas.length}</text></g>`).join('');
+  const lista = (g.etapas || []).map((e) => `<li class="meta-etapa nodo-${COL[e.estado] || 'ambar'}"><button data-meta="${esc(e.id)}" aria-pressed="${e.id === etapaSel}"><span class="punto" aria-hidden="true">●</span> <b>${esc(e.nombre)}</b> <span class="suave">${TXT[e.estado] || ''}</span></button></li>`).join('');
+  const piezasDe = (id) => (g.piezas || []).filter((p) => p.etapa === id).map((p) => `<li><button class="meta-pieza pieza-${COLP[p.estado] || 'ambar'}" data-meta="${esc(p.id)}" aria-pressed="${p.id === sel}"><span class="punto" aria-hidden="true">●</span> ${esc(p.nombre)} <span class="suave">${esc(p.tipo)}</span></button></li>`).join('');
+  const usa = (p) => (p.proyectos || []).length ? p.proyectos.map(esc).join(', ') : 'ninguno todavía';
+  const detalle = pieza
+    ? `<h3>${esc(pieza.nombre)} <span class="etq pieza-${COLP[pieza.estado] || 'ambar'}">${TXTP[pieza.estado] || esc(pieza.estado)}</span></h3><p>${esc(pieza.descripcion)}</p>
+       ${pieza.motivo ? `<p class="pieza-rojo">${esc(pieza.motivo)}</p>` : ''}${pieza.ruta ? `<p class="suave">${esc(pieza.ruta)}</p>` : ''}<p><span class="rotulo">Lo usan</span> ${usa(pieza)}</p>`
+    : etapaSel ? `<h3>${esc((g.etapas.find((e) => e.id === etapaSel) || {}).nombre)}</h3><p class="suave">Toca una pieza para ver qué hace y qué proyectos la usan.</p>`
+    : '<p class="suave">Toca una etapa del flujo.</p>';
+  return `${g.aviso ? `<p class="aviso-meta">${esc(g.aviso)}</p>` : ''}<section class="tarjeta meta">
+    <h2><span>Metodología viva</span><small>${(g.proyectos || []).filter((p) => p.conectado).length} proyecto(s) con sesiones</small></h2>
+    <svg class="meta-flujo" viewBox="0 0 880 154" role="group" aria-label="Flujo de la metodología">${flechas}${nodos}</svg>
+    <ul class="meta-lista" aria-label="Etapas">${lista}</ul>
+    ${etapaSel ? `<ul class="meta-piezas">${piezasDe(etapaSel)}</ul>` : ''}
+    <div class="meta-detalle" aria-live="polite">${detalle}</div></section>`;
+}
+function vistaMetodologia() {
+  if (!META) { cargarMeta(); return '<p class="suave">Leyendo la metodología instalada…</p>'; }
+  return htmlMetodologia(META, metaSel);
+}
+
 const VISTAS = {
   tablero: vistaKanban,
+  metodologia: vistaMetodologia,
   resumen() {
     const bl = P.backlogs.filter((b) => !b.esPlan);
     const g = P.git;
@@ -2145,7 +2203,13 @@ document.addEventListener('toggle', (e) => {
   const id = e.target?.dataset?.retomarDet;
   if (id) guardar(`tablero.retomar.${id}`, e.target.open ? 'abierta' : 'plegada');
 }, true);
+document.addEventListener('keydown', (e) => {
+  const mt = e.target.closest?.('g[data-meta]');
+  if (mt && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); metaSel = mt.dataset.meta; pintar(); }
+});
 document.addEventListener('click', (e) => {
+  const mt = e.target.closest('[data-meta]');
+  if (mt) { metaSel = mt.dataset.meta; pintar(); return; }
   const b = e.target.closest('button');
   if (!b) return;
   if ('copiar' in b.dataset) {
