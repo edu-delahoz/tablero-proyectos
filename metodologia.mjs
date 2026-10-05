@@ -23,6 +23,7 @@ const INFO = {
   statusline: ['sesion', 'Línea de estado de la terminal con contexto y costo.'],
   'hook:vigilar_contexto.sh': ['sesion', 'Avisa a 110k de contexto y pide relevo a 130k.'],
   'hook:acotar_lectura.mjs': ['sesion', 'Recorta lecturas y salidas largas para no llenar el contexto.'],
+  'hook:vigilar_prompt.mjs': ['sesion', 'Avisa si el prompt parece de otra sesión.'],
   'hook:eventos_agentes.mjs': ['sesion', 'Anota qué hace cada agente y subagente (sin prompts ni contenido) para la oficina.'],
   'hook:resumen_semanal.sh': ['sesion', 'Genera el resumen semanal al abrir sesión (una vez por semana).'],
   'hook:generar.mjs --hook-inicio': ['sesion', 'Al abrir sesión, cuenta en qué va el proyecto y las notas abiertas.'],
@@ -140,7 +141,17 @@ export function grafoMetodologia({ home, catalogo, proyectos = [], settings, tra
     return existe(ruta) ? { estado: 'activa', ruta } : { estado: 'falta', motivo: 'no instalado', ruta }
   }
 
-  const piezas = catalogo.map((p) => {
+  // Hooks que solo viven en el settings.json del usuario (no en settings.base.json) también son piezas.
+  const conocidos = new Set(catalogo.map((p) => p.id))
+  const sueltos = []
+  for (const { evento, cmd } of cmds) {
+    const h = hookDe(cmd)
+    if (!h) continue
+    let p = sueltos.find((x) => x.id === h.id)
+    if (!p && !conocidos.has(h.id)) sueltos.push(p = { id: h.id, tipo: 'hook', nombre: h.flag ? `${h.script} ${h.flag}` : h.script, eventos: [] })
+    if (p && !p.eventos.includes(evento)) p.eventos.push(evento)
+  }
+  const piezas = [...catalogo, ...sueltos].map((p) => {
     const [etapa, descripcion] = INFO[p.id] || ['sesion', `${p.tipo} ${p.nombre}`]
     const e = estadoDe(p)
     return {

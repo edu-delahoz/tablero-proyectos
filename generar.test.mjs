@@ -881,3 +881,35 @@ test('las sesiones del tutor de estudio («Plan a estudiar:») no cuentan como t
   const h = hechosRetomar({ transcripciones: '-Users-x-est' }, null, { transcripciones: tr, ahora: new Date(ahora) })
   assert.equal(h.ultimaSesionClaude.titulo, 'Login', 'la última sesión de Claude ignora al tutor')
 })
+
+// ---------- S-OF2: oficina pixel en canvas ----------
+// Saca una función de plantilla.html por su nombre (contando llaves) para probarla de verdad, no solo por texto.
+const fnPlantilla = (html, nombre) => {
+  const i = html.indexOf(`function ${nombre}(`)
+  assert.ok(i >= 0, `existe ${nombre}`)
+  let n = 0, j = html.indexOf('{', i)
+  for (; j < html.length; j++) { if (html[j] === '{') n++; else if (html[j] === '}' && --n === 0) break }
+  return html.slice(i, j + 1)
+}
+
+test('S-OF2: plantilla.html — la oficina se dibuja en canvas pixel, sin emojis ni la escena CSS vieja', () => {
+  const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
+  const cuerpo = fnPlantilla(html, 'htmlOficina')
+  assert.ok(cuerpo.includes('<canvas'), 'htmlOficina pinta un <canvas>')
+  for (const e of ['💤', '💭', '📖', '✍️', '⌨️', '🔎', '⏳']) assert.ok(!html.includes(e), `sin el emoji ${e}`)
+  for (const v of ['ICONO_OFICINA', 'LUGAR_OFICINA', '.personaje', '.oficina .estante']) assert.ok(!html.includes(v), `sin ${v}`)
+  for (const t of ['image-rendering: pixelated', 'requestAnimationFrame', 'prefers-reduced-motion', 'a.apariencia', 'a.casilla']) assert.ok(html.includes(t), t)
+})
+
+test('S-OF2: plantilla.html — placa «proyecto · SX» (subagente: su tipo) y lista móvil con mini-avatar', () => {
+  const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
+  const placaOficina = new Function(`${fnPlantilla(html, 'placaOficina')}; return placaOficina`)()
+  assert.equal(placaOficina({ principal: true, proyecto: 'tablero', etiqueta: 'S65' }), 'tablero · S65')
+  assert.equal(placaOficina({ principal: true, proyecto: null, etiqueta: 'S65' }), 'S65')
+  assert.equal(placaOficina({ principal: true, proyecto: 'tablero', etiqueta: null }), 'tablero')
+  assert.equal(placaOficina({ principal: false, tipo: 'buscador', proyecto: 'tablero', etiqueta: 'S65' }), 'buscador')
+  assert.equal(placaOficina({ principal: false, tipo: null, proyecto: 'tablero', etiqueta: 'S65' }), 'agente')
+  const cuerpo = fnPlantilla(html, 'htmlOficina')
+  assert.ok(cuerpo.includes('placaOficina(a)'), 'la escena y la lista usan la placa')
+  assert.ok(/oficina-lista[\s\S]*mini-avatar/.test(cuerpo), 'cada fila de la lista móvil lleva su mini-avatar')
+})

@@ -77,3 +77,104 @@ export function estadoOficina(eventos = [], colas = [], ahora = Date.now()) {
   vivos.sort((x, y) => reciente.get(y.sid) - reciente.get(x.sid) || x.sid.localeCompare(y.sid) || y.principal - x.principal || Date.parse(x.desde) - Date.parse(y.desde))
   return { agentes: vivos.map(({ _m, ...a }) => a) }
 }
+
+// ---------- S-OF1: placa, apariencia y reparto en salas ----------
+// Placa: la sesión del backlog («Sesión SX de …» en el prompt de arranque), si no la primera S de las claves, la rama o el título.
+const RE_SESION = /Sesión (S[\w-]*\d+[a-z]?) de/
+export const sesionDe = (prompts = []) => { for (const t of prompts) { const m = String(t).match(RE_SESION); if (m) return m[1] } return null }
+export const etiquetaDe = (r) => r ? (r.sesion || (r.foco?.claves || []).find((c) => c.startsWith('S')) || r.rama || r.titulo || null) : null
+
+// Personaje determinista por sesión; el subagente viste la camiseta de su principal y lleva otro pelo.
+const PALETAS = {
+  camiseta: ['#e05d5d', '#4f8fd6', '#4fb07a', '#e3a33b', '#9b6ad6', '#2fb3b3', '#d66aa8', '#7c8a99'],
+  pelo: ['#2b1d14', '#6b4226', '#c98b3c', '#e8d18a', '#8a8f98', '#b5432f'],
+  piel: ['#f6d3b3', '#e0ac85', '#b97b56', '#7d4f33'],
+  peinado: ['corto', 'largo', 'rapado', 'mono'],
+}
+const hash = (s) => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.codePointAt(0), 16777619); return h >>> 0 }
+const elige = (lista, h) => lista[h % lista.length]
+export function aparienciaDe(sid, agente = 'principal') {
+  const hs = hash(sid)
+  const base = { camiseta: elige(PALETAS.camiseta, hs), pelo: elige(PALETAS.pelo, hs >>> 3), piel: elige(PALETAS.piel, hs >>> 7), peinado: elige(PALETAS.peinado, hs >>> 11) }
+  if (agente === 'principal') return base
+  const ha = hash(`${sid}\u0000${agente}`)
+  let i = (ha >>> 3) % PALETAS.pelo.length
+  if (PALETAS.pelo[i] === base.pelo) i = (i + 1) % PALETAS.pelo.length
+  return { camiseta: base.camiseta, pelo: PALETAS.pelo[i], piel: elige(PALETAS.piel, ha >>> 7), peinado: elige(PALETAS.peinado, ha >>> 11) }
+}
+
+// Sala: rejilla con paredes en el borde. Escritorios en la fila 3 (silla en la 4), estante arriba, terminal a la derecha,
+// sofá abajo. Cada sala crece hacia la derecha con sus escritorios, así las casillas ya dadas siguen valiendo.
+const ALTO_SALA = 10
+const FILA_ESCRITORIO = 3
+const anchoSala = (n) => Math.max(12, 4 * n + 6)
+const ZONA = { leyendo: 'estante', buscando: 'estante', ejecutando: 'terminal', esperando: 'sofa', quieto: 'sofa', escribiendo: 'escritorio', pensando: 'escritorio' }
+const zonaDe = (accion) => ZONA[accion] || 'escritorio'
+const claveAgente = (a) => `${a.sid}\u0000${a.agente}`
+const silla = (i) => ({ x: 2 + 4 * i, y: FILA_ESCRITORIO + 1 })
+const anclaDe = (zona, sala) => zona === 'estante' ? { x: 1, y: 1 } : zona === 'terminal' ? { x: sala.ancho - 2, y: Math.floor(ALTO_SALA / 2) } : { x: 1, y: ALTO_SALA - 2 }
+
+// → { salas: [{ id, proyecto, ancho, alto, escritorios: [{ sid, x, y }] }], agentes: [{ …a, casilla: { sala, x, y, zona } }] }
+// Puro. `previa` (el resultado del sondeo anterior) mantiene salas, escritorios y casillas: solo se mueve quien cambia de zona.
+export function distribuirOficina(agentes = [], previa = null) {
+  const idSala = (a) => a.proyecto || 'otros'
+  // Salas: las de antes en su orden; las nuevas, por la llegada más temprana de sus agentes.
+  const llegada = new Map()
+  for (const a of agentes) { const m = Date.parse(a.desde) || 0; const id = idSala(a); llegada.set(id, Math.min(llegada.get(id) ?? Infinity, m)) }
+  const antes = (previa?.salas || []).map((s) => s.id).filter((id) => llegada.has(id))
+  const nuevas = [...llegada.keys()].filter((id) => !antes.includes(id)).sort((x, y) => llegada.get(x) - llegada.get(y) || x.localeCompare(y))
+  const salas = [...antes, ...nuevas].map((id) => {
+    const vieja = previa?.salas?.find((s) => s.id === id)
+    const presentes = new Set(agentes.filter((a) => a.principal && idSala(a) === id).map((a) => a.sid))
+    const puestos = (vieja?.escritorios || []).map((e) => (presentes.has(e.sid) ? e.sid : null))
+    const sinPuesto = agentes.filter((a) => a.principal && idSala(a) === id && !puestos.includes(a.sid)).sort((x, y) => (Date.parse(x.desde) || 0) - (Date.parse(y.desde) || 0) || x.sid.localeCompare(y.sid))
+    for (const a of sinPuesto) { const libre = puestos.indexOf(null); if (libre >= 0) puestos[libre] = a.sid; else puestos.push(a.sid) }
+    while (puestos.length && puestos.at(-1) === null) puestos.pop()
+    const ancho = Math.max(anchoSala(puestos.length), vieja?.ancho || 0)
+    return { id, proyecto: id === 'otros' ? null : id, ancho, alto: ALTO_SALA, escritorios: puestos.map((sid, i) => ({ sid, x: silla(i).x, y: FILA_ESCRITORIO })) }
+  })
+  const porId = new Map(salas.map((s) => [s.id, s]))
+  const ocupadas = new Map(salas.map((s) => [s.id, new Set()]))
+  const k = (x, y) => `${x},${y}`
+  // Bloqueadas: los muebles y las sillas (cada silla es solo de su dueño).
+  const bloqueada = (sala, x, y, quien) => sala.escritorios.some((e, i) => (e.x === x && e.y === y) || (silla(i).x === x && silla(i).y === y && e.sid !== quien))
+  // El sprite de pie mide 24 px y la casilla 16: una casilla ocupada tapa también la de arriba y la de abajo.
+  const libre = (sala, x, y, quien) => x >= 1 && x <= sala.ancho - 2 && y >= 1 && y <= sala.alto - 2 && !bloqueada(sala, x, y, quien) && ![-1, 0, 1].some((dy) => ocupadas.get(sala.id).has(k(x, y + dy)))
+  const masCercana = (sala, ancla, quien) => {
+    let mejor = null
+    for (let y = 1; y <= sala.alto - 2; y++) for (let x = 1; x <= sala.ancho - 2; x++) {
+      if (!libre(sala, x, y, quien)) continue
+      const d = Math.abs(x - ancla.x) + Math.abs(y - ancla.y)
+      if (!mejor || d < mejor.d) mejor = { x, y, d }
+    }
+    return mejor
+  }
+  const previas = new Map((previa?.agentes || []).map((a) => [claveAgente(a), a.casilla]))
+  const destino = (a) => {
+    const sala = porId.get(idSala(a))
+    const zona = zonaDe(a.accion)
+    if (zona !== 'escritorio') return { sala, zona, ancla: anclaDe(zona, sala) }
+    const i = sala.escritorios.findIndex((e) => e.sid === a.sid)
+    if (i >= 0) return { sala, zona, ancla: silla(i), propia: a.principal }
+    return { sala, zona, ancla: { x: Math.floor(sala.ancho / 2), y: ALTO_SALA - 3 } }
+  }
+  const casillas = new Map()
+  // 1) Quien sigue en la misma sala y zona conserva su casilla.
+  for (const a of agentes) {
+    const c = previas.get(claveAgente(a)), d = destino(a)
+    if (c && c.sala === d.sala.id && c.zona === d.zona && libre(d.sala, c.x, c.y, a.principal ? a.sid : null)) {
+      ocupadas.get(d.sala.id).add(k(c.x, c.y)); casillas.set(claveAgente(a), c)
+    }
+  }
+  // 2) Los demás, principales primero, a la libre más cercana a su ancla (el principal a su silla).
+  const resto = agentes.filter((a) => !casillas.has(claveAgente(a))).sort((x, y) => y.principal - x.principal || x.sid.localeCompare(y.sid) || x.agente.localeCompare(y.agente))
+  for (const a of resto) {
+    const d = destino(a)
+    const quien = a.principal ? a.sid : null
+    const p = d.propia && libre(d.sala, d.ancla.x, d.ancla.y, quien) ? d.ancla : masCercana(d.sala, d.ancla, quien)
+    if (!p) continue // sala llena: no debería pasar, crece con los escritorios
+    ocupadas.get(d.sala.id).add(k(p.x, p.y))
+    casillas.set(claveAgente(a), { sala: d.sala.id, x: p.x, y: p.y, zona: d.zona })
+  }
+  return { salas, agentes: agentes.map((a) => ({ ...a, casilla: casillas.get(claveAgente(a)) || null })) }
+}

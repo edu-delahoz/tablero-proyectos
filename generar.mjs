@@ -27,7 +27,7 @@ import { parsearBitacora, sidsPorProyecto, asociar, conFeatures, editarFila, has
 import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
 import { semaforoLlamadas, semaforoCtx, eficienciaDe } from './eficiencia.mjs'
 import { metodologia } from './metodologia.mjs'
-import { estadoOficina, VIGENCIA } from './oficina.mjs'
+import { estadoOficina, VIGENCIA, sesionDe, etiquetaDe, aparienciaDe, distribuirOficina } from './oficina.mjs'
 import { MARCA_ESTUDIO, argsEstudio, promptEstudio, preguntaDe, lanzarEstudio, sesionValida, rutaGuia, anadirAGuia } from './estudio.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
@@ -1319,6 +1319,7 @@ function resumenSesion(ruta, size) {
   return {
     titulo: ultimo((o) => o?.customTitle) || ultimo((o) => o?.aiTitle) || null,
     rama: ultimo((o) => o?.gitBranch),
+    sesion: sesionDe(cabeza.map(textoUsuario).filter(Boolean)),
     inicio: cabeza.find((o) => o?.timestamp)?.timestamp || null,
     archivos,
     ultimoPrompt: prompts.at(-1)?.slice(0, 200) ?? null,
@@ -1411,11 +1412,28 @@ function proyectoDe(lista, cwd, carpeta) {
   return (lista.find((p) => p.transcripciones && c && (c === p.transcripciones || c.startsWith(`${p.transcripciones}-`)))
     || lista.find((p) => [p.repo, ...(p.docs || [])].some(dentro)))?.id || null
 }
+// Último reparto: entre sondeos solo se mueve quien cambia de zona.
+let previaOficina = null
 export function oficina(lista, { eventos = leerEventos(), dir = TRANSCRIPCIONES, ahora = Date.now() } = {}) {
   const colas = colasOficina(dir, ahora)
   const carpetas = new Map(colas.map((c) => [`${c.sid}\u0000${c.agente}`, c.carpeta]))
   const { agentes } = estadoOficina(eventos, colas, ahora)
-  return { agentes: agentes.map((a) => ({ ...a, proyecto: proyectoDe(lista, a.cwd, carpetas.get(`${a.sid}\u0000${a.agente}`)) })) }
+  // Placa de cada sesión desde la transcripción de su principal (ya en caché); nunca sale el prompt.
+  const carpetaSid = new Map(colas.map((c) => [c.sid, c.carpeta]))
+  const etiquetas = new Map()
+  const etiqueta = (sid) => {
+    if (!etiquetas.has(sid)) {
+      const ruta = carpetaSid.has(sid) ? join(dir, carpetaSid.get(sid), `${sid}.jsonl`) : null
+      const st = ruta && statSync(ruta, { throwIfNoEntry: false })
+      etiquetas.set(sid, st ? etiquetaDe(resumenCacheado(ruta, st).r) : null)
+    }
+    return etiquetas.get(sid)
+  }
+  const con = agentes.map((a) => ({ ...a, proyecto: proyectoDe(lista, a.cwd, carpetas.get(`${a.sid}\u0000${a.agente}`)), etiqueta: etiqueta(a.sid), apariencia: aparienciaDe(a.sid, a.agente) }))
+  previaOficina = distribuirOficina(con, previaOficina)
+  // Sala del proyecto actual (donde corre el tablero): la única abierta por defecto en la pestaña Oficina.
+  const actual = proyectoDe(lista, process.cwd())
+  return { ...previaOficina, salas: previaOficina.salas.map((s) => ({ ...s, actual: !!actual && s.proyecto === actual })) }
 }
 
 // Rama de una sección: la de su título, la del hito, o «Rama `x`» en el texto bajo el título del hito.
