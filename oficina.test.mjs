@@ -6,7 +6,7 @@ import { tmpdir, homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
-import { estadoOficina, accionDe } from './oficina.mjs'
+import { estadoOficina, accionDe, sesionDe, etiquetaDe, aparienciaDe, distribuirOficina } from './oficina.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const FIX = join(AQUI, 'fixtures', 'eventos')
@@ -86,6 +86,98 @@ test('estadoOficina: respaldo con colas .jsonl cuando la sesión no tiene avisos
   assert.equal(de(r, 's9', 'principal').accion, 'quieto', 'terminó su turno → quieto')
   assert.equal(de(r, 's1', 'principal').fuente, 'hook')
   assert.equal(de(r, 's1', 'principal').accion, 'escribiendo')
+})
+
+// ---------- S-OF1: placa, apariencia y reparto sin solapes ----------
+test('sesionDe y etiquetaDe: la placa es la sesión del backlog, si no la rama, si no el título', () => {
+  assert.equal(sesionDe(['Modelo: Opus. Sesión S65 de /x/BACKLOG.md (léela…)']), 'S65')
+  assert.equal(sesionDe(['hola', 'Sesión S-OF1 de BACKLOG_OFICINA.md']), 'S-OF1')
+  assert.equal(sesionDe(['Sesión S57c de BACKLOG.md']), 'S57c')
+  assert.equal(sesionDe(['arregla el S3 que falló']), null, 'sin «Sesión SX de» no hay sesión')
+  assert.equal(etiquetaDe({ sesion: 'S65', foco: { claves: ['H2', 'S3'] }, rama: 'r', titulo: 't' }), 'S65')
+  assert.equal(etiquetaDe({ sesion: null, foco: { claves: ['H2', 'S3', 'S4'] }, rama: 'r', titulo: 't' }), 'S3', 'primera S de las claves')
+  assert.equal(etiquetaDe({ sesion: null, foco: { claves: ['H2'] }, rama: 'oficina-pixel', titulo: 't' }), 'oficina-pixel')
+  assert.equal(etiquetaDe({ sesion: null, foco: { claves: [] }, rama: null, titulo: 'Arreglar login' }), 'Arreglar login')
+  assert.equal(etiquetaDe(null), null)
+})
+
+test('aparienciaDe: determinista; el subagente lleva la camiseta de su principal y otro pelo', () => {
+  const p = aparienciaDe('sid-uno', 'principal')
+  assert.deepEqual(Object.keys(p).sort(), ['camiseta', 'peinado', 'pelo', 'piel'])
+  assert.deepEqual(aparienciaDe('sid-uno', 'principal'), p, 'misma entrada, mismo personaje')
+  for (const ag of ['a1', 'a2', 'b7', 'xyz']) {
+    const s = aparienciaDe('sid-uno', ag)
+    assert.equal(s.camiseta, p.camiseta, `${ag}: camiseta del equipo`)
+    assert.notEqual(s.pelo, p.pelo, `${ag}: se distingue del principal`)
+  }
+  const camisetas = new Set(['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8'].map((s) => aparienciaDe(s, 'principal').camiseta))
+  assert.ok(camisetas.size >= 4, 'sesiones distintas, camisetas variadas')
+})
+
+const ag = (sid, agente, proyecto, accion, desde = '2026-10-05T11:00:00Z') => ({ sid, agente, principal: agente === 'principal', proyecto, accion, desde })
+const OCHO = [
+  ag('p1', 'principal', 'kanban', 'escribiendo', '2026-10-05T10:00:00Z'), ag('p1', 'a1', 'kanban', 'leyendo'), ag('p1', 'a2', 'kanban', 'leyendo'),
+  ag('p2', 'principal', 'kanban', 'ejecutando', '2026-10-05T10:05:00Z'), ag('p2', 'b1', 'kanban', 'escribiendo'),
+  ag('p3', 'principal', 'iep', 'quieto', '2026-10-05T10:10:00Z'), ag('p3', 'c1', 'iep', 'buscando'), ag('p3', 'c2', 'iep', 'pensando'),
+]
+const clave = (a) => `${a.sid}/${a.agente}`
+const posiciones = (r) => Object.fromEntries(r.agentes.map((a) => [clave(a), `${a.casilla.sala}:${a.casilla.x},${a.casilla.y}`]))
+
+test('distribuirOficina: una sala por proyecto y cada agente en su casilla, sin compartirla', () => {
+  const r = distribuirOficina(OCHO)
+  assert.deepEqual(r.salas.map((s) => s.proyecto), ['kanban', 'iep'], 'orden estable por llegada')
+  assert.equal(r.agentes.length, 8)
+  const pos = Object.values(posiciones(r))
+  assert.equal(new Set(pos).size, 8, `sin solapes: ${pos}`)
+  for (const a of r.agentes) {
+    const sala = r.salas.find((s) => s.id === a.casilla.sala)
+    assert.equal(sala.proyecto, a.proyecto, `${clave(a)} en la sala de su proyecto`)
+    assert.ok(a.casilla.x >= 0 && a.casilla.x < sala.ancho && a.casilla.y >= 0 && a.casilla.y < sala.alto, `${clave(a)} dentro de la sala`)
+  }
+  const kanban = r.salas.find((s) => s.proyecto === 'kanban')
+  assert.equal(kanban.escritorios.filter((e) => e.sid).length, 2, 'un escritorio por principal')
+  const p1 = r.agentes.find((a) => clave(a) === 'p1/principal')
+  assert.equal(p1.casilla.zona, 'escritorio', 'escribiendo → en su escritorio')
+  assert.equal(r.agentes.find((a) => clave(a) === 'p1/a1').casilla.zona, 'estante', 'leyendo → estante')
+  assert.equal(r.agentes.find((a) => clave(a) === 'p2/principal').casilla.zona, 'terminal', 'ejecutando → terminal')
+  assert.equal(r.agentes.find((a) => clave(a) === 'p3/principal').casilla.zona, 'sofa', 'quieto → sofá')
+  assert.deepEqual(distribuirOficina(OCHO).agentes.map((a) => a.casilla), r.agentes.map((a) => a.casilla), 'determinista')
+})
+
+test('distribuirOficina: nadie se encima (el sprite mide 24 px y la casilla 16: ni misma columna con filas contiguas)', () => {
+  const mk = (sid, agente, accion) => ({ sid, agente, principal: agente === 'principal', proyecto: 'demo', accion, desde: '2026-10-05T11:00:00Z' })
+  for (const zona of [['quieto', 'esperando'], ['ejecutando', 'ejecutando'], ['leyendo', 'buscando']]) {
+    const ags = [mk('a', 'principal', zona[0]), mk('b', 'principal', zona[1]), mk('c', 'principal', zona[0]), mk('a', 'x1', zona[1]), mk('b', 'x2', zona[0])]
+    const r = distribuirOficina(ags)
+    const cs = r.agentes.map((a) => a.casilla)
+    for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+      const solapa = cs[i].sala === cs[j].sala && cs[i].x === cs[j].x && Math.abs(cs[i].y - cs[j].y) <= 1
+      assert.ok(!solapa, `${zona}: ${JSON.stringify(cs[i])} y ${JSON.stringify(cs[j])} se encimarían`)
+    }
+  }
+})
+
+test('distribuirOficina: si uno cambia de acción los demás no se mueven; quien llega no desplaza a nadie', () => {
+  const r1 = distribuirOficina(OCHO)
+  const antes = posiciones(r1)
+  const cambio = OCHO.map((a) => clave(a) === 'p1/a1' ? { ...a, accion: 'ejecutando' } : a)
+  const r2 = distribuirOficina(cambio, r1)
+  const despues = posiciones(r2)
+  for (const k of Object.keys(antes)) if (k !== 'p1/a1') assert.equal(despues[k], antes[k], `${k} no se movió`)
+  assert.notEqual(despues['p1/a1'], antes['p1/a1'], 'el que cambió de acción sí se mueve')
+  assert.equal(new Set(Object.values(despues)).size, 8)
+  const llegan = [...cambio, ag('p4', 'principal', 'kanban', 'leyendo', '2026-10-05T11:30:00Z'), ag('p4', 'd1', 'kanban', 'ejecutando'), ag('p5', 'principal', 'nuevo', 'escribiendo')]
+  const r3 = distribuirOficina(llegan, r2)
+  const tras = posiciones(r3)
+  for (const k of Object.keys(despues)) assert.equal(tras[k], despues[k], `${k} sigue donde estaba`)
+  assert.equal(new Set(Object.values(tras)).size, 11, 'sin solapes con los recién llegados')
+  assert.deepEqual(r3.salas.map((s) => s.proyecto), ['kanban', 'iep', 'nuevo'], 'la sala nueva va al final')
+  // Un principal que se va libera su escritorio sin mover los de los demás.
+  const sinP2 = llegan.filter((a) => a.sid !== 'p2')
+  const r4 = distribuirOficina(sinP2, r3)
+  const esc = (r, sid) => r.salas.find((s) => s.proyecto === 'kanban').escritorios.find((e) => e.sid === sid)
+  assert.deepEqual(esc(r4, 'p1'), esc(r3, 'p1'))
+  assert.deepEqual(esc(r4, 'p4'), esc(r3, 'p4'))
 })
 
 // ---------- Hook: claude/hooks/eventos_agentes.mjs del repo metodologia-claude-code ----------

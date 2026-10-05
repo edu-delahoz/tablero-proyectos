@@ -148,7 +148,7 @@
 Historia: Como Eduardo, quiero que lo que noté al probar Tablero, Estudio, Oficina y móvil quede anotado, para atenderlo cuando toque y no ahora.
 Origen: pruebas a mano del 2026-10-05. Sin sesión definida aún: se planifica cuando Eduardo lo pida. Plugins/MCP: ninguno.
 - [ ] [mejora] Estudio: mejoras que Eduardo irá anotando al usarlo (por ahora «está bien») — `plantilla.html` `panelEstudio`
-- [ ] [mejora] Oficina: aspecto gráfico más trabajado (Eduardo la usará unos días y anotará problemas) — `plantilla.html` `htmlOficina`
+- [x] [mejora] Oficina: aspecto gráfico más trabajado (Eduardo la usará unos días y anotará problemas) — `plantilla.html` `htmlOficina`
 - [ ] [prueba] Probar las vistas nuevas en el móvil (pendiente de Eduardo; ver también la nota de experiencia full móvil)
 
 ### S63 — Limpieza: cerrar en el backlog lo que ya está hecho · **Sonnet** · rama `limpieza-backlog` (sale de `develop`) · ~40k
@@ -194,7 +194,7 @@ Resultado (2026-10-05, Sonnet): Cumplido salvo la re-medición (→ S61b). `ofic
 - [x] [test] Suite y formato en verde tras el merge — `node --test 2>&1 | tail -20` (copiar `proyectos.json` del checkout principal si falta: trampa de S58), `node verificar_backlog.mjs --formato` (366 pasan, 2 omitidos, 0 fallan; formato OK)
 - [-] [verificación] Re-medir la lectura del backlog — `node generar.mjs --auditoria <2026-10-07 o posterior>`: objetivo «Bash sobre BACKLOG» ≤ 40 llamadas / ≤ 40k; anotar cifras en «Resultado:» (si aún no hay 2 días de uso, dejarla `[-] → S61b` con la fecha) → S61b: aún no hay 2 días de uso (hoy 2026-10-05); correr desde 2026-10-07
 - [x] [docs] Fecha de E2 en el Estado — el hook `acotar_lectura` pasa a bloqueo cuando haya 7 días de `~/.claude/session-metrics/acotar_lectura.jsonl` (ver la casilla abierta de E2): anotar la fecha concreta (el log empezó el 2026-10-05 → bloqueo desde 2026-10-12)
-- [x] [docs] PRs pendientes, solo con permiso de Eduardo — tablero `oficina-agentes → develop` y `metodologia-claude-code` `oficina-agentes → develop` (GraphQL de `gh` puede estar limitado: usar REST `gh api repos/…/pulls`) (hecho: tablero #19 mergeado el 2026-10-05; `metodologia-claude-code` #4 mergeado el 2026-10-05)
+- [x] [docs] PRs pendientes, solo con permiso de Eduardo — tablero `oficina-agentes → develop` y `metodologia-claude-code` `oficina-agentes → develop` (GraphQL de `gh` puede estar limitado: usar REST `gh api repos/…/pulls`) → hechos: tablero PR #19 y `metodologia-claude-code` PR #4 mergeados el 2026-10-05 (verificado en S-OF1)
 
 Prompt:
 ```text

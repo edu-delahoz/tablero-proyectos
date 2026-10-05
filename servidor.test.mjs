@@ -712,8 +712,9 @@ test('/api/oficina (S57): agentes desde el hook y, sin hook, desde la transcripc
   mkdirSync(dirname(EVENTOS), { recursive: true })
   const ev = (o) => JSON.stringify({ t: ahora(), sid: 'of1', agente: 'principal', tipo: null, herramienta: null, archivo: null, cwd: '/prueba/sub', ...o }) + '\n'
   writeFileSync(EVENTOS, ev({ evento: 'PreToolUse', herramienta: 'Read', archivo: 'BACKLOG_PRUEBA.md' }) + ev({ evento: 'SubagentStart', agente: 'ag1', tipo: 'buscador' }) + ev({ evento: 'PreToolUse', agente: 'ag1', tipo: 'buscador', herramienta: 'Grep' }))
+  writeFileSync(join(TR, '-prueba', 'of1.jsonl'), JSON.stringify({ type: 'user', cwd: dir, gitBranch: 'rama-of1', timestamp: ahora(), message: { content: 'Modelo: Opus. Sesión S65 de BACKLOG_OTRO.md, primera casilla' } }) + '\n')
   const cola = join(TR, '-prueba', 'oooo1111-0000.jsonl')
-  writeFileSync(cola, JSON.stringify({ type: 'user', cwd: dir, timestamp: ahora(), message: { content: 'hola' } }) + '\n' + JSON.stringify({ type: 'assistant', cwd: dir, message: { content: [{ type: 'tool_use', id: 'u1', name: 'Edit', input: { file_path: join(dir, 'x.mjs'), old_string: 'SECRETO' } }] } }) + '\n')
+  writeFileSync(cola, JSON.stringify({ type: 'user', cwd: dir, gitBranch: 'rama-oooo', timestamp: ahora(), message: { content: 'hola' } }) + '\n' + JSON.stringify({ type: 'assistant', cwd: dir, message: { content: [{ type: 'tool_use', id: 'u1', name: 'Edit', input: { file_path: join(dir, 'x.mjs'), old_string: 'SECRETO' } }] } }) + '\n')
   const v = (await get('/api/version')).json.version
   const r = await get('/api/oficina')
   assert.equal(r.estado, 200)
@@ -727,6 +728,21 @@ test('/api/oficina (S57): agentes desde el hook y, sin hook, desde la transcripc
   assert.equal(t.archivo, 'x.mjs')
   assert.equal(t.proyecto, 'prueba', 'la carpeta de la transcripción manda sobre el cwd')
   assert.ok(!JSON.stringify(r.json).includes('SECRETO'), 'nunca contenido')
+  // S-OF1: placa, apariencia, casilla propia y salas por proyecto.
+  const p = de('of1', 'principal'), s = de('of1', 'ag1')
+  assert.equal(p.etiqueta, 'S65', '«Sesión S65 de …» en la cabeza de su transcripción')
+  assert.equal(s.etiqueta, 'S65', 'el subagente lleva la placa de su sesión')
+  assert.equal(t.etiqueta, 'rama-oooo', 'sin SX → la rama')
+  for (const a of r.json.agentes) {
+    assert.deepEqual(Object.keys(a.apariencia || {}).sort(), ['camiseta', 'peinado', 'pelo', 'piel'], `${a.sid}/${a.agente}: apariencia`)
+    assert.ok(a.casilla && typeof a.casilla.x === 'number' && typeof a.casilla.y === 'number', `${a.sid}/${a.agente}: casilla`)
+  }
+  assert.equal(s.apariencia.camiseta, p.apariencia.camiseta)
+  const pos = r.json.agentes.map((a) => `${a.casilla.sala}:${a.casilla.x},${a.casilla.y}`)
+  assert.equal(new Set(pos).size, pos.length, 'nadie comparte casilla')
+  assert.ok(Array.isArray(r.json.salas) && r.json.salas.some((x) => x.proyecto === 'prueba'), 'una sala para «prueba»')
+  assert.ok(r.json.salas.every((x) => typeof x.actual === 'boolean'), 'cada sala dice si es la del proyecto actual')
+  assert.ok(!JSON.stringify(r.json).includes('BACKLOG_OTRO'), 'de la transcripción solo sale la placa, nunca el prompt')
   writeFileSync(EVENTOS, readFileSync(EVENTOS, 'utf8') + ev({ evento: 'Stop' }))
   assert.equal((await get('/api/oficina')).json.agentes.find((a) => a.sid === 'of1' && a.agente === 'principal').accion, 'quieto')
   assert.equal((await get('/api/version')).json.version, v, 'la oficina no entra en la huella')
@@ -1112,16 +1128,17 @@ test('estudio (S56): el panel trae las acciones rápidas del servidor, pregunta 
 })
 
 // Oficina (S58): la escena de «Metodología» con un personaje por agente.
-test('oficina (S58): conmutador Flujo|Oficina, un personaje por agente con su acción, globo al esperar, lista móvil y sin movimiento', async () => {
+test('oficina (S58, S-OF2): conmutador Flujo|Oficina, lienzo pixel con una placa por agente, lista móvil y sin movimiento', async () => {
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
   for (const marca of ['data-meta-vista="flujo"', 'data-meta-vista="oficina"', "'/api/oficina'", 'document.hidden', 'function htmlOficina']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
-  assert.match(html, /@media \(prefers-reduced-motion: reduce\)[^}]*\.oficina|@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.oficina/, 'iconos fijos con prefers-reduced-motion')
+  assert.ok(html.includes("matchMedia('(prefers-reduced-motion: reduce)')"), 'sin animación con prefers-reduced-motion')
   assert.match(html, /@media \(max-width: 700px\)[^@]*\.oficina-lista/, 'lista en ≤700px')
   assert.ok(!/<(script|link|img)[^>]+(src|href)="https?:/.test(html.split('function htmlOficina')[1] || ''), 'sin recursos externos')
   const ctx = { esc: (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]) }
   vm.createContext(ctx)
-  for (const c of ['ICONO_OFICINA', 'LUGAR_OFICINA']) vm.runInContext(html.match(new RegExp(`^const ${c} = .*$`, 'm'))[0], ctx)
-  vm.runInContext(funcionDe(html, 'htmlOficina'), ctx)
+  vm.runInContext(html.match(/^const llaveOficina = .*$/m)[0] + '\nfunction pedirCuadro() {}', ctx)
+  vm.runInContext(html.match(/^const salaAbiertaOf = .*$/m)[0], ctx)
+  for (const f of ['leerSalasOf', 'placaOficina', 'htmlOficina']) vm.runInContext(funcionDe(html, f), ctx)
   const ag = [
     { sid: 's1', agente: 'principal', principal: true, accion: 'leyendo', archivo: 'BACKLOG.md', proyecto: 'prueba' },
     { sid: 's1', agente: 'a1', tipo: 'buscador', principal: false, accion: 'buscando', proyecto: 'prueba' },
@@ -1130,13 +1147,19 @@ test('oficina (S58): conmutador Flujo|Oficina, un personaje por agente con su ac
     { sid: 's4', agente: 'principal', principal: true, accion: 'esperando', proyecto: 'otro' },
     { sid: 's5', agente: 'principal', principal: true, accion: 'quieto', proyecto: null },
   ]
-  const out = ctx.htmlOficina({ agentes: ag })
-  assert.equal((out.match(/class="personaje /g) || []).length, ag.length, 'un personaje por agente')
-  for (const a of ['leyendo', 'buscando', 'escribiendo', 'ejecutando', 'esperando', 'quieto']) assert.match(out, new RegExp(`class="personaje [^"]*\\b${a}\\b`), `clase ${a}`)
-  assert.equal((out.match(/class="globo"/g) || []).length, 1, 'globo solo en esperando')
-  assert.ok(out.includes('buscador') && out.includes('prueba'), 'etiqueta de tipo y proyecto')
+  const out = ctx.htmlOficina({ agentes: ag, salas: [{ id: 'prueba', proyecto: 'prueba' }, { id: 'otro', proyecto: 'otro' }] })
+  assert.ok(out.includes('class="oficina-lienzo"'), 'escena en canvas')
+  assert.equal((out.match(/class="placa-oficina/g) || []).length, ag.length, 'una placa por agente')
+  assert.equal((out.match(/class="mini-avatar"/g) || []).length, ag.length, 'un mini-avatar por agente en la lista')
+  assert.equal((out.match(/class="oficina-sala-nombre"/g) || []).length, 2, 'nombre de cada sala')
+  assert.ok(out.includes('buscador') && out.includes('prueba'), 'placa de tipo y proyecto')
   assert.ok(out.includes('oficina-lista'), 'lista para móvil')
-  for (const f of ['estante', 'escritorio', 'terminal', 'puerta']) assert.ok(out.includes(`class="${f}`) || out.includes(` ${f}"`), `escena con ${f}`)
+  // S-OF4: solo la sala del proyecto actual abierta; el resto plegado (sin actual, todas abiertas).
+  const sal = [{ id: 'prueba', proyecto: 'prueba', actual: true }, { id: 'otro', proyecto: 'otro' }]
+  const plegadas = (o) => (o.match(/data-plegada="1"/g) || []).length
+  assert.equal(plegadas(ctx.htmlOficina({ agentes: ag, salas: sal })), 1, 'la sala que no es la actual viene plegada')
+  assert.ok(/data-sala-toggle="otro"/.test(ctx.htmlOficina({ agentes: ag, salas: sal })), 'botón para expandir')
+  assert.equal(plegadas(ctx.htmlOficina({ agentes: ag, salas: [{ id: 'prueba', proyecto: 'prueba' }, { id: 'otro', proyecto: 'otro' }] })), 0, 'sin actual, todas abiertas')
   assert.match(ctx.htmlOficina({ agentes: [] }), /Nadie en la oficina/, 'oficina vacía')
   assert.ok(!ctx.htmlOficina({ agentes: [{ sid: 'x', agente: 'principal', accion: 'leyendo', archivo: '<b>x</b>' }] }).includes('<b>x'), 'escapa')
 })

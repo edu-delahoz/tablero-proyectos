@@ -94,3 +94,12 @@ test('sin repo de la metodología: avisa y no revienta', () => {
   assert.match(g.aviso, /instalar\.sh/)
   assert.ok(Array.isArray(g.piezas))
 })
+
+test('S-OF4: un hook que solo vive en settings.json del usuario (vigilar_prompt.mjs) también sale en la etapa Sesión', () => {
+  const g = grafo()
+  const p = pieza(g, 'hook:vigilar_prompt.mjs')
+  assert.equal(p.etapa, 'sesion')
+  assert.deepEqual(p.eventos, ['UserPromptSubmit'])
+  assert.match(p.descripcion, /otra sesión/)
+  assert.ok(g.etapas.find((e) => e.id === 'sesion').piezas.includes('hook:vigilar_prompt.mjs'))
+})
