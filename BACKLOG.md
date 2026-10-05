@@ -289,8 +289,8 @@ Modelo: Sonnet. Sesión S59 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-
 
 ### S59b — Continuación del cierre de H18–H20 · **Sonnet**, con Eduardo · ~30k
 Se espera: Tablero y Estudio revisados a ojo a 1200 y 390 px y los tres PR abiertos hacia `develop`; la nota del chat de estudio queda marcada.
-- [ ] [test] Ojo al Tablero y a Estudio con datos reales — Chrome headless a 1200 y 390 px (ver `shot.mjs` de la sesión anterior: CDP, `TABLERO_PUERTO=47399 node generar.mjs --servir`); anotar fallos como sesión nueva
-- [ ] [doc] PRs y nota — `kanban-sesiones`, `estudio-plan`, `oficina-agentes` → `develop` (confirmar con Eduardo; `gh` tenía el límite de tasa agotado: `gh api rate_limit`); marcar la nota en `../notas/NOTAS_TABLERO.md`
+- [x] [test] Ojo al Tablero y a Estudio con datos reales — Chrome headless a 1200 y 390 px (ver `shot.mjs` de la sesión anterior: CDP, `TABLERO_PUERTO=47399 node generar.mjs --servir`); anotar fallos como sesión nueva
+- [x] [doc] PRs y nota — `kanban-sesiones`, `estudio-plan`, `oficina-agentes` → `develop` (confirmar con Eduardo; `gh` tenía el límite de tasa agotado: `gh api rate_limit`); marcar la nota en `../notas/NOTAS_TABLERO.md`
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S59b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S59b BACKLOG.md`) y trabaja solo esa sesión, en la rama `oficina-agentes` (worktree `../.wt-oficina`; copia `proyectos.json` del tablero si falta). Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
