@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `lectura-backlog` (sale de `kanban-sesiones`, sin PR) · S60 hecha, suite en verde (340 pasan, 2 omitidos; los 5 tests nuevos fallaban 5 de 5). `backlog.mjs`: `estado`, `arranque`, `indice`, `seccion` con varias claves (el archivo es el argumento `.md`); `auditoria.mjs`: «Bash sobre BACKLOG» solo cuenta `sed -n`/`grep`/`awk` sobre `BACKLOG*.md` por segmento y `backlogCli` cuenta el extractor aparte; `plantilla.html`: `NaNk` arreglado (`volumen`). Prompts de arranque cambiados a `arranque`. Sin comando global `backlog` (no hay `~/.claude/bin`). Siguiente: **S54** (rama `kanban-sesiones`); re-medir el hábito en S59.
+- Para retomar (2026-10-05): Una sesión ahora lee el Estado y su sección con un solo comando, y la tarjeta de auditoría ya no castiga ese hábito bueno ni muestra «NaNk». Los prompts de relevo e IEP ya lo piden así. Falta ver en 2–3 días si baja de verdad el gasto en lecturas del backlog. Nada roto.
 - 2026-10-05 · rama `kanban-sesiones` (sin PR) · diagnóstico de «Bash sobre BACKLOG», solo análisis (sin código ni tests). Plan: `~/.claude/plans/quiero-que-me-respondas-vectorized-owl.md`. Definida **H21 / S60** (Sonnet). Siguiente: **S60** (independiente de S54–S59).
 - Para retomar (2026-10-05): Se revisó por qué la auditoría sigue marcando muchas lecturas del backlog con Bash. Ya bajaron un 80 % respecto a ayer; lo que queda es en parte ruido de la propia métrica y en parte que el prompt de arranque todavía pide grep para el Estado y que el extractor no sabe leer el Estado, un índice ni varias secciones. Queda escrita una sesión corta que completa el extractor, limpia la métrica, arregla el «NaNk» de la tarjeta y cambia los prompts. Nada roto.
 - 2026-10-05 · rama `kanban-sesiones` (sin PR) · S53 hecha, suite en verde (335 pasan, 2 omitidos; los 5 nuevos fallaban 5 de 337). `generar.mjs`: `kanbanSesiones(b, p, sesionesClaude)` sobre `sesiones()` (hito `## H<n>` → `H<n>` del `#` → `b.padre.clave`; estado por-hacer/en-curso/en-prueba/hecho; `pr {numero,url,estado,ci}`), `resumenCi(statusCheckRollup)`, `principalDe(repo)`, `GET /api/sesion-detalle?proyecto&rama` (400 rama inválida, 404 sin repo). `p.kanban` y `/api/sesiones` (`{archivo,linea,clave,texto,estado}`) por sesión. Fixture `fixtures/kanban-mini/BACKLOG_H7.md`. Test transversal de rutas en `servidor.test.mjs` (regex sobre `crearManejador`; el helper `post` ahora omite Origin si se pasa `origin: ''`). Trampa para S54: `columnasKanban` queda exportada solo para su test; la vista (`tarjetasKanban`, «Mover a», arrastre) aún asume casillas: quitar arrastre y `KMARCA` por tarjeta, y decidir si se borra `columnasKanban`. Siguiente: **S54** (Sonnet).
@@ -117,17 +119,17 @@ Diagnóstico: (1) la métrica cuenta comandos enteros que mencionan «BACKLOG» 
 
 ### S60 — Extractor completo y métrica limpia · **Sonnet** · rama `lectura-backlog` (sale de `kanban-sesiones`) · ~45k
 Se espera: Al arrancar, una sesión lee Estado + su sección con un solo `backlog arranque SX <ruta>`, y la tarjeta de auditoría ya no cuenta ese comando como mal hábito (y muestra un número en «Tool results >5k», no `NaNk`). Se comprueba con `node generar.mjs --auditoria 2026-10-05` antes y después.
-Resultado:
-- [ ] [test] Pruebas del extractor y del contador; verlas fallar y anotar cuántas — `backlog.test.mjs`: `estado`, `arranque`, `indice`, `seccion` con varias claves; `auditoria.test.mjs`: `node backlog.mjs …` encadenado con grep no cuenta, `sed -i` no cuenta, `ls FORMATO_BACKLOG.md` no cuenta, `sed -n 1,9p BACKLOG_H7.md` sí cuenta, `backlogCli` suma
-- [ ] [código] El backlog se lee de un tirón al arrancar — `backlog.mjs`: `estado [archivo]` (bloque «## Estado»/«Hito actual» con nº de línea), `arranque <clave> [archivo]` (Estado + sección), `indice [archivo]` (línea · nivel · título · abiertas/total), `seccion <c1> [c2…] [archivo]` (archivo = el que termina en `.md`); comando global `backlog` (symlink en `~/.claude/bin` o como `tablero`)
-- [ ] [código] La métrica deja de contar el hábito bueno — `auditoria.mjs:42`: contar solo si un segmento (`;`, `&&`, `|`) es `sed -n`/`grep`/`awk` sobre un `BACKLOG*.md`; excluir `backlog.mjs`/`backlog` y `sed -i`; contador nuevo `backlogCli` (n, tokens) y su fila en la tarjeta de `plantilla.html`
-- [ ] [arreglo] La fila «Tool results >5k» muestra un número — `plantilla.html:1575` da `NaNk`: ver si `dia.grandes[i]` trae `volumen` o `tokens` (posible forma vieja en caché de `/api/datos`) y usar el campo correcto con `?? 0`
-- [ ] [docs] Los prompts de arranque usan el extractor en vez de grep — `~/.claude/skills/relevo/SKILL.md:18,34`, `~/.claude/metodologia/FORMATO_BACKLOG.md` (Prompt), prompt de arranque de este backlog y los prompts de las sesiones abiertas de IEP (`BACKLOG_H7.md`, `BACKLOG_MVP.md`)
-- [ ] [verificación] Cifras antes/después — `node generar.mjs --auditoria 2026-10-05` (esperado: «Bash sobre BACKLOG» baja de 122 a ≲ 85 solo por la métrica; `backlogCli` ≈ 19); anotarlas en «Resultado:». Re-medir tras 2–3 días en S59 (objetivo ≤ 40 llamadas / ≤ 40k)
+Resultado (2026-10-05, Sonnet): `backlog.mjs` ahora tiene `estado`, `arranque <clave>` (Estado + sección en una lectura), `indice` y `seccion` con varias claves; la métrica cuenta solo `sed -n`/`grep`/`awk` sobre un `BACKLOG*.md` por segmento (excluye el extractor y `sed -i`) y suma el extractor aparte (`backlogCli`, fila «Extractor backlog (bueno)» en la tarjeta); el `NaNk` venía de que la fila de «Tool results >5k» usaba `tokens` en vez de `volumen` (arreglado, con `?? 0`). Los prompts de arranque (relevo, FORMATO_BACKLOG, este backlog, `BACKLOG_H7.md` de IEP) usan `arranque`. Tests primero: fallaban 5 (4 de `backlog.test.mjs`, 1 de `auditoria.test.mjs`); suite final 340 pasan, 2 omitidos. Cifras con el mismo día 2026-10-05 (que siguió creciendo): antes 191 llamadas · 159k; después «Bash sobre BACKLOG» 102 · 98k y extractor 57 · 46k. No llegó a ≲ 85: lo que queda son `grep`/`sed` reales de las sesiones de hoy abiertas con el prompt viejo. Re-medir en S59 tras 2–3 días con los prompts nuevos. No se creó el comando global `backlog` (`~/.claude/bin` no existe ni está en el PATH): los prompts usan `node ~/.claude/tablero/backlog.mjs`.
+- [x] [test] Pruebas del extractor y del contador; verlas fallar y anotar cuántas — `backlog.test.mjs`: `estado`, `arranque`, `indice`, `seccion` con varias claves; `auditoria.test.mjs`: `node backlog.mjs …` encadenado con grep no cuenta, `sed -i` no cuenta, `ls FORMATO_BACKLOG.md` no cuenta, `sed -n 1,9p BACKLOG_H7.md` sí cuenta, `backlogCli` suma
+- [x] [código] El backlog se lee de un tirón al arrancar — `backlog.mjs`: `estado [archivo]` (bloque «## Estado»/«Hito actual» con nº de línea), `arranque <clave> [archivo]` (Estado + sección), `indice [archivo]` (línea · nivel · título · abiertas/total), `seccion <c1> [c2…] [archivo]` (archivo = el que termina en `.md`); comando global `backlog` (symlink en `~/.claude/bin` o como `tablero`)
+- [x] [código] La métrica deja de contar el hábito bueno — `auditoria.mjs:42`: contar solo si un segmento (`;`, `&&`, `|`) es `sed -n`/`grep`/`awk` sobre un `BACKLOG*.md`; excluir `backlog.mjs`/`backlog` y `sed -i`; contador nuevo `backlogCli` (n, tokens) y su fila en la tarjeta de `plantilla.html`
+- [x] [arreglo] La fila «Tool results >5k» muestra un número — `plantilla.html:1575` da `NaNk`: ver si `dia.grandes[i]` trae `volumen` o `tokens` (posible forma vieja en caché de `/api/datos`) y usar el campo correcto con `?? 0`
+- [x] [docs] Los prompts de arranque usan el extractor en vez de grep — `~/.claude/skills/relevo/SKILL.md:18,34`, `~/.claude/metodologia/FORMATO_BACKLOG.md` (Prompt), prompt de arranque de este backlog y los prompts de las sesiones abiertas de IEP (`BACKLOG_H7.md`, `BACKLOG_MVP.md`)
+- [x] [verificación] Cifras antes/después — `node generar.mjs --auditoria 2026-10-05` (esperado: «Bash sobre BACKLOG» baja de 122 a ≲ 85 solo por la métrica; `backlogCli` ≈ 19); anotarlas en «Resultado:». Re-medir tras 2–3 días en S59 (objetivo ≤ 40 llamadas / ≤ 40k)
 
 Prompt:
 ```text
-Modelo: Sonnet. Sesión S60 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S60 BACKLOG.md`) y trabaja solo esa sesión, en la rama `lectura-backlog` (sale de `kanban-sesiones`). Tests primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: Sonnet. Sesión S60 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S60 BACKLOG.md`) y trabaja solo esa sesión, en la rama `lectura-backlog` (sale de `kanban-sesiones`). Tests primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 
 ## H18 — Kanban por sesión y prompt a la vista
@@ -146,7 +148,7 @@ Se espera: El servidor entrega una tarjeta por sesión con su hito correcto (el 
 Resultado: Cumplido. `kanbanSesiones` da una tarjeta por sesión; con el `BACKLOG_H7.md` real del IEP salen las 15 sesiones (S0…S7) en H7, que antes salían vacías. `p.kanban` y `/api/sesiones` ya son por sesión (con `texto = llano` y `seccion` para que la vista vieja no se rompa hasta S54; «Mover a» sobre una sesión avisa «No encontré esa casilla» y no escribe). CI en los PR (`ci`), `GET /api/sesion-detalle` y test transversal de rutas. Suite 335 pasan, 2 omitidos.
 Prompt:
 ```text
-Modelo: Opus. Sesión S53 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S53 BACKLOG.md`). Rama `kanban-sesiones`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: Opus. Sesión S53 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S53 BACKLOG.md`). Rama `kanban-sesiones`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 Después: **S54**
 
@@ -160,7 +162,7 @@ Se espera: En la pestaña Tablero cada tarjeta es una sesión con una línea en 
 - [ ] Mirarlo en el navegador con datos del IEP — 1200 y 390 px; `node --test 2>&1 | tail -40` en verde
 Prompt:
 ```text
-Modelo: Sonnet. Sesión S54 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S54 BACKLOG.md`). Rama `kanban-sesiones`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: Sonnet. Sesión S54 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S54 BACKLOG.md`). Rama `kanban-sesiones`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 Después: **S55**
 
@@ -177,7 +179,7 @@ Se espera: `POST /api/estudio` responde en streaming con un Claude de solo lectu
 - [ ] Guía de estudio — `POST /api/estudio/guardar` añade la respuesta a `datos/estudio/<proyecto>/<plan>.md`; README; `node --test 2>&1 | tail -40` en verde
 Prompt:
 ```text
-Modelo: Opus. Sesión S55 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S55 BACKLOG.md`). Rama `estudio-plan` (créala desde `kanban-sesiones` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: Opus. Sesión S55 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S55 BACKLOG.md`). Rama `estudio-plan` (créala desde `kanban-sesiones` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 Después: **S56**
 
@@ -189,7 +191,7 @@ Se espera: Desde Planes, un backlog o el detalle de una tarjeta, el botón «Est
 - [ ] Probarlo en el navegador con el plan de H7 — «Extrae lo técnico» sobre el plan de H7 del IEP; `node --test 2>&1 | tail -40` en verde
 Prompt:
 ```text
-Modelo: Sonnet. Sesión S56 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S56 BACKLOG.md`). Rama `estudio-plan`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: Sonnet. Sesión S56 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S56 BACKLOG.md`). Rama `estudio-plan`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 Después: **S57**
 
@@ -206,7 +208,7 @@ Se espera: `GET /api/oficina` dice por agente y subagente qué hace ahora (leyen
 - [ ] Instalar el hook — `metodologia-claude-code/settings.base.json` + `instalar.sh`, y en el catálogo de `metodologia.mjs`; confirmar con Eduardo antes de tocar su `~/.claude/settings.json`; `node --test 2>&1 | tail -40` y `scripts/probar.sh` en verde
 Prompt:
 ```text
-Modelo: Opus. Sesión S57 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S57 BACKLOG.md`). Rama `oficina-agentes` en el tablero y en metodologia-claude-code (créala desde `estudio-plan` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: Opus. Sesión S57 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S57 BACKLOG.md`). Rama `oficina-agentes` en el tablero y en metodologia-claude-code (créala desde `estudio-plan` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 Después: **S58**
 
@@ -218,7 +220,7 @@ Se espera: En «Metodología», el conmutador «Flujo | Oficina» muestra una es
 - [ ] Mirarla en el navegador con una sesión real — que lee, edita, lanza un `buscador` y pide permiso; `node --test 2>&1 | tail -40` en verde
 Prompt:
 ```text
-Modelo: Sonnet. Sesión S58 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S58 BACKLOG.md`). Rama `oficina-agentes`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: Sonnet. Sesión S58 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S58 BACKLOG.md`). Rama `oficina-agentes`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 Después: **S59**
 
@@ -229,7 +231,7 @@ Se espera: Todo en verde, revisado a ojo en el navegador con datos reales y con 
 - [ ] PRs y nota — `kanban-sesiones`, `estudio-plan`, `oficina-agentes` → `develop`; marcar la nota en `../notas/NOTAS_TABLERO.md`
 Prompt:
 ```text
-Modelo: Sonnet. Sesión S59 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S59 BACKLOG.md`). Trabaja con Eduardo. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: Sonnet. Sesión S59 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S59 BACKLOG.md`). Trabaja con Eduardo. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 
 Cómo ejecutarlo: S53 → S54; S55 → S56 (el botón en el detalle del kanban solo si S54 ya está); S57 → S58; al final S59. `/clear` entre sesiones.
@@ -293,7 +295,7 @@ Después: **S49**
 Se espera: `verificar_backlog.mjs --formato` sale limpio en las secciones abiertas de los 5 proyectos y lo cerrado no se tocó.
 Prompt:
 ```text
-Sesión S49 de BACKLOG.md. Lee /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (sección Estado con `grep -n`, y S49 con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S49 BACKLOG.md`) y trabaja solo esa sesión, en la rama `formato-backlog`. Contrato: `~/Desktop/Desarrollo/metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Sesión S49 de BACKLOG.md. Lee /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S49 BACKLOG.md`: Estado + tu sección de un tirón) y trabaja solo esa sesión, en la rama `formato-backlog`. Contrato: `~/Desktop/Desarrollo/metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 - [x] Pasar al formato solo lo abierto — tablero, IEP (`BACKLOG_MVP.md` H4–H7), EAP10, Squalo; anotar tokens antes/después
 
@@ -306,7 +308,7 @@ Se espera: `/api/metodologia` devuelve el grafo de piezas (hooks, skills, mods, 
 
 Prompt:
 ```text
-Modelo: Opus. Sesión S50 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S50 BACKLOG.md`). Rama `formato-backlog`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: Opus. Sesión S50 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S50 BACKLOG.md`). Rama `formato-backlog`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 Resultado: Cumplido. `GET /api/metodologia` da `{ etapas (6, ok|parcial|falta), aristas, piezas (22: 6 mods, 7 hooks, reglas, statusline, buscador, relevo, carpetas metodologia/tablero, backlog, notas, bitácora), proyectos (conectado = tiene sesiones) }`, cada pieza con `estado` activa|instalada|falta, `motivo`, `descripcion`, `ruta` con `~` y `proyectos`. Tests escritos primero: fallaban 9 de 9 (8 de `metodologia.test.mjs`, 1 de `servidor.test.mjs`); suite 330 pasan, 2 omitidos. Contra el `~/.claude` real: falta `carpeta:metodologia` y `carpeta:tablero` (no enlazadas), `estado-trabajo` y `servidores-locales` instaladas sin activar; sin secretos en la salida.
 
@@ -322,7 +324,7 @@ Resultado: Pestaña «Metodología» con flujo SVG, estados por color, detalle p
 
 Prompt:
 ```text
-Modelo: Sonnet. Sesión S51 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S51 BACKLOG.md`). Rama `formato-backlog`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: Sonnet. Sesión S51 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S51 BACKLOG.md`). Rama `formato-backlog`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 
 ### S52 — Cierre y medición · **Sonnet**, con Eduardo (tras ≥ 8 sesiones con el formato) · ~40k
@@ -336,7 +338,7 @@ Cómo ejecutarlo: S44 → S45 → (S46, S47, S48, S49 en cualquier orden) → S5
 
 Prompt de arranque (cambiar clave y modelo según la tabla de cada título):
 ```text
-Modelo: <Opus|Sonnet>. Sesión <S44> de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion <S44> BACKLOG.md`). Rama `formato-backlog` en el tablero y en metodologia-claude-code (créala desde `eficiencia` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Modelo: <Opus|Sonnet>. Sesión <S44> de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque <S44> BACKLOG.md`). Rama `formato-backlog` en el tablero y en metodologia-claude-code (créala desde `eficiencia` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 
 ## H16 — Eficiencia de uso de Claude Code

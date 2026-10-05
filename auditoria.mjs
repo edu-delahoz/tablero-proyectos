@@ -10,6 +10,8 @@ import { parsearBitacora } from './bitacora.mjs'
 
 // Peso de cada tipo de token en el «gasto» (relativo a la entrada sin caché).
 export const PESOS = { entrada: 1, escritura: 2, lectura: 0.1, salida: 5 }
+// Lectura buena: el extractor (`node …/backlog.mjs <cmd>` o el comando global `backlog <cmd>`).
+const RE_EXTRACTOR = /(^|\s)(node\s+\S*backlog\.mjs|backlog)\s+(seccion|estado|arranque|indice)\b/
 const RE_CAT = /(^|&&|;)\s*cat\s+[^|<>]+$/
 const diaLocal = (ts) => { const d = new Date(ts); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10) }
 const diaUtc = (ts) => String(ts).slice(0, 10) // como b/c/e.mjs y las cifras de PLAN_EFICIENCIA
@@ -18,7 +20,7 @@ const redondeo = (n) => Math.round(n * 10) / 10
 // Una transcripción, solo el día pedido → totales de esa sesión.
 export function auditarSesion(texto, { dia, umbral = UMBRAL_GRANDE, utc = false } = {}) {
   const diaDe = utc ? diaUtc : diaLocal
-  const s = { llamadas: 0, gasto: { entrada: 0, escritura: 0, lectura: 0, salida: 0 }, grandes: [], bashBacklog: { n: 0, tokens: 0 }, catCompletos: { n: 0, tokens: 0 }, readSinLimite: { n: 0, tokens: 0 } }
+  const s = { llamadas: 0, gasto: { entrada: 0, escritura: 0, lectura: 0, salida: 0 }, grandes: [], bashBacklog: { n: 0, tokens: 0 }, backlogCli: { n: 0, tokens: 0 }, catCompletos: { n: 0, tokens: 0 }, readSinLimite: { n: 0, tokens: 0 } }
   const usos = {}, porLlamada = new Map()
   const sumar = (o, t) => { o.n++; o.tokens += t }
   for (const linea of String(texto).split('\n')) {
@@ -39,7 +41,10 @@ export function auditarSesion(texto, { dia, umbral = UMBRAL_GRANDE, utc = false 
       if (u.name === 'Read' && !entrada.limit && !entrada.offset && t > 3000) sumar(s.readSinLimite, t)
       if (u.name === 'Bash' && typeof entrada.command === 'string') {
         const cm = entrada.command
-        if (/BACKLOG/.test(cm) && /sed -n|grep|awk/.test(cm)) sumar(s.bashBacklog, t)
+        const segs = cm.split(/&&|\|\||;|\|/)
+        if (segs.some(RE_EXTRACTOR.test.bind(RE_EXTRACTOR))) sumar(s.backlogCli, t)
+        // Hábito malo: un segmento que lee un BACKLOG*.md con sed -n / grep / awk (no el extractor, ni sed -i).
+        if (segs.some((g) => /BACKLOG\w*\.md/.test(g) && /\b(sed\s+-n|grep|awk)\b/.test(g) && !RE_EXTRACTOR.test(g) && !/\bsed\s+-i/.test(g))) sumar(s.bashBacklog, t)
         if (RE_CAT.test(cm.trim())) sumar(s.catCompletos, t)
       }
     }
@@ -56,14 +61,14 @@ export function auditarSesion(texto, { dia, umbral = UMBRAL_GRANDE, utc = false 
 
 // archivos: [{ proyecto, sid, texto }] → totales del día.
 export function auditar(archivos, { dia, umbral, utc } = {}) {
-  const r = { dia, sesiones: 0, llamadas: 0, gasto: { crudo: { entrada: 0, escritura: 0, lectura: 0, salida: 0 }, ponderado: 0, partes: {} }, grandes: [], bashBacklog: { n: 0, tokens: 0 }, catCompletos: { n: 0, tokens: 0 }, readSinLimite: { n: 0, tokens: 0 } }
+  const r = { dia, sesiones: 0, llamadas: 0, gasto: { crudo: { entrada: 0, escritura: 0, lectura: 0, salida: 0 }, ponderado: 0, partes: {} }, grandes: [], bashBacklog: { n: 0, tokens: 0 }, backlogCli: { n: 0, tokens: 0 }, catCompletos: { n: 0, tokens: 0 }, readSinLimite: { n: 0, tokens: 0 } }
   for (const a of archivos) {
     const s = auditarSesion(a.texto, { dia, umbral, utc })
     if (!s.llamadas) continue
     r.sesiones++; r.llamadas += s.llamadas
     for (const k in s.gasto) r.gasto.crudo[k] += s.gasto[k]
     for (const g of s.grandes) r.grandes.push({ ...g, sid: a.sid, proyecto: a.proyecto })
-    for (const k of ['bashBacklog', 'catCompletos', 'readSinLimite']) { r[k].n += s[k].n; r[k].tokens += s[k].tokens }
+    for (const k of ['bashBacklog', 'backlogCli', 'catCompletos', 'readSinLimite']) { r[k].n += s[k].n; r[k].tokens += s[k].tokens }
   }
   for (const k in PESOS) r.gasto.ponderado += r.gasto.crudo[k] * PESOS[k]
   for (const k in PESOS) {
@@ -103,7 +108,7 @@ export function textoAuditoria(r, dia = r.dia) {
   for (const [n, e] of [['entrada', 'Entrada'], ['escritura', 'Escritura de caché'], ['lectura', 'Lectura de caché'], ['salida', 'Salida']]) L.push(`- ${e}: ${k(g.partes[n].tokens)} tokens → ${k(g.partes[n].ponderado)} ponderados (${g.partes[n].pct} %)`)
   L.push(`- Total ponderado: ${k(g.ponderado)}`, '', `## Tool results >${UMBRAL_GRANDE / 1000}k (${r.grandes.length}, suma ${k(r.grandes.reduce((a, b) => a + b.tokens, 0))})`)
   for (const b of r.grandes.slice(0, 25)) L.push(`- ${k(b.tokens)} · ${b.sid} · ${b.proyecto.slice(0, 20)} · ${b.tool} · ${b.entrada}`)
-  L.push('', '## Bash sobre BACKLOG (sed -n / grep / awk)', fila('llamadas', r.bashBacklog), '', '## `cat` completos (sin acotar)', fila('llamadas', r.catCompletos), '', '## Read sin límite (>3k tokens, sin offset ni limit)', fila('lecturas', r.readSinLimite))
+  L.push('', '## Bash sobre BACKLOG (sed -n / grep / awk)', fila('llamadas', r.bashBacklog), '', '## Extractor `backlog.mjs` (hábito bueno)', fila('llamadas', r.backlogCli), '', '## `cat` completos (sin acotar)', fila('llamadas', r.catCompletos), '', '## Read sin límite (>3k tokens, sin offset ni limit)', fila('lecturas', r.readSinLimite))
   return L.join('\n')
 }
 
