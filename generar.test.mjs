@@ -531,12 +531,14 @@ test('hechosRetomar: rama, siguiente, commits, PR y última sesión de Claude (f
   assert.deepEqual(vacio, { ultimaActividad: null, diasSinActividad: null, rama: null, siguiente: null, pendientesSiguiente: 0, ultimoCommit: null, prsAbiertos: 0, commitsSinSubir: 0, ultimaSesionClaude: null })
 })
 
-test('plantillaBacklog: trae «Para retomar» en Estado e «Historia:» en S1, sin romper «estás aquí»', () => {
+test('plantillaBacklog: formato nuevo — «Para retomar» en Estado, «Historia:» en H1, «Se espera» en S1, sin romper «estás aquí»', () => {
   const t = plantillaB('Demo', '2026-10-04')
   assert.match(t, /^- Para retomar \(2026-10-04\): .+/m)
   assert.ok(retomarDe(t.match(/## Estado\n([\s\S]*?)\n## /)[1]))
   const arbol = estructura(t)
-  assert.ok(porClave(arbol, 'S1').historia)
+  assert.ok(porClave(arbol, 'H1').historia)
+  assert.ok(porClave(arbol, 'S1').seEspera)
+  assert.ok(porClave(arbol, 'S1').tareas[0].llano)
   assert.equal(estasAqui(arbol, t.match(/## Estado\n([\s\S]*?)\n## /)[1]), porClave(arbol, 'S1').id)
 })
 
@@ -636,6 +638,55 @@ test('columnasKanban: por hacer, en curso (sesión activa o [~]), en prueba (PR 
   assert.equal(f['Mandar correo'], 'en-curso'); assert.equal(f.Campos, 'por-hacer')
 })
 
+// ---------- S53: kanban por sesión (una tarjeta = una sesión) ----------
+test('kanbanSesiones: mini backlog «# Mini backlog H7» con «## S1…» → tarjetas con hito H7, llano, prompt, avance y los 4 estados', async () => {
+  const { kanbanSesiones } = await import('./generar.mjs')
+  const texto = fixture('kanban-mini/BACKLOG_H7.md')
+  const b = { archivo: 'BACKLOG_H7.md', ruta: '/r/BACKLOG_H7.md', contenido: texto, estructura: estructura(texto), aqui: null }
+  const git = { prs: [{ number: 12, url: 'https://gh/pr/12', headRefName: 'h7-s1', state: 'OPEN', ci: 'falla' }], sinFusionar: [] }
+  const ts = kanbanSesiones(b, { git }, [])
+  const por = Object.fromEntries(ts.map((t) => [t.clave, t]))
+  assert.deepEqual(ts.map((t) => t.clave), ['S1', 'S2', 'S3', 'S4'], 'una tarjeta por sesión, en orden; «Estado» no es tarjeta')
+  assert.ok(ts.every((t) => t.hito === 'H7'), 'el hito sale del título «# Mini backlog H7», no de la clave del «##»')
+  assert.deepEqual(Object.fromEntries(ts.map((t) => [t.clave, t.estado])), { S1: 'en-prueba', S2: 'en-curso', S3: 'por-hacer', S4: 'hecho' })
+  assert.equal(por.S1.llano, 'La tabla de personas queda migrada sin duplicados.', '1.ª frase de «Se espera»')
+  assert.ok(por.S2.llano.length <= 110 && por.S2.llano.endsWith('…'), 'frase larga recortada a 110')
+  assert.equal(por.S3.llano, 'Limpieza', 'sin «Se espera» → título sin la clave')
+  assert.equal(por.S1.prompt, 'Sesión S1 del mini backlog H7. Migra la tabla.')
+  assert.deepEqual([por.S1.hechas, por.S1.total, por.S2.hechas, por.S2.total], [2, 2, 0, 2])
+  assert.deepEqual({ modelo: por.S1.modelo, rama: por.S1.rama, archivo: por.S1.archivo, resultado: por.S1.resultado }, { modelo: 'Sonnet', rama: 'h7-s1', archivo: 'BACKLOG_H7.md', resultado: 'migrada, 0 duplicados.' })
+  assert.deepEqual(por.S1.pr, { numero: 12, url: 'https://gh/pr/12', estado: 'OPEN', ci: 'falla' }, 'PR de su rama con la CI')
+  assert.equal(por.S2.tareas.length, 2)
+  assert.equal(por.S1.texto, por.S1.llano, 'texto = llano, para la vista de casillas hasta S54')
+  // PR fusionado y rama fusionada → hecho; rama sin fusionar → en prueba.
+  assert.equal(kanbanSesiones(b, { git: { prs: [{ ...git.prs[0], state: 'MERGED' }], sinFusionar: [] } }, [])[0].estado, 'hecho')
+  assert.equal(kanbanSesiones(b, { git: { prs: [], sinFusionar: ['h7-s1'] } }, [])[0].estado, 'en-prueba')
+  // Sesión de Claude activa que nombra S3 en este archivo → en curso; en otro archivo → no.
+  const ses = { activa: true, archivos: [], foco: { claves: ['S3'], backlogs: ['BACKLOG_H7.md'] } }
+  assert.equal(kanbanSesiones(b, { git }, [ses]).find((t) => t.clave === 'S3').estado, 'en-curso')
+  assert.equal(kanbanSesiones(b, { git }, [{ ...ses, foco: { claves: ['S3'], backlogs: ['OTRO.md'] } }]).find((t) => t.clave === 'S3').estado, 'por-hacer')
+  // «Estás aquí» → en curso.
+  const aqui = { ...b, aqui: porClave(b.estructura, 'S3').id }
+  assert.equal(kanbanSesiones(aqui, { git }, []).find((t) => t.clave === 'S3').estado, 'en-curso')
+  // Hito: «## H<n>» del archivo manda; si no hay ni «##» ni título con H, la sección del padre que enlaza el archivo.
+  const conHito = '# B\n\n## H2 — Registro\n\n### S9 — Algo\n- [ ] Uno\n'
+  assert.equal(kanbanSesiones({ archivo: 'B.md', contenido: conHito, estructura: estructura(conHito) }, {}, [])[0].hito, 'H2')
+  const sinH = '# Mini backlog\n\n## S1 — Algo\n- [ ] Uno\n'
+  assert.equal(kanbanSesiones({ archivo: 'BACKLOG_X.md', contenido: sinH, estructura: estructura(sinH), padre: { archivo: 'BACKLOG.md', clave: 'H5' } }, {}, [])[0].hito, 'H5')
+})
+
+test('resumenCi: statusCheckRollup de gh → ok · falla · corre · null', async () => {
+  const { resumenCi } = await import('./generar.mjs')
+  assert.equal(resumenCi([]), null)
+  assert.equal(resumenCi(undefined), null)
+  assert.equal(resumenCi([{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' }, { __typename: 'StatusContext', state: 'SUCCESS' }]), 'ok')
+  assert.equal(resumenCi([{ status: 'COMPLETED', conclusion: 'SUCCESS' }, { status: 'IN_PROGRESS', conclusion: '' }]), 'corre')
+  assert.equal(resumenCi([{ state: 'PENDING' }]), 'corre')
+  assert.equal(resumenCi([{ status: 'IN_PROGRESS', conclusion: '' }, { status: 'COMPLETED', conclusion: 'FAILURE' }]), 'falla', 'falla manda sobre corre')
+  assert.equal(resumenCi([{ state: 'ERROR' }]), 'falla')
+  assert.equal(resumenCi([{ status: 'COMPLETED', conclusion: 'SKIPPED' }, { status: 'COMPLETED', conclusion: 'NEUTRAL' }]), 'ok')
+})
+
 // ---------- S35: elegir carpeta sin pegar rutas ----------
 const { listarCarpetas, sugerirProyectos, propuestaProyecto, proyectoNuevo } = await import('./generar.mjs')
 const { utimesSync: tocarC, symlinkSync: enlaceC } = await import('node:fs')
@@ -723,4 +774,110 @@ test('proyectoNuevo: sin docs y con repo → docs = [repo]; sin id y con repo �
   assert.deepEqual(proyectoNuevo({ id: 'g', nombre: 'G', repo: join(dev, 'Gamma') }, []).docs, [join(dev, 'Gamma')])
   assert.deepEqual(proyectoNuevo({ id: 'g', nombre: 'G', repo: join(dev, 'Gamma'), docs: [join(dev, 'alfa')] }, []).docs, [join(dev, 'alfa')])
   assert.equal(proyectoNuevo({ nombre: 'G', repo: join(dev, 'Gamma') }, [{ id: 'gamma' }]).id, 'gamma-2')
+})
+
+// ---- E5: vistas de eficiencia (umbrales, calibración por ventana, costo por tipo) ----
+const { semaforoLlamadas, semaforoCtx, calibrar, quedan, costoPorTipo, eficienciaDe } = await import('./eficiencia.mjs')
+
+test('E5: umbrales de llamadas por prompt y de contexto final', () => {
+  assert.deepEqual([14, 15, 30, 31].map(semaforoLlamadas), ['verde', 'ambar', 'ambar', 'rojo'])
+  assert.deepEqual([99999, 100000, 130000, 130001].map(semaforoCtx), ['verde', 'ambar', 'ambar', 'rojo'])
+  assert.equal(semaforoLlamadas(null), null)
+})
+
+const lim = (p5, p7, r5 = 1000, r7 = 9000) => ({ five_hour: { used_percentage: p5, resets_at: r5 }, seven_day: { used_percentage: p7, resets_at: r7 } })
+const mets = [
+  { sid: 'aaaaaaaa-1', limites: { inicio: lim(0, 40, 500, 9000), fin: lim(10, 41, 500, 9000) } },
+  { sid: 'bbbbbbbb-2', limites: { inicio: null, fin: lim(5, 45, 1000, 9000) } },
+  { sid: 'cccccccc-3', limites: { inicio: lim(5, 45, 1000, 9000), fin: lim(10, 50, 1000, 9000) } },
+]
+const filas = [
+  { sid: 'aaaaaaaa', tarea: 'BACKLOG/S1', costo: 30, minutos: 5 }, { sid: 'bbbbbbbb', tarea: 'BACKLOG/S2', costo: 8, minutos: 4 },
+  { sid: 'cccccccc', tarea: 'BACKLOG/S2', costo: 12, minutos: 6 }, { sid: 'dddddddd', tarea: 'BACKLOG/S3b', costo: 4, minutos: 3 }, { sid: 'eeeeeeee', tarea: 'libre', costo: 1, minutos: 1 },
+]
+
+test('E5: calibración por ventana — $ por 1 %, ventana vigente y su fecha', () => {
+  const c = calibrar(mets, filas)
+  // 5 h: la ventana vigente es la de resets_at 1000: $20 (b + c) con 10 % → $2 por 1 %.
+  assert.equal(c.cinco.porPct, 2)
+  assert.equal(c.cinco.pct, 10)
+  assert.equal(c.cinco.resetsAt, 1000)
+  assert.equal(c.cinco.fecha, new Date(1000e3).toISOString())
+  // 7 d: una sola ventana, $50 con 50 % → $1 por 1 %.
+  assert.equal(c.siete.porPct, 1)
+  assert.equal(calibrar([], filas).cinco, null)
+})
+
+test('E5: «quedan ~N sesiones tipo X» = (100 − %) × $/1 % ÷ mediana', () => {
+  assert.equal(quedan({ pct: 10, porPct: 2 }, 6), 30)
+  assert.equal(quedan({ pct: 10, porPct: 2 }, 0), null)
+  assert.equal(quedan(null, 6), null)
+})
+
+test('E5: costo por tipo — suma filas de la misma tarea, mediana, p90 y % de ventana 5 h', () => {
+  const t = costoPorTipo(filas, { porPct5h: 2 })
+  const sn = t.find((x) => x.tipo === 'Sn')
+  assert.equal(sn.n, 2)               // S1 ($30) y S2 ($8 + $12 = $20)
+  assert.equal(sn.mediana, 25)
+  assert.equal(sn.pct5h, 12.5)
+  assert.equal(t.find((x) => x.tipo === 'Snb').n, 1)
+  assert.equal(t.find((x) => x.tipo === 'otro').n, 1)
+})
+
+test('E5b: plantilla.html — costo por feature con interruptor rama/feature, desglose y «sin rama», sin «otras»', () => {
+  const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
+  for (const txt of ['Costo por feature', 'Costo por rama', 'data-graf-ramas="${v}"', "[['feature', 'Feature'], ['rama', 'Rama']]", "'sin rama'", 'graf-desglose']) assert.ok(html.includes(txt), txt)
+  assert.ok(!html.includes('otras ('), 'sin corte top 10 + «otras»')
+})
+
+test('E5b: plantilla.html — el costo por feature muestra el tiempo total de cada feature y de sus ramas', () => {
+  const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
+  for (const txt of ['r.minutos += f.minutos ?? 0', "por === 'feature' ? (g) => `${usd(g.costo)} · ${dur(g.minutos)}`", 'de trabajo en total']) assert.ok(html.includes(txt), txt)
+})
+
+test('E5: plantilla.html muestra las advertencias y la calibración del panel de límites', () => {
+  const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
+  for (const txt of ['El % incluye uso fuera de Claude Code', '$ por 1 % se recalcula en cada ventana', 'Última ventana usada', 'sesiones tipo', 'Costo por tipo de tarea']) assert.ok(html.includes(txt), txt)
+  const e = eficienciaDe(mets, filas)
+  assert.equal(e.limites.cinco.porPct, 2)
+  assert.ok(e.quedan.some((q) => q.tipo === 'Sn' && q.cinco != null))
+})
+
+// ---------- E5c: Auditoría en la pestaña Bitácora ----------
+test('E5c: auditoriaPanel — últimos N días con las cinco secciones de auditar y porModelo; sin transcripciones → null', async () => {
+  const { auditoriaPanel } = await import('./auditoria.mjs')
+  const L = (o) => JSON.stringify(o)
+  const texto = [L({ type: 'assistant', timestamp: '2026-10-04T15:00:00.000Z', requestId: 'r1', message: { model: 'claude-opus-5-5', usage: { input_tokens: 100, cache_creation_input_tokens: 1000, cache_read_input_tokens: 10000, output_tokens: 200 }, content: [] } })].join('\n')
+  const bit = '| Fecha | Tarea | Modelo | Costo |\n|---|---|---|---|\n'
+  const a = auditoriaPanel([{ proyecto: 'p', sid: 's1', texto }], bit, { hoy: '2026-10-04', dias: 7 })
+  assert.equal(a.dias.length, 7)
+  assert.deepEqual(a.dias.map((d) => d.dia), ['2026-10-04', '2026-10-03', '2026-10-02', '2026-10-01', '2026-09-30', '2026-09-29', '2026-09-28'])
+  const d = a.dias[0]
+  for (const k of ['gasto', 'grandes', 'bashBacklog', 'catCompletos', 'readSinLimite']) assert.ok(k in d, k)
+  assert.equal(d.llamadas, 1)
+  assert.equal(a.dias[1].llamadas, 0)
+  assert.ok(Array.isArray(a.modelos))
+  assert.equal(auditoriaPanel([], bit, { hoy: '2026-10-04' }), null)
+})
+
+test('E5c: plantilla.html — tarjeta «Auditoría» con selector de día, composición, malos hábitos y Opus frente a Sonnet', () => {
+  const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
+  for (const txt of ['Auditoría', 'Opus frente a Sonnet', 'sesgo de selección', 'data-aud-dia']) assert.ok(html.includes(txt), txt)
+})
+
+test('las sesiones del tutor de estudio («Plan a estudiar:») no cuentan como trabajo: ni activas ni «última sesión»', async () => {
+  const { hechosRetomar } = await import('./generar.mjs')
+  const tr = tmpS(join(tmpdirS(), 'tablero-est-'))
+  mkdirS(join(tr, '-Users-x-est'), { recursive: true })
+  const u = (t) => JSON.stringify({ type: 'user', timestamp: '2026-10-05T10:00:00Z', message: { role: 'user', content: t } }) + '\n'
+  const real = join(tr, '-Users-x-est', 'real0000.jsonl'), tutor = join(tr, '-Users-x-est', 'tutor000.jsonl')
+  escribirS(real, u('arregla el login') + JSON.stringify({ aiTitle: 'Login' }) + '\n')
+  escribirS(tutor, u('Plan a estudiar: /x/BACKLOG.md\nLéelo completo con Read antes de responder.\n\nExtrae lo técnico') + JSON.stringify({ aiTitle: 'Estudio' }) + '\n')
+  const ahora = Date.parse('2026-10-05T10:05:00Z')
+  utimesSync(real, new Date(ahora - 3600e3), new Date(ahora - 3600e3))
+  utimesSync(tutor, new Date(ahora - 60e3), new Date(ahora - 60e3)) // el tutor es el más reciente
+  const r = sesionesActivas([{ id: 'e', transcripciones: '-Users-x-est' }], tr, { ahora })
+  assert.deepEqual(r.e.map((s) => s.sid), ['real0000'], 'el tutor no sale entre las sesiones activas (ni en el kanban)')
+  const h = hechosRetomar({ transcripciones: '-Users-x-est' }, null, { transcripciones: tr, ahora: new Date(ahora) })
+  assert.equal(h.ultimaSesionClaude.titulo, 'Login', 'la última sesión de Claude ignora al tutor')
 })

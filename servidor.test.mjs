@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer, request } from 'node:http'
+import vm from 'node:vm'
+import { execFileSync } from 'node:child_process'
 
 const dir = mkdtempSync(join(tmpdir(), 'tablero-srv-'))
 const BACKLOG = join(dir, 'BACKLOG_PRUEBA.md')
@@ -35,6 +37,18 @@ process.env.TABLERO_DATOS = join(dir, 'datos')
 // Credenciales: siempre un archivo del temporal, nunca ~/.config/tablero.
 const CRED = join(dir, 'config', 'credenciales.json')
 process.env.TABLERO_CREDENCIALES = CRED
+// Metodología (S50): repo de mentira y un settings.json con un secreto en el home temporal.
+process.env.TABLERO_METODOLOGIA_REPO = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'metodologia', 'repo')
+mkdirSync(join(dir, '.claude', 'hooks'), { recursive: true })
+writeFileSync(join(dir, '.claude', 'hooks', 'vigilar_contexto.sh'), '')
+writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify({ env: { API_KEY: 'sk-SECRETO-SRV' }, hooks: { PostToolUse: [{ hooks: [{ type: 'command', command: '~/.claude/hooks/vigilar_contexto.sh' }] }] } }))
+// Estudio (S55): nunca el claude real; el falso registra args/cwd/stdin de cada llamada.
+process.env.TABLERO_CLAUDE_BIN = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'claude-falso.mjs')
+const REGISTRO_CLAUDE = join(dir, 'claude-falso.log')
+process.env.CLAUDE_FALSO_REGISTRO = REGISTRO_CLAUDE
+// Oficina (S57): avisos del hook en el temporal, nunca ~/.claude/oficina.
+const EVENTOS = join(dir, 'oficina', 'eventos.jsonl')
+process.env.OFICINA_EVENTOS = EVENTOS
 
 const fuera = new Map([['E1', { id: 'E1', titulo: 'Desde afuera', hecha: false, columna: 'Todo', url: 'https://x/E1' }]])
 let n = 0
@@ -69,14 +83,14 @@ before(async () => {
   srv = createServer((q, r) => manejador(q, r))
   await new Promise((ok) => srv.listen(0, '127.0.0.1', ok))
   puerto = srv.address().port
-  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso, trello: trelloFalso, 'azure-devops': adoFalso }, codigo: 'c1', alSalir: () => { salidas++ } })
+  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso, trello: trelloFalso, 'azure-devops': adoFalso }, codigo: 'c1', alSalir: () => { salidas++ }, tiempoEstudio: 1500 })
 })
 after(() => srv.close())
 
 function post(ruta, cuerpo, { host = `127.0.0.1:${puerto}`, origin = `http://127.0.0.1:${puerto}`, tipo = 'application/json' } = {}) {
   return new Promise((ok, mal) => {
     const datos = JSON.stringify(cuerpo)
-    const q = request({ host: '127.0.0.1', port: puerto, path: ruta, method: 'POST', headers: { host, origin, 'content-type': tipo, 'content-length': Buffer.byteLength(datos) } }, (r) => {
+    const q = request({ host: '127.0.0.1', port: puerto, path: ruta, method: 'POST', headers: { host, ...(origin ? { origin } : {}), 'content-type': tipo, 'content-length': Buffer.byteLength(datos) } }, (r) => {
       let t = ''
       r.on('data', (c) => { t += c })
       r.on('end', () => ok({ estado: r.statusCode, json: JSON.parse(t) }))
@@ -500,7 +514,7 @@ test('vista: la plantilla trae la tarjeta «Para retomar» y «Qué se busca» e
 
 test('vista: la plantilla trae la pestaña «Tablero» (kanban), la franja de Claude y «Mover a»', async () => {
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
-  for (const marca of ["['tablero', 'Tablero']", 'function vistaKanban', "'/api/sesiones'", 'data-kanban-col', 'Claude está trabajando', 'Mover a', 'scroll-snap', 'sin sesión activa', 'data-mover', 'draggable', 'derivada']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+  for (const marca of ["['tablero', 'Tablero']", 'function vistaKanban', "'/api/sesiones'", 'data-kanban-col', 'Claude está trabajando', 'scroll-snap', 'sin sesión activa', 'derivada']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
 })
 
 test('vista: la plantilla trae el selector de carpeta (Elegir…, recientes de Claude, explorar)', async () => {
@@ -565,7 +579,7 @@ test('crear backlog: sin docs, nombre con ruta o fuera del patrón → 400; exis
   assert.equal(pv.estado, 200, pv.json.error)
   assert.equal(pv.json.archivo, 'BACKLOG.md')
   assert.match(pv.json.contenido, /^# Backlog — Nuevo\n\n## Estado\n- \d{4}-\d{2}-\d{2} · /)
-  assert.match(pv.json.contenido, /\n## S1 — .*\nHistoria: .*\n- \[ \] /)
+  assert.match(pv.json.contenido, /\n## H1 — .*\nHistoria: .*\n\n### S1 — .*\nSe espera: .*\n- \[ \] .+ — /)
   assert.ok(!existsSync(join(docsNuevo, 'BACKLOG.md')))
   const r = await post('/api/backlog/crear', { proyecto: 'nuevo' })
   assert.equal(r.estado, 200, r.json.error)
@@ -693,6 +707,32 @@ test('vista: Resumen con el avance de la integración y botón «Mis tareas» en
   for (const marca of ['function avanceIntegracion', 'id="ir-mias"', 'data-ir-mias', 'Cerrados por semana', 'function pintarBotonMias']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
 })
 
+test('/api/oficina (S57): agentes desde el hook y, sin hook, desde la transcripción; con proyecto y fuera de la huella', async () => {
+  const ahora = () => new Date().toISOString()
+  mkdirSync(dirname(EVENTOS), { recursive: true })
+  const ev = (o) => JSON.stringify({ t: ahora(), sid: 'of1', agente: 'principal', tipo: null, herramienta: null, archivo: null, cwd: '/prueba/sub', ...o }) + '\n'
+  writeFileSync(EVENTOS, ev({ evento: 'PreToolUse', herramienta: 'Read', archivo: 'BACKLOG_PRUEBA.md' }) + ev({ evento: 'SubagentStart', agente: 'ag1', tipo: 'buscador' }) + ev({ evento: 'PreToolUse', agente: 'ag1', tipo: 'buscador', herramienta: 'Grep' }))
+  const cola = join(TR, '-prueba', 'oooo1111-0000.jsonl')
+  writeFileSync(cola, JSON.stringify({ type: 'user', cwd: dir, timestamp: ahora(), message: { content: 'hola' } }) + '\n' + JSON.stringify({ type: 'assistant', cwd: dir, message: { content: [{ type: 'tool_use', id: 'u1', name: 'Edit', input: { file_path: join(dir, 'x.mjs'), old_string: 'SECRETO' } }] } }) + '\n')
+  const v = (await get('/api/version')).json.version
+  const r = await get('/api/oficina')
+  assert.equal(r.estado, 200)
+  const de = (sid, agente) => r.json.agentes.find((a) => a.sid === sid && a.agente === agente)
+  assert.equal(de('of1', 'principal').accion, 'leyendo')
+  assert.equal(de('of1', 'principal').proyecto, 'prueba', 'su cwd cae en la carpeta de transcripciones de «prueba» (-prueba-sub)')
+  assert.equal(de('of1', 'ag1').accion, 'buscando')
+  const t = de('oooo1111-0000', 'principal')
+  assert.equal(t?.fuente, 'transcripcion')
+  assert.equal(t.accion, 'escribiendo')
+  assert.equal(t.archivo, 'x.mjs')
+  assert.equal(t.proyecto, 'prueba', 'la carpeta de la transcripción manda sobre el cwd')
+  assert.ok(!JSON.stringify(r.json).includes('SECRETO'), 'nunca contenido')
+  writeFileSync(EVENTOS, readFileSync(EVENTOS, 'utf8') + ev({ evento: 'Stop' }))
+  assert.equal((await get('/api/oficina')).json.agentes.find((a) => a.sid === 'of1' && a.agente === 'principal').accion, 'quieto')
+  assert.equal((await get('/api/version')).json.version, v, 'la oficina no entra en la huella')
+  assert.equal((await get('/api/oficina', { host: `evil.com:${puerto}` })).estado, 403)
+})
+
 test('/api/sesiones: sesiones recientes por proyecto, barato, sin tocar la huella; /api/datos trae sesiones y kanban', async () => {
   writeFileSync(BACKLOG, readFileSync(BACKLOG, 'utf8').replace('- [x] Uno', '- [ ] Uno')) // un test anterior la marcó
   const r = join(TR, '-prueba', 'hhhh9999-0000.jsonl')
@@ -707,14 +747,16 @@ test('/api/sesiones: sesiones recientes por proyecto, barato, sin tocar la huell
   assert.equal(mia.activa, true)
   assert.equal(mia.rama, 'kb')
   assert.ok(Array.isArray(s.json.columnas.prueba), 'estado de cada tarjeta para repintar')
-  assert.equal(s.json.columnas.prueba.find((c) => c.texto === 'Uno')?.estado, 'en-curso')
+  assert.equal(s.json.columnas.prueba.find((c) => c.clave === 'S1')?.estado, 'en-curso', 'una entrada por sesión (S53)')
   writeFileSync(r, readFileSync(r, 'utf8') + JSON.stringify({ type: 'user', message: { content: 'más' } }) + '\n')
   assert.equal((await get('/api/version')).json.version, v, 'la actividad de Claude no entra en la huella')
   assert.equal((await get('/api/sesiones', { host: `evil.com:${puerto}` })).estado, 403)
   const d = (await get('/api/datos')).json
   assert.ok(d.sesiones?.prueba)
   assert.ok(Array.isArray(d.proyectos[0].kanban))
-  assert.equal(d.proyectos[0].kanban.find((c) => c.texto === 'Uno').archivo, 'BACKLOG_PRUEBA.md')
+  const s1 = d.proyectos[0].kanban.find((c) => c.clave === 'S1')
+  assert.equal(s1.archivo, 'BACKLOG_PRUEBA.md')
+  assert.deepEqual([s1.llano, s1.total], ['Base', 2], 'p.kanban es por sesión (S53)')
 })
 
 test('/api/carpetas: sin ruta → home + sugerencias; con ruta → subcarpetas y propuesta; nunca fuera de home ni archivos; solo con Origin', async () => {
@@ -801,4 +843,307 @@ test('participar (S37): asignar y estado solo en «participar» (400 en lectura/
   assert.equal(readFileSync(CONF, 'utf8'), antesConf)
   assert.equal(readFileSync(BACKLOG, 'utf8'), antesMd)
   assert.ok(!existsSync(join(dir, 'datos', 'sync-part-ado.json')))
+})
+
+test('vista del formato: llano visible, técnico desplegable, «Se espera» frente a «Resultado», etiquetas y prompt siguiente', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['function casillaFormato', 'class="llano"', 'class="tecnico"', 'Se espera', 'Resultado', 'function bloqueEspera', 'class="etq-formato"', 'Épica', 'Historia', 'Tarea', 'data-copiar', 'bloqueEspera(']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
+test('vista del formato: la casilla legada (sin « — ») se muestra como hoy', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  assert.ok(/function casillaFormato[\s\S]{0,600}if \(!f\) return inline\(/.test(html), 'casillaFormato debe devolver el texto de siempre si no hay « — »')
+  assert.ok(html.includes('class="prompt-siguiente"'), 'el prompt siguiente va en un sitio fijo')
+})
+
+test('metodología (S50): GET /api/metodologia da el grafo sin secretos ni rutas del home', async () => {
+  const r = await fetch(`http://127.0.0.1:${puerto}/api/metodologia`)
+  assert.equal(r.status, 200)
+  const t = await r.text()
+  const g = JSON.parse(t)
+  assert.ok(g.etapas.length === 6 && g.piezas.length > 15)
+  assert.equal(g.piezas.find((p) => p.id === 'hook:vigilar_contexto.sh').estado, 'activa')
+  assert.ok(g.proyectos.some((p) => p.id === 'prueba' && p.conectado), '«prueba» tiene sesiones en TABLERO_TRANSCRIPCIONES')
+  assert.ok(g.piezas.find((p) => p.id === 'bitacora').proyectos.includes('prueba'))
+  assert.doesNotMatch(t, /SECRETO|API_KEY/)
+  assert.ok(!t.includes(dir), 'rutas del home con ~')
+  const ajeno = await new Promise((ok, mal) => request({ host: '127.0.0.1', port: puerto, path: '/api/metodologia', headers: { host: `evil.com:${puerto}` } }, (x) => { x.resume(); ok(x.statusCode) }).on('error', mal).end())
+  assert.equal(ajeno, 403)
+})
+
+// Metodología viva (S51): la pestaña dibuja el flujo con los datos de /api/metodologia.
+function funcionDe(html, nombre) {
+  const i = html.indexOf(`function ${nombre}(`)
+  assert.ok(i >= 0, `falta function ${nombre} en plantilla.html`)
+  const f = html.indexOf('\n}\n', i)
+  return html.slice(i, f + 2)
+}
+test('metodología (S51): la pestaña pinta un nodo por etapa con su estado y el detalle de la pieza', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  assert.ok(/\['metodologia', 'Metodolog[ií]a'\]/.test(html), 'pestaña «Metodología» en PESTANAS')
+  assert.ok(html.includes('/api/metodologia'), 'la vista pide /api/metodologia')
+  assert.ok(/metodologia:\s*vistaMetodologia/.test(html), 'registrada en VISTAS')
+  const g = await (await fetch(`http://127.0.0.1:${puerto}/api/metodologia`)).json()
+  const ctx = { esc: (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]) }
+  vm.createContext(ctx)
+  vm.runInContext(funcionDe(html, 'htmlMetodologia'), ctx)
+  const pieza = g.piezas.find((p) => p.id === 'bitacora')
+  const out = ctx.htmlMetodologia(g, pieza.id)
+  assert.match(out, /<svg/, 'flujo en SVG en línea')
+  for (const e of g.etapas) {
+    assert.ok(out.includes(`data-etapa="${e.id}"`), `nodo de la etapa ${e.id}`)
+    assert.match(out, new RegExp(`data-etapa="${e.id}"[^>]*class="[^"]*\\bnodo-${{ ok: 'verde', parcial: 'ambar', falta: 'rojo' }[e.estado]}\\b`), `${e.id} en ${e.estado}`)
+  }
+  assert.ok(out.includes(pieza.descripcion.slice(0, 20)), 'qué hace la pieza elegida')
+  assert.ok(out.includes('prueba'), 'proyectos que la usan')
+  for (const est of ['activa', 'instalada', 'falta']) {
+    const p = g.piezas.find((x) => x.estado === est)
+    if (p) assert.match(ctx.htmlMetodologia(g, p.id), new RegExp(`pieza-${{ activa: 'verde', instalada: 'ambar', falta: 'rojo' }[est]}`), `pieza ${est}`)
+  }
+  assert.match(out, /class="meta-lista"/, 'lista vertical para móvil')
+})
+
+// ---------- S53: prueba transversal de rutas y detalle de una sesión ----------
+test('toda ruta /api/* que declara crearManejador rechaza Host ajeno, y las POST además sin Origin (descubre las nuevas sola)', async () => {
+  const fuente = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'generar.mjs'), 'utf8')
+  const m = fuente.slice(fuente.indexOf('export function crearManejador'))
+  const rutas = [...new Set([...m.matchAll(/ruta === '(\/api\/[^']+)'/g)].map((x) => x[1]))]
+  const gets = new Set([...m.matchAll(/req\.method === 'GET' && ruta === '(\/api\/[^']+)'/g)].map((x) => x[1]))
+  assert.ok(rutas.length >= 20, `encontró ${rutas.length} rutas`)
+  assert.ok(rutas.includes('/api/sesion-detalle'), 'S53 declara /api/sesion-detalle')
+  const ajeno = { host: `evil.com:${puerto}` }
+  for (const r of rutas) {
+    assert.equal((gets.has(r) ? await get(r, ajeno) : await post(r, {}, ajeno)).estado, 403, `${r} con Host ajeno`)
+    if (!gets.has(r)) assert.equal((await post(r, {}, { origin: '' })).estado, 403, `${r} sin Origin`)
+  }
+})
+
+test('/api/sesion-detalle: commits y archivos de la rama frente a la principal; rama inválida → 400; proyecto ajeno → 404', async () => {
+  const repo = join(dir, 'repo-detalle')
+  mkdirSync(repo)
+  const g = (...a) => execFileSync('git', a, { cwd: repo, stdio: 'pipe' })
+  g('init', '-q', '-b', 'main'); g('config', 'user.email', 't@t'); g('config', 'user.name', 't')
+  writeFileSync(join(repo, 'a.txt'), 'a'); g('add', '.'); g('commit', '-qm', 'base')
+  g('checkout', '-qb', 'h7-s1'); writeFileSync(join(repo, 'b.mjs'), 'b'); writeFileSync(join(repo, 'c.md'), 'c'); g('add', '.'); g('commit', '-qm', 'S1: dos archivos')
+  g('checkout', '-q', 'main')
+  const PJ = join(dir, 'proyectos.json'), original = readFileSync(PJ, 'utf8')
+  writeFileSync(PJ, JSON.stringify([...JSON.parse(original), { id: 'conrepo', nombre: 'Con repo', repo }]))
+  try {
+    const r = await get('/api/sesion-detalle?proyecto=conrepo&rama=h7-s1')
+    assert.equal(r.estado, 200)
+    assert.equal(r.json.principal, 'main')
+    assert.deepEqual(r.json.commits.map((c) => c.titulo), ['S1: dos archivos'])
+    assert.deepEqual([...r.json.commits[0].archivos].sort(), ['b.mjs', 'c.md'])
+    assert.ok(r.json.commits[0].oid && r.json.commits[0].fecha)
+    assert.deepEqual((await get('/api/sesion-detalle?proyecto=conrepo&rama=no-existe')).json.commits, [])
+    assert.equal((await get('/api/sesion-detalle?proyecto=conrepo&rama=--output%3D%2Ftmp%2Fx')).estado, 400)
+    assert.equal((await get('/api/sesion-detalle?proyecto=conrepo')).estado, 400)
+    assert.equal((await get('/api/sesion-detalle?proyecto=nadie&rama=h7-s1')).estado, 404)
+  } finally { writeFileSync(PJ, original) }
+})
+
+// ---------- S54: kanban por sesión — tarjeta, panel de detalle, filtros y botón «Prompt de» ----------
+const sesionKanban = {
+  archivo: 'BACKLOG_H7.md', clave: 'S1', titulo: 'S1 — Alta de personas', llano: 'Se pueden dar de alta personas desde la pantalla.', modelo: 'Sonnet',
+  hito: 'H7', rama: 'h7-s1', estado: 'en-curso', hechas: 1, total: 3, linea: 12, seccion: 's1',
+  seEspera: 'Se pueden dar de alta personas.', resultado: 'Quedó el alta con validación.',
+  prompt: 'Sesión S1 de BACKLOG_H7.md. Primera casilla: el test.',
+  tareas: [
+    { hecha: true, texto: '[test] Prueba el alta — `alta.test.mjs` con tres casos', linea: 13 },
+    { hecha: false, texto: '[fix] Valida la cédula — `alta.mjs` regla de 10 dígitos', linea: 14 },
+  ],
+  pr: { numero: 7, url: 'https://github.com/x/y/pull/7', estado: 'OPEN', ci: 'ok' },
+}
+function ctxKanban(html, extra = {}) {
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+  const ctx = { esc, inline: esc, plano: (s) => String(s ?? ''), corto: (s, n = 160) => String(s).slice(0, n), editable: () => true,
+    chipsExternos: () => '', estrella: () => '', hace: () => 'hace 1 min', etqPR: (pr) => `<a class="pr">#${pr.numero}</a>`, badgeRama: (r) => `<code>${esc(r)}</code>`,
+    CASILLA: () => ['☐', '☑'], KCOLS: [['por-hacer', 'Por hacer'], ['en-curso', 'En curso'], ['en-prueba', 'En prueba'], ['hecho', 'Hecho']],
+    kClave: (c) => `${c.archivo}:${c.linea}`, kAbierta: null, kDetalle: new Map(), gastoSesion: () => null, ...extra }
+  vm.createContext(ctx)
+  vm.runInContext(html.match(/^const CI_K = .*$/m)[0], ctx)
+  for (const f of ['partesFormato', 'casillaFormato', ...(extra.funciones || [])]) vm.runInContext(funcionDe(html, f), ctx)
+  return ctx
+}
+test('kanban por sesión (S54): tarjeta en llano con chip clave·modelo·x/y y punto de CI; sin arrastre', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  const ctx = ctxKanban(html, { funciones: ['botonPrompt', 'tarjetaSesion'] })
+  const out = ctx.tarjetaSesion(sesionKanban)
+  assert.ok(out.includes('Se pueden dar de alta personas desde la pantalla.'), 'línea en llano')
+  assert.match(out, /S1[^<]*·[^<]*Sonnet[^<]*·[^<]*1\/3/, 'chip clave · modelo · x/y')
+  assert.match(out, /class="[^"]*\bci-ok\b/, 'punto de CI en verde')
+  assert.match(out, /data-k-sesion="BACKLOG_H7\.md:12"/, 'abre el panel por archivo:línea')
+  assert.ok(!out.includes('draggable'), 'las sesiones no se arrastran')
+  assert.match(ctx.tarjetaSesion({ ...sesionKanban, pr: { ...sesionKanban.pr, ci: 'falla' } }), /\bci-mal\b/, 'CI roto en rojo')
+})
+test('kanban por sesión (S54): el panel pone el prompt con «Copiar» arriba, luego Se espera/Resultado, casillas, rama/PR/CI y commits', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  const ctx = ctxKanban(html, { funciones: ['botonPrompt', 'botonEstudiar', 'panelSesion'], haceSeg: () => 'hace 1 min' })
+  const det = { principal: 'main', commits: [{ oid: 'abc1234def', fecha: '2026-10-05T10:00:00Z', titulo: 'S1: alta', archivos: ['alta.mjs', 'alta.test.mjs'] }] }
+  const out = ctx.panelSesion(sesionKanban, det)
+  const pos = (re) => { const i = out.search(re); assert.ok(i >= 0, `falta ${re}`); return i }
+  const iPrompt = pos(/Sesión S1 de BACKLOG_H7\.md/), iCopiar = pos(/data-copiar/), iEspera = pos(/Se espera/), iRes = pos(/Resultado/), iCas = pos(/class="llano"/), iRama = pos(/h7-s1/), iCommit = pos(/S1: alta/)
+  assert.ok(iPrompt < iEspera && iCopiar < iEspera, 'prompt y «Copiar» antes de Se espera')
+  assert.ok(iEspera < iRes && iRes < iCas && iCas < iRama && iRama < iCommit, 'orden: espera → resultado → casillas → rama → commits')
+  assert.match(out, />[^<]*Copiar[^<]*</, 'botón «Copiar»')
+  assert.match(out, /data-linea="14"/, 'casilla marcable (POST /api/guardar por línea)')
+  assert.ok(out.includes('class="etq-formato"') && out.includes('<details class="tecnico">'), 'casillas con casillaFormato')
+  assert.ok(out.includes('https://github.com/x/y/pull/7') && out.includes('alta.test.mjs'), 'PR y archivos')
+  assert.ok(!/Resultado/.test(ctx.panelSesion({ ...sesionKanban, resultado: null }, null)), 'sin resultado no hay bloque Resultado')
+  assert.ok(ctx.panelSesion({ ...sesionKanban, prompt: null }, null).length > 0 && !ctx.panelSesion({ ...sesionKanban, prompt: null }, null).includes('data-copiar'), 'sin prompt no hay Copiar')
+})
+test('kanban por sesión (S54): filtro hito+backlog sin sesiones lo dice; botón «Prompt de SX» en las tarjetas del Resumen', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  const ctx = ctxKanban(html, { funciones: ['botonPrompt', 'vistaKanban'], kf: { hito: 'H9', backlog: 'BACKLOG_H7.md', movidas: false },
+    tarjetasKanban: () => [sesionKanban, { ...sesionKanban, hito: 'H9', archivo: 'BACKLOG_H9.md', clave: 'S9', linea: 3 }], tarjetaSesion: () => '<div class="k-tarjeta"></div>', tarjetaKanban: () => '<div class="k-tarjeta"></div>',
+    franjaKanban: () => '' })
+  assert.match(ctx.vistaKanban(), /class="k-vacio"[^>]*>[^<]*Ninguna sesión/, 'aviso de combinación vacía')
+  assert.match(ctx.botonPrompt({ clave: 'S54', prompt: 'x' }), /Prompt de S54/, 'botón con la clave')
+  assert.equal(ctx.botonPrompt({ clave: 'S54', prompt: null }), '', 'sin prompt no hay botón')
+  const usos = html.match(/botonPrompt\(/g) || []
+  assert.ok(usos.length >= 4, `botonPrompt se usa en «estás aquí» (×3) y en tarjetaEnCurso; usos: ${usos.length}`)
+})
+
+// ---------- S55: estudio de un plan con un Claude de solo lectura (el falso de fixtures/) ----------
+function postCrudo(ruta, cuerpo) {
+  return new Promise((ok, mal) => {
+    const datos = JSON.stringify(cuerpo)
+    const q = request({ host: '127.0.0.1', port: puerto, path: ruta, method: 'POST', headers: { host: `127.0.0.1:${puerto}`, origin: `http://127.0.0.1:${puerto}`, 'content-type': 'application/json', 'content-length': Buffer.byteLength(datos) } }, (r) => {
+      let t = ''
+      r.on('data', (c) => { t += c })
+      r.on('end', () => ok({ estado: r.statusCode, tipo: r.headers['content-type'], eventos: t.split('\n').filter(Boolean).map((l) => JSON.parse(l)) }))
+    })
+    q.on('error', mal)
+    q.end(datos)
+  })
+}
+const llamadasClaude = () => existsSync(REGISTRO_CLAUDE) ? readFileSync(REGISTRO_CLAUDE, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []
+
+test('estudio (S55): responde en streaming (ndjson) con sesión, texto y fin; sigue la conversación con --resume', async () => {
+  const r = await postCrudo('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, accion: 'tecnico' })
+  assert.equal(r.estado, 200)
+  assert.match(r.tipo, /application\/x-ndjson/)
+  assert.deepEqual(r.eventos.map((e) => e.tipo), ['sesion', 'texto', 'texto', 'herramienta', 'fin'])
+  assert.equal(r.eventos[0].sesionId, 'sesion-falsa-1')
+  const [primera] = llamadasClaude().slice(-1)
+  assert.ok(primera.args.includes('-p') && primera.args.includes('--disallowedTools'))
+  assert.equal(primera.cwd, (await import('node:fs')).realpathSync(dir), 'sin repo: la carpeta del plan')
+  assert.match(primera.entrada, /BACKLOG_PRUEBA\.md[\s\S]*técnic/i)
+  const r2 = await postCrudo('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: '¿Y la S1?', sesionId: 'sesion-falsa-1' })
+  assert.equal(r2.estado, 200)
+  const [segunda] = llamadasClaude().slice(-1)
+  assert.equal(segunda.args[segunda.args.indexOf('--resume') + 1], 'sesion-falsa-1')
+  assert.equal(segunda.entrada, '¿Y la S1?')
+})
+
+test('estudio (S55): plan fuera del proyecto, sin pregunta o sesión inválida → 400; sin Origin → 403; nunca lanza claude', async () => {
+  const antes = llamadasClaude().length
+  const otro = join(dir, 'otro.md'); writeFileSync(otro, '# fuera\n')
+  assert.equal((await post('/api/estudio', { proyecto: 'prueba', plan: otro, pregunta: 'x' })).estado, 400)
+  assert.equal((await post('/api/estudio', { proyecto: 'eap10', plan: BACKLOG, pregunta: 'x' })).estado, 400, 'el plan es de otro proyecto')
+  assert.equal((await post('/api/estudio', { proyecto: 'prueba', plan: BACKLOG })).estado, 400)
+  assert.equal((await post('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'x', sesionId: '--dangerously' })).estado, 400)
+  assert.equal((await post('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'x' }, { origin: '' })).estado, 403)
+  assert.equal(llamadasClaude().length, antes)
+})
+
+test('estudio (S55): un proceso por plan (409 mientras corre) y tiempo máximo con evento de error', async () => {
+  const colgado = postCrudo('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'colgar' })
+  await new Promise((ok) => setTimeout(ok, 300))
+  assert.equal((await post('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'otra' })).estado, 409)
+  const r = await colgado
+  assert.equal(r.estado, 200)
+  assert.equal(r.eventos.at(-1).tipo, 'error')
+  assert.match(r.eventos.at(-1).error, /tiempo/i)
+  assert.equal((await postCrudo('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'ya libre' })).estado, 200)
+})
+
+test('estudio (S55): guardar añade la respuesta a datos/estudio/<proyecto>/<plan>.md y GET guía la devuelve', async () => {
+  const guia = join(dir, 'datos', 'estudio', 'prueba', 'BACKLOG_PRUEBA.md')
+  assert.deepEqual((await get(`/api/estudio/guia?proyecto=prueba&plan=${encodeURIComponent(BACKLOG)}`)).json, { ok: true, ruta: guia, contenido: null })
+  assert.equal((await post('/api/estudio/guardar', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'Extrae lo técnico', respuesta: 'Node.' })).estado, 200)
+  assert.equal((await post('/api/estudio/guardar', { proyecto: 'prueba', plan: BACKLOG, pregunta: '¿Y S1?', respuesta: 'Base.' })).estado, 200)
+  const t = readFileSync(guia, 'utf8')
+  assert.match(t, /^# Guía de estudio — BACKLOG_PRUEBA\.md/)
+  assert.match(t, /— Extrae lo técnico\n\nNode\.\n[\s\S]*— ¿Y S1\?\n\nBase\.\n$/)
+  assert.equal((await get(`/api/estudio/guia?proyecto=prueba&plan=${encodeURIComponent(BACKLOG)}`)).json.contenido, t)
+  assert.equal((await post('/api/estudio/guardar', { proyecto: 'prueba', plan: join(dir, 'otro.md'), pregunta: 'x', respuesta: 'y' })).estado, 400)
+  assert.equal((await post('/api/estudio/guardar', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'x', respuesta: '' })).estado, 400)
+  assert.equal((await get(`/api/estudio/guia?proyecto=prueba&plan=${encodeURIComponent(join(dir, 'otro.md'))}`)).estado, 400)
+  assert.equal(readFileSync(BACKLOG, 'utf8').includes('Node.'), false, 'nunca toca el plan')
+})
+
+// ---------- S56: vista del estudio — botón «Estudiar», chat con acciones rápidas, guardar y pestaña «Guía» ----------
+const ctxEstudio = (html, extra = {}) => {
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+  const ctx = { esc, md: (t) => `<div class="md">${esc(t)}</div>`, ...extra }
+  vm.createContext(ctx)
+  vm.runInContext(html.match(/^const ACCIONES_ESTUDIO = .*$/m)[0], ctx)
+  for (const f of ['botonEstudiar', 'panelEstudio', ...(extra.funciones || [])]) vm.runInContext(funcionDe(html, f), ctx)
+  return ctx
+}
+test('estudio (S56): botón «Estudiar» en Planes, en el backlog y en el detalle de una tarjeta del kanban', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  const ctx = ctxEstudio(html)
+  const b = ctx.botonEstudiar('/x/plan.md', { sesion: 'S3b', rama: 'h7-s3b' })
+  assert.match(b, /data-estudiar="\/x\/plan\.md"/)
+  assert.match(b, /data-estudiar-sesion="S3b"/)
+  assert.match(b, /data-estudiar-rama="h7-s3b"/)
+  assert.match(b, />[^<]*Estudiar[^<]*</)
+  assert.ok(!/data-estudiar-sesion/.test(ctx.botonEstudiar('/x/plan.md')), 'sin sesión no manda sesión')
+  assert.ok((html.match(/botonEstudiar\(/g) || []).length >= 4, 'se usa en planes(), backlogs() y panelSesion() (más su definición)')
+})
+test('estudio (S56): el panel trae las acciones rápidas del servidor, pregunta libre, «Guardar en la guía» y la pestaña «Guía»', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  const ctx = ctxEstudio(html)
+  const ac = { tecnico: 'Extrae lo técnico', pedidos: '¿Qué le pide a Claude cada paso?', sesion: 'Explícame la sesión X', quedo: 'Muéstrame cómo quedó' }
+  for (const [k, e] of Object.entries(ac)) assert.ok(html.includes(e), `etiqueta «${e}» (${k})`)
+  const est = { plan: '/x/plan.md', sesion: 'S3b', mensajes: [{ rol: 'yo', texto: 'Extrae lo técnico' }, { rol: 'claude', texto: 'Usa **Node**', fin: true }], cargando: false, pestana: 'chat', guia: null }
+  const out = ctx.panelEstudio(est)
+  assert.match(out, /data-estudio-accion="tecnico"/)
+  assert.match(out, /data-estudio-accion="sesion"/)
+  assert.match(out, /<textarea[^>]*data-estudio-pregunta/)
+  assert.match(out, /data-estudio-guardar="1"[^>]*>[^<]*Guardar en la guía/, 'guarda la respuesta terminada')
+  assert.match(out, /data-estudio-pestana="guia"[^>]*>[^<]*Guía/)
+  assert.ok(!/data-estudio-guardar/.test(ctx.panelEstudio({ ...est, mensajes: [{ rol: 'yo', texto: 'x' }, { rol: 'claude', texto: 'a medias', fin: false }] })), 'sin «Guardar» mientras llega')
+  const g = ctx.panelEstudio({ ...est, pestana: 'guia', guia: '# Guía de estudio\n\nNode.' })
+  assert.ok(g.includes('Guía de estudio'), 'muestra el .md guardado')
+  assert.match(ctx.panelEstudio({ ...est, pestana: 'guia', guia: null }), /Aún no guardaste nada/)
+})
+
+// Oficina (S58): la escena de «Metodología» con un personaje por agente.
+test('oficina (S58): conmutador Flujo|Oficina, un personaje por agente con su acción, globo al esperar, lista móvil y sin movimiento', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['data-meta-vista="flujo"', 'data-meta-vista="oficina"', "'/api/oficina'", 'document.hidden', 'function htmlOficina']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+  assert.match(html, /@media \(prefers-reduced-motion: reduce\)[^}]*\.oficina|@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.oficina/, 'iconos fijos con prefers-reduced-motion')
+  assert.match(html, /@media \(max-width: 700px\)[^@]*\.oficina-lista/, 'lista en ≤700px')
+  assert.ok(!/<(script|link|img)[^>]+(src|href)="https?:/.test(html.split('function htmlOficina')[1] || ''), 'sin recursos externos')
+  const ctx = { esc: (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]) }
+  vm.createContext(ctx)
+  for (const c of ['ICONO_OFICINA', 'LUGAR_OFICINA']) vm.runInContext(html.match(new RegExp(`^const ${c} = .*$`, 'm'))[0], ctx)
+  vm.runInContext(funcionDe(html, 'htmlOficina'), ctx)
+  const ag = [
+    { sid: 's1', agente: 'principal', principal: true, accion: 'leyendo', archivo: 'BACKLOG.md', proyecto: 'prueba' },
+    { sid: 's1', agente: 'a1', tipo: 'buscador', principal: false, accion: 'buscando', proyecto: 'prueba' },
+    { sid: 's2', agente: 'principal', principal: true, accion: 'escribiendo', archivo: 'x.mjs', proyecto: null },
+    { sid: 's3', agente: 'principal', principal: true, accion: 'ejecutando', proyecto: 'otro' },
+    { sid: 's4', agente: 'principal', principal: true, accion: 'esperando', proyecto: 'otro' },
+    { sid: 's5', agente: 'principal', principal: true, accion: 'quieto', proyecto: null },
+  ]
+  const out = ctx.htmlOficina({ agentes: ag })
+  assert.equal((out.match(/class="personaje /g) || []).length, ag.length, 'un personaje por agente')
+  for (const a of ['leyendo', 'buscando', 'escribiendo', 'ejecutando', 'esperando', 'quieto']) assert.match(out, new RegExp(`class="personaje [^"]*\\b${a}\\b`), `clase ${a}`)
+  assert.equal((out.match(/class="globo"/g) || []).length, 1, 'globo solo en esperando')
+  assert.ok(out.includes('buscador') && out.includes('prueba'), 'etiqueta de tipo y proyecto')
+  assert.ok(out.includes('oficina-lista'), 'lista para móvil')
+  for (const f of ['estante', 'escritorio', 'terminal', 'puerta']) assert.ok(out.includes(`class="${f}`) || out.includes(` ${f}"`), `escena con ${f}`)
+  assert.match(ctx.htmlOficina({ agentes: [] }), /Nadie en la oficina/, 'oficina vacía')
+  assert.ok(!ctx.htmlOficina({ agentes: [{ sid: 'x', agente: 'principal', accion: 'leyendo', archivo: '<b>x</b>' }] }).includes('<b>x'), 'escapa')
+})
+
+test('metodología (S59): GET /api/metodologia no reconstruye el tablero (sin sincronías ni red)', async () => {
+  const t0 = Date.now()
+  const r = await fetch(`http://127.0.0.1:${puerto}/api/metodologia`)
+  assert.equal(r.status, 200)
+  assert.ok(Date.now() - t0 < 1500, `tardó ${Date.now() - t0} ms`)
 })

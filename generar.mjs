@@ -22,13 +22,20 @@ import { validarIntegracion, aplicarCambio, anadirProyecto, editarProyecto, escr
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
-import { parsearBitacora, sidsPorProyecto, asociar, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
+import { auditoriaDe } from './auditoria.mjs'
+import { parsearBitacora, sidsPorProyecto, asociar, conFeatures, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
+import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
+import { semaforoLlamadas, semaforoCtx, eficienciaDe } from './eficiencia.mjs'
+import { metodologia } from './metodologia.mjs'
+import { estadoOficina, VIGENCIA } from './oficina.mjs'
+import { MARCA_ESTUDIO, argsEstudio, promptEstudio, preguntaDe, lanzarEstudio, sesionValida, rutaGuia, anadirAGuia } from './estudio.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
 const DATOS = process.env.TABLERO_DATOS || join(AQUI, 'datos')
 const PLANES = join(homedir(), '.claude', 'plans')
 const TRANSCRIPCIONES = process.env.TABLERO_TRANSCRIPCIONES || join(homedir(), '.claude', 'projects')
+const EVENTOS_OFICINA = process.env.OFICINA_EVENTOS || join(homedir(), '.claude', 'oficina', 'eventos.jsonl')
 const args = process.argv.slice(2)
 // Las apps de macOS y los hooks arrancan con un PATH mínimo: sin esto no encuentran gh ni git.
 process.env.PATH = ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].join(':')
@@ -247,12 +254,15 @@ export function cambiosProyecto(cambios, actual) {
 export const plantillaBacklog = (nombre, fecha) => `# Backlog — ${nombre}
 
 ## Estado
-- ${fecha} · backlog creado desde el tablero.
+- ${fecha} · backlog creado desde el tablero. Siguiente: **S1**.
 - Para retomar (${fecha}): Backlog recién creado; aún no se empezó nada. Lo primero es describir la primera tarea de S1.
 
-## S1 — Primera sesión
+## H1 — Primer hito
 Historia: Como <quién>, quiero <qué>, para <para qué>.
-- [ ] Describe aquí la primera tarea
+
+### S1 — Primera sesión
+Se espera: <qué queda funcionando y cómo se comprueba>.
+- [ ] Describe aquí la primera tarea — <archivo, qué hacer y prueba esperada>
 `
 
 // Backlog secundario con nombre: «Sprint 3 — Diseño» → BACKLOG_SPRINT_3_DISENO.md (sin tildes; nunca el principal).
@@ -309,11 +319,27 @@ function contarCasillas(texto) {
 }
 
 // ---------- Estructura (vista «Mapa»): secciones ##/### con sus casillas anidadas ----------
-const RE_TITULO = /^(#{2,3})\s+(.+?)\s*#*\s*$/
+const RE_TITULO = /^(#{2,4})\s+(.+?)\s*#*\s*$/
 // «[~]» = en curso a mano (cuenta como pendiente); «[-]» = movida (fuera de los conteos).
 const RE_TAREA = /^(\s*)[-*] \[([ xX~-])\]\s?(.*)$/
 const RE_CERCA = /^\s*(```|~~~)/
 const RE_COMO = /c[oó]mo ejecutarlo/i
+// Clave de sesión o hito (FORMATO_BACKLOG.md): S44, E5b, H17, S-CI1b.
+const CLAVE = '[A-Z][A-Z0-9-]*\\d+[a-z]?'
+const RE_CLAVE_INICIO = new RegExp(`^\\**(${CLAVE})(?![A-Za-z0-9])`)
+const RE_CLAVE_EN = new RegExp(`(?<![A-Za-z0-9-])(${CLAVE})(?![A-Za-z0-9])`)
+const RE_MODELO_PAR = /\s*\(([^()]*\b(Opus|Sonnet|Haiku|Fable)\b[^()]*)\)\s*$/i
+const RE_SE_ESPERA = /^\s*(?:[-*]\s+)?\**Se espera\s*:\**\s*(.+)$/i
+const RE_RESULTADO = new RegExp(`^\\s*(?:[-*]\\s+)?\\**Resultado(?:\\s+(${CLAVE}))?\\s*(?:\\([^)]*\\))?\\s*:\\**\\s*(.+)$`)
+const RE_DESPUES = new RegExp(`^\\s*(?:[-*]\\s+)?\\**Despu[eé]s\\s*:\\**\\s*\\**(${CLAVE})\\b`)
+// Prompt en una línea: «Prompt de arranque (S4a): «…»» (vale para la clave que nombra; sin clave, para su sesión).
+const RE_PROMPT_LINEA = /^\s*(?:[-*]\s+)?\**(Prompt\b[^:«]*):\**\s*«(.+)»\s*\.?\s*$/i
+// Casilla del formato: «[tipo] <llano ≤ 12 palabras, sin backticks> — <técnico>»; si no cumple, es legada (todo texto).
+export function partesCasilla(texto) {
+  const m = String(texto).match(/^(?:\[(fix|test|doc|refactor)\]\s+)?(.+?)\s+—\s+(.+)$/)
+  if (!m || m[2].includes('`') || m[2].trim().split(/\s+/).length > 12) return null
+  return { tipo: m[1] || null, llano: plano(m[2]), tecnico: plano(m[3]) }
+}
 const RE_ITEM = /^ ?(\d+[.)]|[-*])\s+(?!\[[ xX~-]\])(.+)$/
 const RE_DURACION = /\s*\(([^()]*\b(?:d[ií]as?|d|semanas?|sem|horas?|h)\b[^()]*)\)\s*$/i
 // «Qué se busca»: línea «Historia:|Objetivo:|Para qué:» (también en viñeta o en negrita); la descripción es el primer
@@ -339,11 +365,13 @@ export function analizarTitulo(crudo) {
     resto = resto.trim().replace(/^\((.*)\)$/, '$1')
     if (resto) notas.push(resto)
   }
+  const par = titulo.match(RE_MODELO_PAR)
+  if (par) { meta.modelo ??= par[2][0].toUpperCase() + par[2].slice(1).toLowerCase(); notas.unshift(par[1].trim()); titulo = titulo.slice(0, par.index) }
   const dur = titulo.match(RE_DURACION)
   if (dur) { meta.duracion = dur[1].trim(); titulo = titulo.slice(0, dur.index) }
   if (notas.length) meta.nota = notas.join(' · ')
   titulo = titulo.trim()
-  return { titulo, clave: (titulo.match(/^\**([HS]\d+[a-z]?)\b/) || [])[1] || null, meta }
+  return { titulo, clave: (titulo.match(RE_CLAVE_INICIO) || [])[1] || null, meta }
 }
 
 function cerrarSeccion(s) {
@@ -365,14 +393,14 @@ const textoDeCita = (lineas) => lineas.map((l) => l.replace(/^\s*>\s?/, '').trim
 // Árbol de secciones: [{ id, linea, titulo, tituloCrudo, clave, nivel, meta, hechas, total, estado, tareas:[{texto,hecha,linea,hijas,marcas?}], items, prompts:[{etiqueta,texto,clave,modelo}], hijas:[sección] }]
 export function estructura(texto) {
   const raiz = []
-  let padre = null, actual = null, pila = [], cerca = null, cita = null, rotulo = null, n = 0, intro = false
+  let padre = null, sesion = null, actual = null, pila = [], cerca = null, cita = null, rotulo = null, n = 0, intro = false
   const cuenta = () => RE_COMO.test(plano(actual.titulo)) || (actual.nivel === 3 && padre && RE_COMO.test(plano(padre.titulo)))
   const emitir = (lineas, rot, esCita) => {
     const texto = esCita ? textoDeCita(lineas) : lineas.join('\n')
     if (!actual || !texto.trim() || !(cuenta() || /prompt/i.test(rot || ''))) return
     const etiqueta = (/prompt/i.test(rot || '') ? plano(rot) : '').replace(/^(?:[-*]|\d+[.)])\s+/, '').replace(/\s*:\s*$/, '').slice(0, 80) || 'Prompt'
     const modelo = (etiqueta.match(/\b(Opus|Sonnet|Haiku|Fable)\b/i) || [])[1]
-    actual.prompts.push({ etiqueta, texto: texto.slice(0, 20000), clave: (etiqueta.match(/\b([A-Z]\d+[a-z]?)\b/) || [])[1] || null, ...(modelo ? { modelo: modelo[0].toUpperCase() + modelo.slice(1).toLowerCase() } : {}) })
+    actual.prompts.push({ etiqueta, texto: texto.slice(0, 20000), clave: (etiqueta.match(RE_CLAVE_EN) || [])[1] || null, ...(modelo ? { modelo: modelo[0].toUpperCase() + modelo.slice(1).toLowerCase() } : {}) })
   }
   for (const [i, linea] of String(texto).replace(/\t/g, '    ').split('\n').entries()) {
     if (RE_CERCA.test(linea)) {
@@ -395,8 +423,12 @@ export function estructura(texto) {
     if (t) {
       const nivel = t[1].length
       const s = { id: `s${n++}`, nivel, linea: i, tituloCrudo: t[2], ...analizarTitulo(t[2]), tareas: [], items: [], prompts: [], hijas: [] }
-      if (nivel === 3 && padre) padre.hijas.push(s)
+      // «####» es sub-sesión de la «###» en curso.
+      if (nivel === 4 && (sesion || padre)) (sesion || padre).hijas.push(s)
+      else if (nivel >= 3 && padre) padre.hijas.push(s)
       else { raiz.push(s); if (nivel === 2) padre = s }
+      if (nivel === 2) sesion = null
+      if (nivel === 3) sesion = s
       actual = s; pila = []; rotulo = null; intro = true
       continue
     }
@@ -406,6 +438,13 @@ export function estructura(texto) {
       if (!linea.trim()) { if (actual.descripcion) intro = false }
       else if (esParrafo(linea)) actual.descripcion = actual.descripcion ? `${actual.descripcion} ${plano(linea)}` : plano(linea)
       else intro = false
+    }
+    if (actual) {
+      const e = linea.match(RE_SE_ESPERA), r = linea.match(RE_RESULTADO), d = linea.match(RE_DESPUES), pr = linea.match(RE_PROMPT_LINEA)
+      if (e) actual.seEspera ??= plano(e[1])
+      if (r && (!r[1] || r[1] === actual.clave)) actual.resultado ??= plano(r[2])
+      if (d) actual.despues ??= d[1]
+      if (pr) actual.prompts.push({ etiqueta: plano(pr[1]).slice(0, 80), texto: pr[2].trim(), clave: (pr[1].match(RE_CLAVE_EN) || [])[1] || null })
     }
     const m = actual && linea.match(RE_TAREA)
     if (actual && !actual.plan) { const pl = linea.match(/plans\/([A-Za-z0-9_-]+\.md)/); if (pl) actual.plan = pl[1] }
@@ -423,7 +462,7 @@ export function estructura(texto) {
     }
     const sangria = m[1].length
     const { texto: limpio, marcas } = extraerMarcas(m[3].trim())
-    const tarea = { texto: limpio.slice(0, 1500), hecha: /x/i.test(m[2]), linea: i, hijas: [], ...(/[~-]/.test(m[2]) ? { marca: m[2] } : {}), ...(Object.keys(marcas).length ? { marcas } : {}) }
+    const tarea = { texto: limpio.slice(0, 1500), hecha: /x/i.test(m[2]), linea: i, hijas: [], ...partesCasilla(limpio), ...(/[~-]/.test(m[2]) ? { marca: m[2] } : {}), ...(Object.keys(marcas).length ? { marcas } : {}) }
     while (pila.length && pila.at(-1).sangria >= sangria) pila.pop()
     ;(pila.length ? pila.at(-1).tarea.hijas : actual.tareas).push(tarea)
     pila.push({ sangria, tarea })
@@ -439,6 +478,56 @@ export function estructura(texto) {
   return raiz
 }
 export const aplanar = (arbol) => arbol.flatMap((s) => [s, ...aplanar(s.hijas)])
+
+// Sesiones del backlog según «Lo que devuelven los parsers» de FORMATO_BACKLOG.md: títulos «###»/«####» con clave
+// (y «##» que no sean hitos H…) más las viñetas legadas de IEP «- **S3c — título (Fable, …)**, rama `x`».
+const RE_SESION_VINETA = new RegExp(`^(\\s*)[-*]\\s+\\*\\*(${CLAVE})\\s*[—–-]\\s*(.+?)\\*\\*(.*)$`)
+const vistaTarea = (t) => ({ hecha: t.hecha, tipo: t.tipo ?? null, llano: t.llano ?? null, tecnico: t.tecnico ?? null, texto: t.texto, linea: t.linea })
+const sinClave = (titulo, clave) => plano(titulo).replace(new RegExp(`^${clave.replace(/-/g, '\\-')}\\s*[—–:-]?\\s*`), '').trim()
+export function sesiones(texto) {
+  const arbol = estructura(texto)
+  const todas = aplanar(arbol)
+  const prompts = todas.flatMap((s) => s.prompts)
+  const promptDe = (clave, propios) => (prompts.find((p) => p.clave === clave) || propios.find((p) => !p.clave))?.texto.trim() ?? null
+  const res = []
+  for (const s of todas) {
+    if (!s.clave || (s.nivel === 2 && /^H\d/.test(s.clave))) continue
+    res.push({
+      clave: s.clave, titulo: sinClave(s.titulo, s.clave), modelo: s.meta.modelo ?? null, rama: s.meta.rama ?? null,
+      seEspera: s.seEspera ?? null, resultado: s.resultado ?? null, prompt: promptDe(s.clave, s.prompts),
+      hechas: s.hechas, total: s.total, tareas: s.tareas.map(vistaTarea),
+      subsesiones: s.hijas.filter((h) => h.nivel === 4 && h.clave).map((h) => h.clave), despues: s.despues ?? null, linea: s.linea,
+    })
+  }
+  // Viñetas legadas: su bloque son las líneas con más sangría que la viñeta (hasta un título).
+  const lineas = String(texto).replace(/\t/g, '    ').split('\n')
+  lineas.forEach((l, i) => {
+    const v = l.match(RE_SESION_VINETA)
+    if (!v || res.some((s) => s.clave === v[2])) return
+    const { titulo, meta } = analizarTitulo(v[3])
+    const s = { clave: v[2], titulo: sinClave(titulo, v[2]), modelo: meta.modelo ?? null, rama: meta.rama ?? v[4].match(/rama\s+`([^`]+)`/)?.[1] ?? null,
+      seEspera: null, resultado: null, prompt: null, hechas: 0, total: 0, tareas: [], subsesiones: [], despues: null, linea: i }
+    const propios = []
+    for (let j = i + 1; j < lineas.length && !RE_TITULO.test(lineas[j]) && (!lineas[j].trim() || sangria(lineas[j]) > v[1].length); j++) {
+      const t = lineas[j].match(RE_TAREA), e = lineas[j].match(RE_SE_ESPERA), r = lineas[j].match(RE_RESULTADO), pr = lineas[j].match(RE_PROMPT_LINEA)
+      if (t && t[2] !== '-') {
+        const tx = extraerMarcas(t[3].trim()).texto
+        s.tareas.push(vistaTarea({ hecha: /x/i.test(t[2]), texto: tx, linea: j, ...partesCasilla(tx) }))
+      } else if (e) s.seEspera ??= plano(e[1])
+      else if (r && (!r[1] || r[1] === s.clave)) s.resultado ??= plano(r[2])
+      else if (pr && !RE_CLAVE_EN.test(pr[1])) propios.push({ clave: null, texto: pr[2] })
+    }
+    s.total = s.tareas.length; s.hechas = s.tareas.filter((t) => t.hecha).length
+    s.prompt = promptDe(s.clave, propios)
+    res.push(s)
+  })
+  // «Resultado S3c (…): …» fuera de la sesión (p. ej. bajo la tarea madre) también cuenta.
+  for (const l of lineas) {
+    const r = l.match(RE_RESULTADO), s = r?.[1] && res.find((x) => x.clave === r[1])
+    if (s) s.resultado ??= plano(r[2])
+  }
+  return res.sort((a, b) => a.linea - b.linea)
+}
 // «Qué se busca» de un plan de Claude: el primer párrafo bajo «## Context» o «## Contexto».
 export const contextoDePlan = (arbol) => aplanar(arbol).find((s) => /^contexto?\b/i.test(plano(s.titulo)))?.descripcion ?? null
 
@@ -485,7 +574,7 @@ export function estasAqui(arbol, estadoTxt = '') {
 
 // Frente activo: dónde se está editando de verdad, según el historial del backlog (la entrada más reciente manda).
 // Devuelve { seccion, tarea, subsesiones, plan } del hito tocado si aún tiene casillas abiertas; si no, null (manda «estás aquí»).
-const RE_SUB = /^\s*[-*]\s+\*\*(S\d+[a-z]?)\b\s*[—–-]?\s*(.*?)\*\*(.*)$/
+const RE_SUB = new RegExp(`^\\s*(?:[-*]\\s+\\*\\*|####\\s+)(${CLAVE})(?![A-Za-z0-9])\\s*[—–-]?\\s*(.*?)(?:\\*\\*(.*))?$`)
 const RE_CASILLA = /^\s*[-*] \[([ xX-])\]\s?(.*)$/
 const sangria = (l) => l.match(/^\s*/)[0].length
 const abierta = (s) => s.estado === 'en-curso' || s.estado === 'pendiente'
@@ -784,15 +873,26 @@ function leerRamas(repo) {
   return fusionarRamas(sh('git', ['for-each-ref', 'refs/heads', 'refs/remotes/origin',
     '--format=%(refname)%1f%(objectname)%1f%(committerdate:iso-strict)%1f%(upstream:track)'], repo) || '')
 }
+// CI de un PR a partir del statusCheckRollup de gh: falla manda sobre corre, y corre sobre ok; sin checks → null.
+const CI_FALLA = /^(FAILURE|ERROR|TIMED_OUT|CANCELLED|ACTION_REQUIRED|STARTUP_FAILURE)$/
+export function resumenCi(rollup) {
+  if (!rollup?.length) return null
+  const estado = (c) => c.state ? (CI_FALLA.test(c.state) ? 'falla' : c.state === 'SUCCESS' ? 'ok' : 'corre')
+    : c.status && c.status !== 'COMPLETED' ? 'corre' : CI_FALLA.test(c.conclusion || '') ? 'falla' : 'ok'
+  const es = rollup.map(estado)
+  return es.includes('falla') ? 'falla' : es.includes('corre') ? 'corre' : 'ok'
+}
+// Rama principal del repo: origin/HEAD, si no main.
+const principalDe = (repo) => (sh('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], repo) || '').trim() || 'main'
 function leerGit(p) {
   if (!p.repo || !existsSync(p.repo)) return null
   const rutaCache = join(DATOS, `github-${p.id}.json`)
   const cache = leerJson(rutaCache, {})
   const url = (sh('gh', ['repo', 'view', '--json', 'url', '-q', '.url'], p.repo) || '').trim() || cache.url || ''
   const prsCrudo = sh('gh', ['pr', 'list', '--state', 'all', '--limit', '40', '--json',
-    'number,title,state,isDraft,headRefName,baseRefName,url,createdAt,mergedAt,commits,body'], p.repo, 20000)
-  const prs = prsCrudo ? JSON.parse(prsCrudo).map((pr) => ({
-    ...pr, body: (pr.body || '').slice(0, 4000),
+    'number,title,state,isDraft,headRefName,baseRefName,url,createdAt,mergedAt,commits,body,statusCheckRollup'], p.repo, 20000)
+  const prs = prsCrudo ? JSON.parse(prsCrudo).map(({ statusCheckRollup, ...pr }) => ({
+    ...pr, body: (pr.body || '').slice(0, 4000), ci: resumenCi(statusCheckRollup),
     commits: (pr.commits || []).map((c) => ({ oid: c.oid, titulo: c.messageHeadline })),
   })) : cache.prs || []
   const log = sh('git', ['log', '--branches', '--remotes', '--topo-order', '-n', '80', '--date=iso-strict', '--pretty=format:%H%x1f%P%x1f%ad%x1f%an%x1f%s%x1f%D'], p.repo) || ''
@@ -803,7 +903,7 @@ function leerGit(p) {
   const rama = (sh('git', ['branch', '--show-current'], p.repo) || '').trim()
   const sinPush = (sh('git', ['log', '--branches', '--not', '--remotes', '--pretty=%H'], p.repo) || '').split('\n').filter(Boolean)
   // Ramas locales sin fusionar en la principal (origin/HEAD, si no main): las casillas hechas en ellas van «En prueba».
-  const principal = (sh('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], p.repo) || '').trim() || 'main'
+  const principal = principalDe(p.repo)
   const sinFusionar = (sh('git', ['for-each-ref', `--no-merged=${principal}`, 'refs/heads', '--format=%(refname:short)'], p.repo) || '').split('\n').filter(Boolean)
   const datos = { url, prs, commits, rama, sinPush, sinFusionar, ramas: leerRamas(p.repo), grafo: grafoRamas(commits), actualizadoGh: prsCrudo ? new Date().toISOString() : cache.actualizadoGh || null }
   writeFileSync(rutaCache, JSON.stringify({ url, prs, actualizadoGh: datos.actualizadoGh }))
@@ -1062,7 +1162,27 @@ function leerBitacoras() {
   if (!rutas.length) return new Map()
   const jsonl = new Map()
   const mapa = sidsPorProyecto(proyectos, TRANSCRIPCIONES, jsonl)
-  return new Map(rutas.map((ruta) => [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa, jsonl) }]))
+  const metricas = leerMetricasSesion()
+  return new Map(rutas.map((ruta) => {
+    const bit = asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa, jsonl)
+    bit.registro = conFeatures(bit.registro, proyectos) // «Costo por feature»: hN- de la rama o `features` del proyecto
+    // Columnas «llamadas/prompt» y «ctx final» (solo filas con <sid>.metricas.json) y panel de eficiencia.
+    const porSid = new Map(metricas.map((m) => [String(m.sid).slice(0, 8), m]))
+    for (const f of bit.registro) {
+      const m = f.sid && porSid.get(f.sid)
+      if (!m || !m.prompts) continue
+      const llamadasPorPrompt = Math.round((m.llamadas / m.prompts) * 10) / 10
+      Object.assign(f, { llamadasPorPrompt, semaforoLlamadas: semaforoLlamadas(llamadasPorPrompt), ctxFinalK: Math.round(m.ctxFinal / 1000), semaforoCtx: semaforoCtx(m.ctxFinal), grandes: m.resultadosGrandes?.length || 0 })
+    }
+    const texto = readFileSync(ruta, 'utf8')
+    return [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...bit, eficiencia: eficienciaDe(metricas, bit.registro), auditoria: auditoriaDe(TRANSCRIPCIONES, texto) }]
+  }))
+}
+
+// <sid>.metricas.json que escribe registrar_sesion.sh en session-metrics (llamadas, ctxFinal, % de 5 h/7 d…).
+function leerMetricasSesion(dir = join(homedir(), '.claude', 'session-metrics')) {
+  if (!existsSync(dir)) return []
+  return readdirSync(dir).filter((f) => f.endsWith('.metricas.json')).flatMap((f) => { try { return [JSON.parse(readFileSync(join(dir, f), 'utf8'))] } catch { return [] } })
 }
 
 // Guía «Configurar este proyecto»: un paso por pieza, con lo que ya hay a mano (sin red: GitHub sale de p.git, que ya leyó gh).
@@ -1095,7 +1215,7 @@ export function estadoConfiguracion(p, { git = null, backlogs = [], transcripcio
 // (customTitle, si no aiTitle), leyendo solo las primeras ~20 líneas.
 function ultimaSesionDe(prefijo, dir) {
   if (!prefijo || !existsSync(dir)) return null
-  let ult = null
+  const cand = []
   for (const d of readdirSync(dir)) {
     if (d !== prefijo && !d.startsWith(`${prefijo}-`)) continue
     let archivos = []
@@ -1104,21 +1224,24 @@ function ultimaSesionDe(prefijo, dir) {
       if (!f.endsWith('.jsonl')) continue
       const ruta = join(dir, d, f)
       const mtime = statSync(ruta, { throwIfNoEntry: false })?.mtimeMs
-      if (mtime != null && (!ult || mtime > ult.mtime)) ult = { ruta, mtime }
+      if (mtime != null) cand.push({ ruta, mtime })
     }
   }
-  if (!ult) return null
-  let titulo = null
-  try {
-    const fd = openSync(ult.ruta, 'r')
+  // Las sesiones del tutor de estudio no cuentan: se baja hasta la primera que sea trabajo.
+  for (const c of cand.sort((a, b) => b.mtime - a.mtime)) {
     try {
-      const buf = Buffer.alloc(64 * 1024)
-      const lineas = buf.toString('utf8', 0, readSync(fd, buf, 0, buf.length, 0)).split('\n').slice(0, 20)
-      const objs = lineas.flatMap((l) => { try { return [JSON.parse(l)] } catch { return [] } })
-      titulo = objs.find((o) => o?.customTitle)?.customTitle || objs.find((o) => o?.aiTitle)?.aiTitle || null
-    } finally { closeSync(fd) }
-  } catch {}
-  return { titulo, fecha: new Date(ult.mtime).toISOString() }
+      const fd = openSync(c.ruta, 'r')
+      try {
+        const buf = Buffer.alloc(64 * 1024)
+        const lineas = buf.toString('utf8', 0, readSync(fd, buf, 0, buf.length, 0)).split('\n').slice(0, 20)
+        const objs = lineas.flatMap((l) => { try { return [JSON.parse(l)] } catch { return [] } })
+        if (esDeEstudio(objs)) continue
+        const titulo = objs.find((o) => o?.customTitle)?.customTitle || objs.find((o) => o?.aiTitle)?.aiTitle || null
+        return { titulo, fecha: new Date(c.mtime).toISOString() }
+      } finally { closeSync(fd) }
+    } catch { return { titulo: null, fecha: new Date(c.mtime).toISOString() } }
+  }
+  return null
 }
 // p: { transcripciones, git }; b: el backlog principal (con estructura, aqui y, si hay, activo).
 export function hechosRetomar(p, b, { transcripciones = TRANSCRIPCIONES, ahora = new Date() } = {}) {
@@ -1165,6 +1288,7 @@ const textoUsuario = (o) => {
   const t = typeof c === 'string' ? c : Array.isArray(c) && !c.some((x) => x?.type === 'tool_result') ? c.filter((x) => x?.type === 'text').map((x) => x.text).join('\n') : ''
   return t && t.trim() && !t.trimStart().startsWith('<') ? t.trim() : null
 }
+const esDeEstudio = (objs) => (objs.map(textoUsuario).find(Boolean) || '').startsWith(MARCA_ESTUDIO)
 function resumenSesion(ruta, size) {
   const fd = openSync(ruta, 'r')
   const leer = (desde, largo) => { const buf = Buffer.alloc(largo); return buf.toString('utf8', 0, readSync(fd, buf, 0, largo, desde)) }
@@ -1179,6 +1303,7 @@ function resumenSesion(ruta, size) {
     }
   } finally { closeSync(fd) }
   if (!cabeza.length && !cola.length) return null
+  if (esDeEstudio(cabeza)) return null
   const todas = cabeza === cola ? cola : [...cabeza, ...cola]
   const ultimo = (f) => { for (let i = todas.length - 1; i >= 0; i--) { const v = f(todas[i]); if (v) return v } return null }
   const archivos = []
@@ -1200,6 +1325,15 @@ function resumenSesion(ruta, size) {
     foco: { claves: unicos(/\b[HS]\d+[a-z]?\b/g), backlogs: unicos(/[\w.-]+\.md\b/g) },
   }
 }
+function resumenCacheado(ruta, st) {
+  let c = cacheSesiones.get(ruta)
+  if (!c || c.mtime !== st.mtimeMs || c.size !== st.size) {
+    let r = null
+    try { r = resumenSesion(ruta, st.size) } catch {}
+    cacheSesiones.set(ruta, c = { mtime: st.mtimeMs, size: st.size, r })
+  }
+  return c
+}
 // → { [proyectoId]: [{ sid, titulo, rama, inicio, ultimo, activa, archivos, ultimoPrompt, foco }] }, más reciente primero.
 export function sesionesActivas(lista, dir = TRANSCRIPCIONES, { ahora = Date.now(), ventanaMs = 24 * 3600e3, activaMs = 5 * 60e3 } = {}) {
   const carpetas = existsSync(dir) ? readdirSync(dir) : []
@@ -1214,17 +1348,74 @@ export function sesionesActivas(lista, dir = TRANSCRIPCIONES, { ahora = Date.now
         const ruta = join(dir, d, f)
         const st = statSync(ruta, { throwIfNoEntry: false })
         if (!st || ahora - st.mtimeMs > ventanaMs) continue
-        let c = cacheSesiones.get(ruta)
-        if (!c || c.mtime !== st.mtimeMs || c.size !== st.size) {
-          let r = null
-          try { r = resumenSesion(ruta, st.size) } catch {}
-          cacheSesiones.set(ruta, c = { mtime: st.mtimeMs, size: st.size, r })
-        }
+        const c = resumenCacheado(ruta, st)
         if (c.r) res.push({ sid: f.slice(0, -6), ...c.r, ultimo: new Date(st.mtimeMs).toISOString(), activa: ahora - st.mtimeMs < activaMs, _m: st.mtimeMs })
       }
     }
     return [p.id, res.sort((a, b) => b._m - a._m).map(({ _m, ...s }) => s)]
   }))
+}
+
+// ---------- Oficina de agentes (S57): avisos del hook + colas de las transcripciones de respaldo ----------
+// Fuera de la huella: la escena la sondea con GET /api/oficina. Cola de 16 KB por .jsonl tocado en la vigencia del
+// principal (los del tutor del estudio no entran: resumenCacheado los descarta) y de sus <sid>/subagents/agent-*.jsonl.
+const TROZO_OFICINA = 16 * 1024
+const colaJsonl = (ruta, size, trozo = TROZO_OFICINA) => {
+  const fd = openSync(ruta, 'r')
+  try {
+    const largo = Math.min(size, trozo)
+    const buf = Buffer.alloc(largo)
+    return buf.toString('utf8', 0, readSync(fd, buf, 0, largo, size - largo)).split('\n').flatMap((l) => { try { return [JSON.parse(l)] } catch { return [] } })
+  } finally { closeSync(fd) }
+}
+// El hook lo recorta a 2000 líneas (~0,5 MB); se lee como mucho el último MB.
+function leerEventos(ruta = EVENTOS_OFICINA) {
+  const st = statSync(ruta, { throwIfNoEntry: false })
+  try { return st ? colaJsonl(ruta, st.size, 1024 * 1024) : [] } catch { return [] }
+}
+export function colasOficina(dir = TRANSCRIPCIONES, ahora = Date.now()) {
+  const colas = []
+  const reciente = (st) => st && ahora - st.mtimeMs <= VIGENCIA.principal
+  const cwdDe = (lineas) => lineas.findLast?.((o) => o?.cwd)?.cwd || null
+  for (const d of existsSync(dir) ? readdirSync(dir) : []) {
+    let archivos = []
+    try { archivos = readdirSync(join(dir, d)) } catch { continue }
+    for (const f of archivos) {
+      if (!f.endsWith('.jsonl')) continue
+      const ruta = join(dir, d, f), sid = f.slice(0, -6)
+      const st = statSync(ruta, { throwIfNoEntry: false })
+      const subdir = join(dir, d, sid, 'subagents')
+      const subs = existsSync(subdir) ? readdirSync(subdir).filter((x) => /^agent-.+\.jsonl$/.test(x)) : []
+      if (!reciente(st) && !subs.length) continue
+      if (st && !resumenCacheado(ruta, st).r) continue // vacío o del tutor del estudio
+      try {
+        if (reciente(st)) { const lineas = colaJsonl(ruta, st.size); colas.push({ sid, agente: 'principal', tipo: null, cwd: cwdDe(lineas), carpeta: d, mtime: st.mtimeMs, lineas }) }
+        for (const x of subs) {
+          const sr = join(subdir, x), sst = statSync(sr, { throwIfNoEntry: false })
+          if (!reciente(sst)) continue
+          let tipo = null
+          try { tipo = JSON.parse(readFileSync(sr.replace(/\.jsonl$/, '.meta.json'), 'utf8')).agentType || null } catch {}
+          const lineas = colaJsonl(sr, sst.size)
+          colas.push({ sid, agente: x.slice(6, -6), tipo, cwd: cwdDe(lineas), carpeta: d, mtime: sst.mtimeMs, lineas })
+        }
+      } catch {}
+    }
+  }
+  return colas
+}
+// Proyecto de un agente: el de su carpeta de transcripciones o el que contiene su cwd (docs o repo).
+const carpetaDeCwd = (cwd) => cwd.replace(/[^a-zA-Z0-9]/g, '-')
+function proyectoDe(lista, cwd, carpeta) {
+  const c = carpeta || (cwd ? carpetaDeCwd(cwd) : null)
+  const dentro = (r) => r && cwd && (cwd === r || cwd.startsWith(r.endsWith(sep) ? r : r + sep))
+  return (lista.find((p) => p.transcripciones && c && (c === p.transcripciones || c.startsWith(`${p.transcripciones}-`)))
+    || lista.find((p) => [p.repo, ...(p.docs || [])].some(dentro)))?.id || null
+}
+export function oficina(lista, { eventos = leerEventos(), dir = TRANSCRIPCIONES, ahora = Date.now() } = {}) {
+  const colas = colasOficina(dir, ahora)
+  const carpetas = new Map(colas.map((c) => [`${c.sid}\u0000${c.agente}`, c.carpeta]))
+  const { agentes } = estadoOficina(eventos, colas, ahora)
+  return { agentes: agentes.map((a) => ({ ...a, proyecto: proyectoDe(lista, a.cwd, carpetas.get(`${a.sid}\u0000${a.agente}`)) })) }
 }
 
 // Rama de una sección: la de su título, la del hito, o «Rama `x`» en el texto bajo el título del hito.
@@ -1275,6 +1466,43 @@ export function columnasKanban(b, p, sesiones = []) {
   return tarjetas
 }
 
+// Kanban por sesión (S53): una tarjeta por sesión de sesiones(). hito: «## H<n>» que la contiene → H<n> del título «#»
+// («Mini backlog H7») → la sección del backlog padre que enlaza el archivo. estado: hecho (todo hecho y rama fusionada
+// o sin rama) · en-prueba (todo hecho y PR abierto o rama sin fusionar) · en-curso ([~], una sesión de Claude activa
+// que la nombra o «estás aquí») · por-hacer. texto = llano y seccion, para la vista por casillas hasta S54.
+const primeraFrase = (t) => { const f = String(t).trim().split(/(?<=[.!?])\s+/)[0]; return f.length > 110 ? `${f.slice(0, 109).trimEnd()}…` : f }
+export function kanbanSesiones(b, p, sesionesClaude = []) {
+  const texto = String(b.contenido || ''), lineas = texto.replace(/\t/g, '    ').split('\n')
+  const git = p?.git || {}, prs = git.prs || []
+  const abiertas = new Set(prs.filter((pr) => pr.state === 'OPEN').map((pr) => pr.headRefName))
+  const sinFusionar = new Set(git.sinFusionar || [])
+  const vivas = sesionesClaude.filter((s) => s.activa && (s.foco?.backlogs?.includes(b.archivo) || s.archivos?.includes(b.ruta)))
+  const arriba = b.estructura || [], nodos = aplanar(arriba)
+  const hitoTitulo = texto.match(/^#\s+(.+)$/m)?.[1].match(/\b(H\d+)\b/)?.[1] ?? null
+  return sesiones(texto).map((s) => {
+    const nodo = nodos.find((x) => x.linea === s.linea) || null
+    const raiz = arriba.filter((x) => x.linea <= s.linea).at(-1)
+    const hitoNodo = raiz && raiz !== nodo && /^H\d/.test(raiz.clave || '') ? raiz : null
+    const hito = hitoNodo?.clave || hitoTitulo || b.padre?.clave || null
+    const rama = nodo ? ramaDe(lineas, nodo, hitoNodo) : s.rama
+    const pr = rama ? prs.filter((x) => x.headRefName === rama).sort((x, y) => (y.state === 'OPEN') - (x.state === 'OPEN'))[0] : null
+    const todo = s.total ? s.hechas >= s.total : !!s.resultado
+    const nombrada = vivas.some((v) => {
+      const claves = v.foco?.claves || []
+      if (claves.length) return claves.includes(s.clave) || (!!hitoNodo && claves.includes(hitoNodo.clave))
+      return !!nodo && b.activo?.seccion === nodo.id
+    })
+    const enCurso = s.tareas.some((t) => /\[~\]/.test(lineas[t.linea] || '')) || (!!nodo && b.aqui === nodo.id) || nombrada
+    const estado = todo ? (rama && (abiertas.has(rama) || sinFusionar.has(rama)) ? 'en-prueba' : 'hecho') : enCurso ? 'en-curso' : 'por-hacer'
+    const llano = s.seEspera ? primeraFrase(s.seEspera) : s.titulo
+    return {
+      archivo: b.archivo, clave: s.clave, titulo: s.titulo, llano, texto: llano, modelo: s.modelo, rama, hito, estado,
+      hechas: s.hechas, total: s.total, seEspera: s.seEspera, resultado: s.resultado, prompt: s.prompt, tareas: s.tareas,
+      linea: s.linea, seccion: nodo?.id ?? null, ...(pr ? { pr: { numero: pr.number, url: pr.url, estado: pr.state, ci: pr.ci ?? null } } : {}),
+    }
+  })
+}
+
 async function recolectar(opciones = {}) {
   cargarProyectos()
   mkdirSync(DATOS, { recursive: true })
@@ -1301,8 +1529,14 @@ async function recolectar(opciones = {}) {
     const git = leerGit(p)
     const configuracion = estadoConfiguracion(p, { git, backlogs })
     const retomar = hechosRetomar({ transcripciones: p.transcripciones, git }, backlogs.find((b) => !b.esPlan) || null)
-    const kanban = backlogs.filter((b) => !b.esPlan).flatMap((b) => columnasKanban(b, { git }, opciones.sesiones?.[p.id] || []))
-    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones, configuracion, editable: p.editable, retomar, kanban }
+    const kanban = backlogs.filter((b) => !b.esPlan).flatMap((b) => kanbanSesiones(b, { git }, opciones.sesiones?.[p.id] || []))
+    // Badge «≠ plan»: el modelo de la fila (foto de la statusline) frente al que pedía el prompt de esa sesión.
+    const bitacora = bitacoras.get(p.bitacora) || null
+    for (const f of bitacora?.registro || []) if (f.proyecto === p.id) {
+      const plan = modeloPlanDe(f.tarea, backlogs)
+      if (plan) Object.assign(f, { modeloPlan: plan, modeloDistinto: modeloDistinto(plan, f.modelo) })
+    }
+    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora, integraciones, configuracion, editable: p.editable, retomar, kanban }
   }))
 }
 
@@ -1373,15 +1607,24 @@ export const PUERTO = Number(process.env.TABLERO_PUERTO) || 47321
 const URL_LOCAL = `http://127.0.0.1:${PUERTO}/`
 const INACTIVIDAD_MS = 6 * 3600e3
 // Huella del código del servidor (mtimes): la del arranque viaja en /api/version; si la del disco cambia, se recicla.
-const CODIGO = ['generar.mjs', 'plantilla.html', 'bitacora.mjs', 'coherencia.mjs']
+const CODIGO = ['generar.mjs', 'plantilla.html', 'bitacora.mjs', 'coherencia.mjs', 'estudio.mjs']
 export function huellaCodigo(dir = AQUI) {
   return CODIGO.map((f) => statSync(join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0).join(':')
 }
 const CODIGO_ARRANQUE = huellaCodigo()
+// Metodología viva (S50): repo con instalar.sh; los proyectos aportan sesiones, backlogs, notas y bitácora.
+const METODOLOGIA_REPO = process.env.TABLERO_METODOLOGIA_REPO || join(AQUI, '..', '..', 'metodologia-claude-code')
+// Solo lo que la vista necesita (conteo de backlogs, rutas de notas y bitácora), leído del disco: no pasa por `construir`,
+// que sincroniza integraciones y pide PRs a la red (~15 s).
+const proyectosMetodologia = () => proyectos.map((p) => ({
+  id: p.id, nombre: p.nombre, transcripciones: p.transcripciones || (p.repo ? transcripcionesDe(p.repo) : null),
+  backlogs: leerBacklogs(p).length, notas: p.notas || undefined, bitacora: p.bitacora || undefined,
+}))
 const local = (dir) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(dir)
 // Manejador HTTP (exportado para los tests: puerto y adaptadores inyectables).
-export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alUsar = () => {}, codigo = CODIGO_ARRANQUE, alSalir = () => {} } = {}) {
+export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alUsar = () => {}, codigo = CODIGO_ARRANQUE, alSalir = () => {}, tiempoEstudio = 10 * 60e3 } = {}) {
   let cache = null
+  const estudios = new Map() // `${proyecto}\n${plan}` → proceso de claude en curso (uno por plan)
   const fresco = async (forzar) => { if (forzar || !cache || Date.now() - cache.t > 15000) cache = { t: Date.now(), ...(await construir(true, { adaptadores })) }; return cache }
   const permitidas = async () => new Set((await fresco()).datos.proyectos.flatMap((p) => [...p.backlogs.map((b) => b.ruta), ...p.planes.map((x) => x.ruta), p.notas?.ruta, p.bitacora?.ruta]).filter(Boolean))
   const enviar = (res, codigo, cuerpo, tipo = 'application/json; charset=utf-8') => {
@@ -1415,6 +1658,12 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
     if (errores.length) throw Object.assign(new ErrorConfig(errores.join(' ')), { errores })
     return limpia
   }
+  // Estudio (S55): el plan tiene que ser un plan o backlog que el tablero ya muestra de ese proyecto.
+  const planDe = async (proyecto, plan) => {
+    const v = (await fresco()).datos.proyectos.find((x) => x.id === proyecto)
+    if (!v || typeof plan !== 'string' || ![...v.backlogs, ...v.planes].some((x) => x.ruta === plan)) return null
+    return proyectos.find((x) => x.id === proyecto) || null
+  }
   const escribirConfig = (p, cambio) => {
     escribirAtomico(CONFIG, aplicarCambio(readFileSync(CONFIG, 'utf8'), p.id, cambio))
     cargarProyectos(true)
@@ -1430,12 +1679,37 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
       if (req.method === 'GET' && ruta === '/api/ping') return enviar(res, 200, { tablero: true })
       if (req.method === 'GET' && ruta === '/api/version') return enviar(res, 200, { version: huella(), codigo })
       if (req.method === 'GET' && ruta === '/api/datos') return enviar(res, 200, (await fresco(true)).datos)
+      if (req.method === 'GET' && ruta === '/api/metodologia') return enviar(res, 200, metodologia({ home: HOME, repo: METODOLOGIA_REPO, transcripciones: TRANSCRIPCIONES, proyectos: proyectosMetodologia() }))
+      if (req.method === 'GET' && ruta === '/api/oficina') return enviar(res, 200, oficina(proyectos))
       // Barato (sondeo cada 5 s): solo cabeza/cola de los .jsonl recientes y columnas sobre los datos ya construidos.
       if (req.method === 'GET' && ruta === '/api/sesiones') {
         const sesiones = sesionesActivas(proyectos)
         const columnas = Object.fromEntries((cache?.datos.proyectos || []).map((p) => [p.id, p.backlogs.filter((b) => !b.esPlan)
-          .flatMap((b) => columnasKanban(b, p, sesiones[p.id] || []).map(({ archivo, linea, texto, estado }) => ({ archivo, linea, texto, estado })))]))
+          .flatMap((b) => kanbanSesiones(b, p, sesiones[p.id] || []).map(({ archivo, linea, clave, texto, estado }) => ({ archivo, linea, clave, texto, estado })))]))
         return enviar(res, 200, { sesiones, columnas })
+      }
+      // Commits y archivos de la rama de una sesión, solo al abrir su tarjeta (sin red; fuera de /api/datos y de la huella).
+      if (req.method === 'GET' && ruta === '/api/sesion-detalle') {
+        const q = new URL(req.url, `http://${host}`).searchParams, rama = q.get('rama') || ''
+        if (!/^[A-Za-z0-9._][A-Za-z0-9._/-]*$/.test(rama) || rama.includes('..')) return enviar(res, 400, { error: 'Falta la rama o no es válida.' })
+        const p = proyectos.find((x) => x.id === q.get('proyecto'))
+        if (!p?.repo || !existsSync(p.repo)) return enviar(res, 404, { error: 'Proyecto sin repo o no está en proyectos.json.' })
+        const principal = principalDe(p.repo)
+        const log = sh('git', ['log', `${principal}..${rama}`, '--name-only', '-n', '30', '--date=iso-strict', '--pretty=format:%x1e%H%x1f%ad%x1f%s', '--'], p.repo) || ''
+        const commits = log.split('\x1e').filter((x) => x.trim()).map((bloque) => {
+          const [cab, ...archivos] = bloque.split('\n')
+          const [oid, fecha, titulo] = cab.split('\x1f')
+          return { oid, fecha, titulo, archivos: archivos.filter(Boolean) }
+        })
+        return enviar(res, 200, { principal, rama, commits })
+      }
+      // Guía de estudio guardada de un plan (contenido null si aún no hay).
+      if (req.method === 'GET' && ruta === '/api/estudio/guia') {
+        const q = new URL(req.url, `http://${host}`).searchParams
+        const p = await planDe(q.get('proyecto'), q.get('plan'))
+        if (!p) return enviar(res, 400, { error: 'Ese plan no es de ese proyecto (o el proyecto no existe).' })
+        const guia = rutaGuia(DATOS, p.id, q.get('plan'))
+        return enviar(res, 200, { ok: true, ruta: guia, contenido: existsSync(guia) ? readFileSync(guia, 'utf8') : null })
       }
       if (req.method !== 'POST') return enviar(res, 404, { error: 'no existe' })
       if (req.headers.origin !== `http://${host}` || !String(req.headers['content-type']).startsWith('application/json')) return enviar(res, 403, { error: 'origen no permitido' })
@@ -1459,6 +1733,44 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         leerNotas(p) // crea el archivo con la plantilla si no existe
         writeFileSync(p.notas, anadirNota(readFileSync(p.notas, 'utf8'), texto.slice(0, 4000)))
         return enviar(res, 200, { ok: true, datos: (await fresco(true)).datos })
+      }
+      // Estudio: claude -p de solo lectura sobre el plan; reenvía sus eventos como ndjson (sesion, texto, herramienta, fin|error).
+      if (ruta === '/api/estudio') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const p = await planDe(b.proyecto, b.plan)
+        if (!p) return enviar(res, 400, { error: 'Ese plan no es de ese proyecto (o el proyecto no existe).' })
+        if (b.sesionId != null && !sesionValida(b.sesionId)) return enviar(res, 400, { error: 'La sesión de Claude no es válida.' })
+        const pregunta = preguntaDe(b)
+        if (!pregunta) return enviar(res, 400, { error: 'Falta la pregunta o la acción no existe (la sesión X necesita su clave, p. ej. S3b).' })
+        const clave = `${p.id}\n${b.plan}`
+        if (estudios.has(clave)) return enviar(res, 409, { error: 'Claude ya está respondiendo sobre este plan: espera a que termine.' })
+        const cwd = p.repo && existsSync(p.repo) ? p.repo : dirname(b.plan)
+        const sesionId = b.sesionId || undefined
+        let fin = false
+        const escribir = (e) => { if (e.tipo === 'fin') fin = true; if (!res.destroyed) res.write(JSON.stringify(e) + '\n') }
+        res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
+        const proc = lanzarEstudio({ bin: process.env.TABLERO_CLAUDE_BIN || 'claude', args: argsEstudio({ plan: b.plan, cwd, sesionId }), entrada: promptEstudio({ plan: b.plan, pregunta, sesionId }), cwd, ms: tiempoEstudio, alEvento: escribir })
+        estudios.set(clave, proc)
+        res.on('close', proc.detener) // si la vista se cierra, se corta el proceso
+        const r = await proc.hecho
+        estudios.delete(clave)
+        if (r.porTiempo) escribir({ tipo: 'error', error: `Se acabó el tiempo (${Math.round(tiempoEstudio / 1000)} s): Claude se cortó.` })
+        else if (!fin) { escribir({ tipo: 'error', error: r.error || `Claude terminó sin respuesta (código ${r.codigo}).` }); registrar(`estudio ${p.id}: ${r.error || r.codigo}`) }
+        return res.end()
+      }
+      // Guía de estudio: añade la pregunta y la respuesta al final de datos/estudio/<proyecto>/<plan>.md (nunca toca el plan).
+      if (ruta === '/api/estudio/guardar') {
+        const p = await planDe(b.proyecto, b.plan)
+        if (!p) return enviar(res, 400, { error: 'Ese plan no es de ese proyecto (o el proyecto no existe).' })
+        const pregunta = typeof b.pregunta === 'string' ? b.pregunta.trim().slice(0, 300) : ''
+        const respuesta = typeof b.respuesta === 'string' ? b.respuesta.trim() : ''
+        if (!pregunta || !respuesta || respuesta.length > 200000) return enviar(res, 400, { error: 'Faltan la pregunta o la respuesta.' })
+        const guia = rutaGuia(DATOS, p.id, b.plan)
+        mkdirSync(dirname(guia), { recursive: true })
+        const d = new Date(), fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const contenido = anadirAGuia(existsSync(guia) ? readFileSync(guia, 'utf8') : null, { plan: b.plan, pregunta, respuesta, fecha })
+        writeFileSync(guia, contenido)
+        return enviar(res, 200, { ok: true, ruta: guia, contenido })
       }
       // Bitácora: solo Calidad/Seguridad/Notas de la fila de esa sesión; 409 si el archivo cambió desde que se cargó.
       if (ruta === '/api/bitacora') {
@@ -1754,12 +2066,25 @@ function hookInicio() {
   process.stdout.write(lineas.join('\n') + '\n')
 }
 
+// `--auditoria <AAAA-MM-DD> [--modelos]` (auditoria.mjs): gasto del día desde las transcripciones; con --modelos, Opus frente a Sonnet en la bitácora.
+async function auditoriaCli() {
+  const { auditar, leerTranscripciones, textoAuditoria, porModelo, textoModelos } = await import('./auditoria.mjs')
+  const dia = args[args.indexOf('--auditoria') + 1]
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia || '')) { console.error('Uso: tablero --auditoria <AAAA-MM-DD> [--modelos]'); process.exitCode = 1; return }
+  console.log(textoAuditoria(auditar(leerTranscripciones(dia), { dia, utc: args.includes('--utc') }), dia))
+  if (args.includes('--modelos')) {
+    const i = args.indexOf('--bitacora'), b = i >= 0 ? args[i + 1] : join(AQUI, '..', 'BITACORA.md')
+    console.log('\n' + (existsSync(b) ? textoModelos(porModelo(readFileSync(b, 'utf8'))) : 'Sin BITACORA.md en ' + b))
+  }
+}
+
 // Solo corre al ejecutarse como programa (los tests importan el parser sin generar nada).
 let esPrincipal = false
 try { esPrincipal = realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)) } catch {}
 if (!esPrincipal) { /* importado */ }
 else if (!existsSync(CONFIG) && (console.error('Falta proyectos.json: copia proyectos.ejemplo.json a proyectos.json y edítalo (ver README.md).'), true)) process.exitCode = 1
 else if (['--tareas', '--asignarme', '--estado'].some((f) => args.includes(f))) await tareasCli()
+else if (args.includes('--auditoria')) await auditoriaCli()
 else if (args.includes('--hook-inicio')) hookInicio()
 else if (args.includes('--servir')) servir()
 else if (args.includes('--probar-conexiones')) await probarConexiones()

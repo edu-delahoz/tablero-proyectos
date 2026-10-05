@@ -19,7 +19,7 @@ Cada proyecto tiene estas pestañas:
 - **Historial**: qué casillas cambiaron entre una generación y la siguiente.
 - **GitHub**: ramas, grafo de ramas y pull requests (requiere `gh`).
 - **Notas**: notas abiertas para Claude, que ve al iniciar cada sesión.
-- **Bitácora** (solo con el campo `bitacora`): bloque «Gastos» (SVG en línea: costo por día/semana/mes, por feature/rama y por modelo; sigue el filtro «todas», con tabla y tooltip), totales (sesiones, costo, duración, % con contexto 🔴),
+- **Bitácora** (solo con el campo `bitacora`): bloque «Gastos» (SVG en línea: costo por día/semana/mes, por feature o rama (interruptor; la rama de una sesión es la más usada en su transcripción, la feature sale del prefijo `hN-` de la rama o del mapa opcional `"features": { "rama": "Feature" }` del proyecto en `proyectos.json`, y lo que no tiene rama va a «sin rama» con sus filas al expandir; nada se excluye) y por modelo; sigue el filtro «todas», con tabla y tooltip), totales (sesiones, costo, duración, % con contexto 🔴),
   la tabla de sesiones del proyecto (casilla para ver todas y para «solo pendientes»), resumen semanal y
   lecciones. Con el servidor local, las filas `_pendiente_` se completan ahí mismo (Calidad, Seguridad,
   Notas → Guardar; Enter también guarda) y la barra de estado avisa «✎ N filas de bitácora pendientes».
@@ -27,6 +27,12 @@ Cada proyecto tiene estas pestañas:
 - **Integraciones**: estado de cada conector (GitHub Projects, Trello y Azure DevOps), sus
   tarjetas por columna y el botón **Sincronizar** con vista previa. En el Mapa, cada casilla vinculada
   lleva un chip (`GH ↗`) y la barra de estado avisa «⇄ N cambios por sincronizar».
+
+### Leer y marcar una sección sin cargar el backlog
+
+`node backlog.mjs seccion <clave> [archivo]` imprime solo esa sección (`S4b`, `E1`, `H16`) con su nº de línea;
+`node backlog.mjs marcar <clave> <n> [archivo]` pasa a `[x]` su casilla n (en orden, anidadas incluidas).
+Sin archivo usa `BACKLOG.md` del directorio actual; clave inexistente → código 1.
 
 ### Para retomar y «Qué se busca» (convenciones del backlog)
 
@@ -42,19 +48,28 @@ Cada proyecto tiene estas pestañas:
 
 ### Tablero (kanban)
 
-Cada casilla de primer nivel del backlog es una tarjeta (`p.kanban`, con `archivo`, `linea`, `seccion`, `clave`,
-`hito` y `sub` con el avance de sus hijas). Columnas y de dónde sale cada una:
+Cada **sesión** del backlog es una tarjeta (`kanbanSesiones` → `p.kanban`, desde S53): `{ archivo, clave, titulo,
+llano, modelo, rama, hito, estado, hechas, total, seEspera, resultado, prompt, tareas, linea, seccion, pr? }`.
+`llano` es la primera frase de «Se espera» (≤ 110) o, si no hay, el título sin la clave. `pr` es el PR de su rama
+(`{ numero, url, estado, ci }`, con `ci` = `ok | falla | corre | null` resumido del `statusCheckRollup` de `gh`).
+El `hito` sale, en este orden, del `## H<n>` que contiene la sesión, de una `H<n>` en el título `#` del archivo
+(«# Mini backlog H7», cuyas sesiones son `## S0…`) o de la sección del backlog padre que enlaza el archivo
+(`BACKLOG_H7.md` → `## H7`). Columnas y de dónde sale cada una (derivadas: las sesiones no se arrastran):
 
-- **Por hacer**: `- [ ]`.
-- **En curso**: `- [~]` (puesta a mano), o una sesión de Claude activa (`.jsonl` tocado hace < 5 min) que trabaja
-  ese backlog (lo nombra en un prompt o editó su archivo) y esa sección: por la clave (`S3c`, `H2`) que nombran
-  sus prompts o, si no nombran ninguna, por el frente activo del backlog.
-- **En prueba**: `- [x]` cuya rama (la del título de la sección, la del hito o «Rama \`x\`» bajo el título del
+- **Por hacer**: ninguna de las demás.
+- **En curso**: alguna casilla `- [~]`, la sesión es la del «estás aquí», o una sesión de Claude activa (`.jsonl`
+  tocado hace < 5 min) que trabaja ese backlog (lo nombra en un prompt o editó su archivo) y la nombra por su clave
+  (o la de su `## H<n>`) o, si no nombra ninguna, es el frente activo del backlog.
+- **En prueba**: todas sus casillas hechas y su rama (la del título, la del hito o «Rama \`x\`» bajo el título del
   hito) tiene un PR abierto o no está fusionada en la principal (`origin/HEAD`, si no `main`).
-- **Hecho**: `- [x]` sin nada de lo anterior. `- [-]` = movida (fuera de los conteos y de las columnas normales).
+- **Hecho**: todas sus casillas hechas (o sin casillas y con «Resultado») sin nada de lo anterior.
+
+`GET /api/sesion-detalle?proyecto=<id>&rama=<rama>` → `{ principal, rama, commits: [{ oid, fecha, titulo,
+archivos }] }`: `git log <principal>..<rama> --name-only -n 30`, sin red, solo al abrir una tarjeta; no entra en
+`/api/datos` ni en la huella de `/api/version`. Rama inválida → 400; proyecto sin repo → 404.
 
 `GET /api/sesiones` → `{ sesiones: { [proyecto]: [{ sid, titulo, rama, inicio, ultimo, activa, archivos,
-ultimoPrompt, foco }] }, columnas: { [proyecto]: [{ archivo, linea, texto, estado }] } }`. Es barato a propósito
+ultimoPrompt, foco }] }, columnas: { [proyecto]: [{ archivo, linea, clave, texto, estado }] } }` (una por sesión). Es barato a propósito
 (la vista lo sondea cada 5 s): solo los `.jsonl` de las últimas 24 h, de cada uno 64 KB de cabeza y 64 KB de cola,
 con caché por mtime y tamaño, y las columnas se recalculan sobre los datos ya construidos. La actividad de Claude
 **no entra** en la huella de `/api/version`. Sin servidor (`file://`) las mismas sesiones viajan en `datos.sesiones`.
@@ -124,6 +139,21 @@ o padre cerrado con hijo abierto).
 ```
 
 - A mano: `node verificar_backlog.mjs <carpeta del repo>` (exit 1 si hay desajustes).
+
+## Auditoría del gasto
+
+```bash
+node generar.mjs --auditoria 2026-10-04            # el día en hora local
+node generar.mjs --auditoria 2026-10-04 --utc      # cortado en UTC (como las cifras de PLAN_EFICIENCIA)
+node generar.mjs --auditoria 2026-10-04 --modelos  # añade Opus frente a Sonnet (lee ../BITACORA.md; --bitacora <ruta>)
+```
+
+**También en la pestaña Bitácora**: tarjeta «Auditoría» con selector de los últimos 7 días (hora local), composición del gasto, malos hábitos y «Opus frente a Sonnet» (se calcula al generar; sin transcripciones no aparece).
+
+Lee `~/.claude/projects/*/*.jsonl` (`auditoria.mjs`, que reutiliza `metricas_jsonl.mjs`) e imprime:
+composición del gasto (entrada ×1, escritura de caché ×2, lectura de caché ×0,1, salida ×5),
+tool results >5k, Bash con `sed -n/grep/awk` sobre `BACKLOG*`, `cat` completos y Read sin límite.
+`--modelos`: en la bitácora, Sn de ejecución de Opus 5.x y Sonnet 5.x (effort medio por defecto) con n, tasa Snb/Sn y costo mediano por tarea. Sustituye a `../analisis/*.mjs`.
 
 ## Servidor local
 
@@ -195,6 +225,26 @@ Id inexistente → 404, no valida → 400, `mtime` viejo → 409; `previa: true`
 **Guía de configuración.** Cada proyecto de `/api/datos` trae `configuracion: [{ paso, hecho, detalle }]`
 (repo, git, github, docs, backlog, sesiones de Claude, notas, integraciones; sin llamadas de red nuevas) y
 `editable` (los campos editables tal como están en `proyectos.json`, para precargar el formulario).
+
+**Metodología viva.** `GET /api/metodologia` (`metodologia.mjs`) devuelve `{ etapas, aristas, piezas, proyectos }`:
+el catálogo sale de `instalar.sh` y `claude/settings.base.json` del repo `metodologia-claude-code`
+(`TABLERO_METODOLOGIA_REPO` lo cambia) y cada pieza (mod, hook, skill, agente, reglas, carpeta, backlog, notas,
+bitácora) trae `estado` `activa | instalada | falta` (con `motivo`) mirando `~/.claude` (`TABLERO_HOME`) y qué
+proyectos conectados (con sesiones de Claude) la usan. Las etapas van `ok | parcial | falta`. Nunca expone el
+contenido de `settings.json`; las rutas salen con `~`.
+
+**Estudiar un plan (`estudio.mjs`).** `POST /api/estudio` `{ proyecto, plan, pregunta | accion, sesion?, rama?, sesionId? }`
+lanza `claude -p` de **solo lectura** (`Read Grep Glob` y `git log/show/diff`; `Edit Write NotebookEdit` prohibidas;
+sin MCP ni hooks del usuario) con un prompt de tutor que explica el plan sin proponer mejoras. `plan` debe ser la
+`ruta` de un plan o backlog de ese proyecto (si no → 400); `cwd` = `repo` del proyecto (o la carpeta del plan) y
+`--add-dir` si el plan está fuera. `accion`: `tecnico`, `pedidos`, `sesion` (con `sesion: "S3b"`) o `quedo`
+(con `rama?`). Con `sesionId` sigue la conversación (`--resume`). Responde en streaming `application/x-ndjson`:
+`{tipo:'sesion',sesionId}`, `{tipo:'texto',texto}` (trozos), `{tipo:'herramienta',nombre,detalle}`,
+`{tipo:'fin',sesionId,texto,error}` o `{tipo:'error',error}`. Un proceso por plan (otro a la vez → 409) y
+tiempo máximo de 10 min. `POST /api/estudio/guardar` `{ proyecto, plan, pregunta, respuesta }` añade
+`## <fecha> — <pregunta>` y la respuesta a `datos/estudio/<proyecto>/<plan>.md` (nunca a `~/.claude/plans`);
+`GET /api/estudio/guia?proyecto&plan` la devuelve (`contenido: null` si aún no hay). `TABLERO_CLAUDE_BIN`
+cambia el binario (los tests usan `fixtures/claude-falso.mjs`).
 
 **Crear backlog.** `POST /api/backlog/crear` `{ proyecto, archivo?, carpeta? }` crea `archivo`
 (por defecto `BACKLOG.md`) con una plantilla mínima (título, `## Estado`, `## S1` con una casilla) en la

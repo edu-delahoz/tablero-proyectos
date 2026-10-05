@@ -1,0 +1,33 @@
+{
+  "sesiones": [
+    {
+      "clave": "S1", "titulo": "Exportar a PDF", "modelo": "Opus", "rama": "exportar-pdf",
+      "seEspera": "El botón «Exportar» baja un PDF con la tabla del mes; se comprueba con informe.test.mjs en verde.",
+      "resultado": "PDF con tabla y acentos pendientes; S1b abierta para el pie.",
+      "prompt": "Sesión S1 de BACKLOG.md. Rama `exportar-pdf`. Primero el test. Al terminar, ejecuta /relevo.",
+      "hechas": 2, "total": 4, "subsesiones": ["S1b"], "despues": "S2",
+      "tareas": [
+        { "hecha": true, "tipo": "test", "llano": "Probar que el PDF trae la tabla", "tecnico": "informe.test.mjs: 3 filas del fixture, verla fallar" },
+        { "hecha": true, "tipo": null, "llano": "Generar el PDF", "tecnico": "informe.mjs aPdf(); prueba anterior en verde" },
+        { "hecha": false, "tipo": "fix", "llano": "Acentos bien en el título", "tecnico": "informe.mjs fuente con UTF-8; caso «Diseño» en el test" }
+      ]
+    },
+    {
+      "clave": "S1b", "titulo": "Pie de página", "modelo": "Sonnet", "rama": "exportar-pdf",
+      "seEspera": "Cada página lleva número y fecha; se comprueba abriendo el PDF del fixture.",
+      "resultado": null, "prompt": null, "hechas": 0, "total": 1, "subsesiones": [], "despues": null,
+      "tareas": [
+        { "hecha": false, "tipo": "doc", "llano": "Contar en el README cómo exportar", "tecnico": "README.md sección «Informes»" }
+      ]
+    },
+    {
+      "clave": "S2", "titulo": "Enviar por correo", "modelo": "Sonnet", "rama": "exportar-pdf",
+      "seEspera": "El informe llega al correo del gestor; se comprueba con el buzón falso del test.",
+      "resultado": null, "prompt": null, "hechas": 0, "total": 2, "subsesiones": [], "despues": null,
+      "tareas": [
+        { "hecha": false, "tipo": "test", "llano": "Probar el envío con buzón falso", "tecnico": "correo.test.mjs: un envío, adjunto PDF; verla fallar" },
+        { "hecha": false, "tipo": "refactor", "llano": "Separar el armado del envío", "tecnico": "correo.mjs armar() puro y enviar() con red" }
+      ]
+    }
+  ]
+}
