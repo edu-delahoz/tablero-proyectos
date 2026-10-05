@@ -83,12 +83,14 @@ Después: **S-OF4**
 
 ### S-OF4 — Oficina por proyecto, hook visible y PRs · **Sonnet** · rama `oficina-pixel` · ~40k · plugins: ninguno
 Se espera: La pestaña Oficina muestra por defecto solo la sala del proyecto actual y deja expandir las demás con un clic; en «Metodología viva», la etapa Sesión (hooks) incluye `vigilar_prompt.mjs`. Se comprueba con la suite en verde, abriendo el tablero en el navegador y con los PRs `oficina-pixel → develop` y `develop → main` abiertos (Eduardo ya autorizó ambos).
-- [ ] [test] Salas plegables, verlo fallar y anotar cuántos fallan — `oficina.test.mjs`/`servidor.test.mjs`: el servidor marca la sala del proyecto actual (p. ej. campo `actual` en la sala, según `cwd`/proyecto del tablero) y el resto vienen plegables; sin proyecto actual se muestran todas
-- [ ] [test] El inventario muestra el hook de prompt, verlo fallar — `metodologia.test.mjs`: con `UserPromptSubmit` en settings aparece `hook:vigilar_prompt.mjs` en la etapa «sesion» (hoy no sale en el grafo; averiguar si `metodologia.mjs` ignora ese evento o solo falta en `INFO`)
-- [ ] [código] Mostrar solo la sala del proyecto, el resto plegado — `plantilla.html` (`htmlOficina`): cabecera de cada sala con botón expandir/plegar, recordar el estado en el navegador, que el canvas solo dibuje salas abiertas y las placas/globos sigan sin taparse; en móvil la lista agrupa igual
-- [ ] [código] Hook de prompt en el grafo — `metodologia.mjs`: añadir `'hook:vigilar_prompt.mjs': ['sesion', 'Avisa si el prompt parece de otra sesión.']` y arreglar la detección si ese evento no se lee
-- [ ] [test] Suite completa en verde y vista en el navegador — `node --test 2>&1 | tail -20`, `node verificar_backlog.mjs "$PWD" --formato`; reiniciar el servidor y mirar Oficina (1280 y 390 px) y Flujo
+- [x] [test] Salas plegables, verlo fallar y anotar cuántos fallan — `oficina.test.mjs`/`servidor.test.mjs`: el servidor marca la sala del proyecto actual (p. ej. campo `actual` en la sala, según `cwd`/proyecto del tablero) y el resto vienen plegables; sin proyecto actual se muestran todas
+- [x] [test] El inventario muestra el hook de prompt, verlo fallar — `metodologia.test.mjs`: con `UserPromptSubmit` en settings aparece `hook:vigilar_prompt.mjs` en la etapa «sesion» (hoy no sale en el grafo; averiguar si `metodologia.mjs` ignora ese evento o solo falta en `INFO`)
+- [x] [código] Mostrar solo la sala del proyecto, el resto plegado — `plantilla.html` (`htmlOficina`): cabecera de cada sala con botón expandir/plegar, recordar el estado en el navegador, que el canvas solo dibuje salas abiertas y las placas/globos sigan sin taparse; en móvil la lista agrupa igual
+- [x] [código] Hook de prompt en el grafo — `metodologia.mjs`: añadir `'hook:vigilar_prompt.mjs': ['sesion', 'Avisa si el prompt parece de otra sesión.']` y arreglar la detección si ese evento no se lee
+- [x] [test] Suite completa en verde y vista en el navegador — `node --test 2>&1 | tail -20`, `node verificar_backlog.mjs "$PWD" --formato`; reiniciar el servidor y mirar Oficina (1280 y 390 px) y Flujo
 - [ ] [doc] PRs con permiso ya dado — `oficina-pixel → develop`, luego `develop → main` (si GraphQL de `gh` está limitado, REST `gh api repos/…/pulls`); marcar en `BACKLOG.md` la casilla de H23 «Oficina: aspecto gráfico» como hecha con referencia a este backlog
+
+Resultado: salas plegables hechas (el servidor marca `actual` según el cwd del servidor; botón por sala, estado en `localStorage`; sin sala actual, todas abiertas) y `vigilar_prompt.mjs` sale en la etapa Sesión (los hooks que solo viven en `settings.json` del usuario ahora son piezas del grafo). Tests: 3 fallaban antes del código; suite 375 pasan / 0 fallan / 2 omitidos. No pude hacer clic en el navegador: verificado por API (`/api/oficina` con `actual`, `/api/metodologia` con el hook activo) y por prueba del HTML.
 
 Prompt:
 ```text

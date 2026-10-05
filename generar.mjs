@@ -1430,7 +1430,10 @@ export function oficina(lista, { eventos = leerEventos(), dir = TRANSCRIPCIONES,
     return etiquetas.get(sid)
   }
   const con = agentes.map((a) => ({ ...a, proyecto: proyectoDe(lista, a.cwd, carpetas.get(`${a.sid}\u0000${a.agente}`)), etiqueta: etiqueta(a.sid), apariencia: aparienciaDe(a.sid, a.agente) }))
-  return previaOficina = distribuirOficina(con, previaOficina)
+  previaOficina = distribuirOficina(con, previaOficina)
+  // Sala del proyecto actual (donde corre el tablero): la única abierta por defecto en la pestaña Oficina.
+  const actual = proyectoDe(lista, process.cwd())
+  return { ...previaOficina, salas: previaOficina.salas.map((s) => ({ ...s, actual: !!actual && s.proyecto === actual })) }
 }
 
 // Rama de una sección: la de su título, la del hito, o «Rama `x`» en el texto bajo el título del hito.

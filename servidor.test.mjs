@@ -741,6 +741,7 @@ test('/api/oficina (S57): agentes desde el hook y, sin hook, desde la transcripc
   const pos = r.json.agentes.map((a) => `${a.casilla.sala}:${a.casilla.x},${a.casilla.y}`)
   assert.equal(new Set(pos).size, pos.length, 'nadie comparte casilla')
   assert.ok(Array.isArray(r.json.salas) && r.json.salas.some((x) => x.proyecto === 'prueba'), 'una sala para «prueba»')
+  assert.ok(r.json.salas.every((x) => typeof x.actual === 'boolean'), 'cada sala dice si es la del proyecto actual')
   assert.ok(!JSON.stringify(r.json).includes('BACKLOG_OTRO'), 'de la transcripción solo sale la placa, nunca el prompt')
   writeFileSync(EVENTOS, readFileSync(EVENTOS, 'utf8') + ev({ evento: 'Stop' }))
   assert.equal((await get('/api/oficina')).json.agentes.find((a) => a.sid === 'of1' && a.agente === 'principal').accion, 'quieto')
@@ -1136,7 +1137,8 @@ test('oficina (S58, S-OF2): conmutador Flujo|Oficina, lienzo pixel con una placa
   const ctx = { esc: (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]) }
   vm.createContext(ctx)
   vm.runInContext(html.match(/^const llaveOficina = .*$/m)[0] + '\nfunction pedirCuadro() {}', ctx)
-  for (const f of ['placaOficina', 'htmlOficina']) vm.runInContext(funcionDe(html, f), ctx)
+  vm.runInContext(html.match(/^const salaAbiertaOf = .*$/m)[0], ctx)
+  for (const f of ['leerSalasOf', 'placaOficina', 'htmlOficina']) vm.runInContext(funcionDe(html, f), ctx)
   const ag = [
     { sid: 's1', agente: 'principal', principal: true, accion: 'leyendo', archivo: 'BACKLOG.md', proyecto: 'prueba' },
     { sid: 's1', agente: 'a1', tipo: 'buscador', principal: false, accion: 'buscando', proyecto: 'prueba' },
@@ -1152,6 +1154,12 @@ test('oficina (S58, S-OF2): conmutador Flujo|Oficina, lienzo pixel con una placa
   assert.equal((out.match(/class="oficina-sala-nombre"/g) || []).length, 2, 'nombre de cada sala')
   assert.ok(out.includes('buscador') && out.includes('prueba'), 'placa de tipo y proyecto')
   assert.ok(out.includes('oficina-lista'), 'lista para móvil')
+  // S-OF4: solo la sala del proyecto actual abierta; el resto plegado (sin actual, todas abiertas).
+  const sal = [{ id: 'prueba', proyecto: 'prueba', actual: true }, { id: 'otro', proyecto: 'otro' }]
+  const plegadas = (o) => (o.match(/data-plegada="1"/g) || []).length
+  assert.equal(plegadas(ctx.htmlOficina({ agentes: ag, salas: sal })), 1, 'la sala que no es la actual viene plegada')
+  assert.ok(/data-sala-toggle="otro"/.test(ctx.htmlOficina({ agentes: ag, salas: sal })), 'botón para expandir')
+  assert.equal(plegadas(ctx.htmlOficina({ agentes: ag, salas: [{ id: 'prueba', proyecto: 'prueba' }, { id: 'otro', proyecto: 'otro' }] })), 0, 'sin actual, todas abiertas')
   assert.match(ctx.htmlOficina({ agentes: [] }), /Nadie en la oficina/, 'oficina vacía')
   assert.ok(!ctx.htmlOficina({ agentes: [{ sid: 'x', agente: 'principal', accion: 'leyendo', archivo: '<b>x</b>' }] }).includes('<b>x'), 'escapa')
 })

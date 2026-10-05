@@ -5,6 +5,7 @@
     "GITHUB_TOKEN": "ghp_SECRETO_DE_PRUEBA_123"
   },
   "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node \"$HOME/.claude/hooks/vigilar_prompt.mjs\"" }] }],
     "PostToolUse": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/vigilar_contexto.sh" }] }],
     "SessionEnd": [{ "hooks": [
       { "type": "command", "command": "$HOME/otra/carpeta/registrar_sesion.sh" },

@@ -122,6 +122,10 @@ details summary { cursor: pointer; }
 .meta-vistas { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .oficina-escena { position: relative; overflow-x: auto; overflow-y: hidden; border: 1px solid var(--borde); border-radius: var(--radio); background: color-mix(in srgb, var(--borde) 35%, var(--panel)); }
 .oficina-lienzo { display: block; image-rendering: crisp-edges; image-rendering: pixelated; }
+.oficina-salas { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.oficina-sala-toggle { font: 700 12px/1 var(--mono); padding: 5px 9px; border: 1px solid var(--borde); border-radius: var(--radio); background: var(--panel); color: var(--texto); cursor: pointer; }
+.oficina-sala-toggle[data-plegada] { color: var(--suave); font-weight: 400; }
+.oficina-sala-toggle small { opacity: .7; }
 .oficina-sala-nombre { position: absolute; font: 700 12px/1 var(--mono); color: var(--suave); white-space: nowrap; pointer-events: none; }
 .placa-oficina { position: absolute; left: 0; top: 0; padding: 0 5px; border: 1px solid var(--borde); border-left: 4px solid var(--c, var(--acento)); border-radius: 3px; background: var(--panel); color: inherit; font: 600 10px/1.5 var(--mono); white-space: nowrap; cursor: pointer; }
 .placa-oficina.sub { font-weight: 400; }
@@ -1959,12 +1963,20 @@ function placaOficina(a) {
   if (!a.principal) return a.tipo || 'agente';
   return [a.proyecto, a.etiqueta].filter(Boolean).join(' · ') || 'sesión';
 }
+// Salas plegables (S-OF4): por defecto solo abierta la del proyecto actual (`actual`); sin ninguna actual, todas. El clic se recuerda.
+function leerSalasOf() {
+  try { return JSON.parse(localStorage.getItem('oficinaSalas') || '{}') || {}; } catch { return {}; }
+}
+const salaAbiertaOf = (s, salas, mem = leerSalasOf()) => (s.id in mem ? !!mem[s.id] : (salas.some((x) => x.actual) ? !!s.actual : true));
 function htmlOficina(datos) {
-  const agentes = (datos && datos.agentes) || [], salas = (datos && datos.salas) || [];
+  const agentes = (datos && datos.agentes) || [], todas = (datos && datos.salas) || [];
+  const mem = leerSalasOf(), abiertas = todas.filter((s) => salaAbiertaOf(s, todas, mem)), salas = abiertas;
+  const cuantos = (s) => agentes.filter((a) => a.casilla && a.casilla.sala === s.id).length;
+  const interruptores = todas.length > 1 ? `<div class="oficina-salas">${todas.map((s) => { const ab = abiertas.includes(s); return `<button type="button" class="oficina-sala-toggle" data-sala-toggle="${esc(s.id)}" aria-expanded="${ab}"${ab ? '' : ' data-plegada="1"'}>${ab ? '▾' : '▸'} ${esc(s.proyecto || 'otros')} <small>${cuantos(s)}</small></button>`; }).join('')}</div>` : '';
   const color = (a) => (a.apariencia && a.apariencia.camiseta ? ` style="--c:${esc(a.apariencia.camiseta)}"` : '');
   pedirCuadro();
   return `<section class="tarjeta meta oficina"><h2><span>Oficina</span><small>${agentes.length} agente(s) trabajando</small></h2>
-    ${agentes.length ? `<div class="oficina-escena"><canvas class="oficina-lienzo" width="0" height="0" role="img" aria-label="Oficina con ${agentes.length} agente(s) en ${salas.length} sala(s)"></canvas>${salas.map((s) => `<span class="oficina-sala-nombre" data-sala="${esc(s.id)}">${esc(s.proyecto || 'otros')}</span>`).join('')}${agentes.map((a) => `<button type="button" class="placa-oficina${a.principal ? '' : ' sub'}" data-key="${esc(llaveOficina(a))}"${color(a)}>${esc(placaOficina(a))}</button>`).join('')}<div class="tarjeta-oficina" hidden></div></div>` : '<p class="oficina-vacia">Nadie en la oficina: no hay sesiones de Claude Code activas.</p>'}
+    ${agentes.length ? interruptores : ''}${agentes.length ? `<div class="oficina-escena"><canvas class="oficina-lienzo" width="0" height="0" role="img" aria-label="Oficina con ${agentes.length} agente(s) en ${salas.length} sala(s) abierta(s)"></canvas>${salas.map((s) => `<span class="oficina-sala-nombre" data-sala="${esc(s.id)}">${esc(s.proyecto || 'otros')}</span>`).join('')}${agentes.map((a) => `<button type="button" class="placa-oficina${a.principal ? '' : ' sub'}" data-key="${esc(llaveOficina(a))}"${color(a)}>${esc(placaOficina(a))}</button>`).join('')}<div class="tarjeta-oficina" hidden></div></div>` : '<p class="oficina-vacia">Nadie en la oficina: no hay sesiones de Claude Code activas.</p>'}
     <ul class="oficina-lista" aria-label="Agentes">${agentes.map((a) => `<li><canvas class="mini-avatar" width="16" height="24" data-key="${esc(llaveOficina(a))}" aria-hidden="true"></canvas><span><b${color(a)}>${esc(placaOficina(a))}</b> — ${esc(a.accion)}${a.archivo ? ' · ' + esc(a.archivo) : ''}</span></li>`).join('')}</ul></section>`;
 }
 
@@ -2181,7 +2193,7 @@ function cuadroOficina(t) {
   const calma = matchMedia('(prefers-reduced-motion: reduce)').matches, tv = calma ? 0 : t;
   const dt = ultimoCuadroOf ? Math.min(t - ultimoCuadroOf, 100) : 0;
   ultimoCuadroOf = t;
-  const salas = OFICINA.salas || [], agentes = (OFICINA.agentes || []).filter((a) => a.casilla);
+  const todas = OFICINA.salas || [], mem = leerSalasOf(), salas = todas.filter((s) => salaAbiertaOf(s, todas, mem)), agentes = (OFICINA.agentes || []).filter((a) => a.casilla);
   const porSala = new Map(salas.map((s) => [s.id, s]));
   const disp = disposicionOf(salas, escena.clientWidth);
   moverOf(agentes.filter((a) => porSala.has(a.casilla.sala)), porSala, dt, calma || !oficinaAnimada);
@@ -2194,7 +2206,7 @@ function cuadroOficina(t) {
   ctx.clearRect(0, 0, W, H);
   // Pantalla encendida mientras su dueño trabaja; apagada si está quieto o se fue.
   const encendido = new Set(agentes.filter((a) => a.principal && a.accion !== 'quieto').map((a) => a.sid));
-  salas.forEach((s, i) => dibujarSalaOf(ctx, s, disp.pos.get(s.id), i, encendido, tv));
+  salas.forEach((s) => dibujarSalaOf(ctx, s, disp.pos.get(s.id), todas.indexOf(s), encendido, tv));
   POS_OF = agentes.map((a) => {
     const s = ANIM_OF.get(llaveOficina(a)), p = disp.pos.get(a.casilla.sala);
     return s && p && { a, s, sala: porSala.get(a.casilla.sala), x: Math.round((p.ox + s.x) * T_OF), y: Math.round((p.oy + s.y) * T_OF) };
@@ -2228,6 +2240,15 @@ document.addEventListener('click', (ev) => {
   pedirCuadro();
 });
 window.addEventListener('resize', pedirCuadro);
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest && ev.target.closest('[data-sala-toggle]');
+  if (!b || !OFICINA) return;
+  const mem = leerSalasOf(), s = (OFICINA.salas || []).find((x) => x.id === b.dataset.salaToggle);
+  if (!s) return;
+  mem[s.id] = !salaAbiertaOf(s, OFICINA.salas || [], mem);
+  try { localStorage.setItem('oficinaSalas', JSON.stringify(mem)); } catch {}
+  pintar();
+});
 
 let OFICINA = null, metaVista = 'flujo', oficinaOcupada = false;
 const llavesOficina = (d) => ((d && d.agentes) || []).map(llaveOficina);

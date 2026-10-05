@@ -144,7 +144,7 @@
 Historia: Como Eduardo, quiero que lo que noté al probar Tablero, Estudio, Oficina y móvil quede anotado, para atenderlo cuando toque y no ahora.
 Origen: pruebas a mano del 2026-10-05. Sin sesión definida aún: se planifica cuando Eduardo lo pida. Plugins/MCP: ninguno.
 - [ ] [mejora] Estudio: mejoras que Eduardo irá anotando al usarlo (por ahora «está bien») — `plantilla.html` `panelEstudio`
-- [ ] [mejora] Oficina: aspecto gráfico más trabajado (Eduardo la usará unos días y anotará problemas) — `plantilla.html` `htmlOficina`
+- [x] [mejora] Oficina: aspecto gráfico más trabajado (Eduardo la usará unos días y anotará problemas) — `plantilla.html` `htmlOficina`
 - [ ] [prueba] Probar las vistas nuevas en el móvil (pendiente de Eduardo; ver también la nota de experiencia full móvil)
 
 ### S63 — Limpieza: cerrar en el backlog lo que ya está hecho · **Sonnet** · rama `limpieza-backlog` (sale de `develop`) · ~40k
