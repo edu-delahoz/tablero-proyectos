@@ -7,6 +7,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer, request } from 'node:http'
 import vm from 'node:vm'
+import { execFileSync } from 'node:child_process'
 
 const dir = mkdtempSync(join(tmpdir(), 'tablero-srv-'))
 const BACKLOG = join(dir, 'BACKLOG_PRUEBA.md')
@@ -82,7 +83,7 @@ after(() => srv.close())
 function post(ruta, cuerpo, { host = `127.0.0.1:${puerto}`, origin = `http://127.0.0.1:${puerto}`, tipo = 'application/json' } = {}) {
   return new Promise((ok, mal) => {
     const datos = JSON.stringify(cuerpo)
-    const q = request({ host: '127.0.0.1', port: puerto, path: ruta, method: 'POST', headers: { host, origin, 'content-type': tipo, 'content-length': Buffer.byteLength(datos) } }, (r) => {
+    const q = request({ host: '127.0.0.1', port: puerto, path: ruta, method: 'POST', headers: { host, ...(origin ? { origin } : {}), 'content-type': tipo, 'content-length': Buffer.byteLength(datos) } }, (r) => {
       let t = ''
       r.on('data', (c) => { t += c })
       r.on('end', () => ok({ estado: r.statusCode, json: JSON.parse(t) }))
@@ -713,14 +714,16 @@ test('/api/sesiones: sesiones recientes por proyecto, barato, sin tocar la huell
   assert.equal(mia.activa, true)
   assert.equal(mia.rama, 'kb')
   assert.ok(Array.isArray(s.json.columnas.prueba), 'estado de cada tarjeta para repintar')
-  assert.equal(s.json.columnas.prueba.find((c) => c.texto === 'Uno')?.estado, 'en-curso')
+  assert.equal(s.json.columnas.prueba.find((c) => c.clave === 'S1')?.estado, 'en-curso', 'una entrada por sesión (S53)')
   writeFileSync(r, readFileSync(r, 'utf8') + JSON.stringify({ type: 'user', message: { content: 'más' } }) + '\n')
   assert.equal((await get('/api/version')).json.version, v, 'la actividad de Claude no entra en la huella')
   assert.equal((await get('/api/sesiones', { host: `evil.com:${puerto}` })).estado, 403)
   const d = (await get('/api/datos')).json
   assert.ok(d.sesiones?.prueba)
   assert.ok(Array.isArray(d.proyectos[0].kanban))
-  assert.equal(d.proyectos[0].kanban.find((c) => c.texto === 'Uno').archivo, 'BACKLOG_PRUEBA.md')
+  const s1 = d.proyectos[0].kanban.find((c) => c.clave === 'S1')
+  assert.equal(s1.archivo, 'BACKLOG_PRUEBA.md')
+  assert.deepEqual([s1.llano, s1.total], ['Base', 2], 'p.kanban es por sesión (S53)')
 })
 
 test('/api/carpetas: sin ruta → home + sugerencias; con ruta → subcarpetas y propuesta; nunca fuera de home ni archivos; solo con Origin', async () => {
@@ -865,4 +868,43 @@ test('metodología (S51): la pestaña pinta un nodo por etapa con su estado y el
     if (p) assert.match(ctx.htmlMetodologia(g, p.id), new RegExp(`pieza-${{ activa: 'verde', instalada: 'ambar', falta: 'rojo' }[est]}`), `pieza ${est}`)
   }
   assert.match(out, /class="meta-lista"/, 'lista vertical para móvil')
+})
+
+// ---------- S53: prueba transversal de rutas y detalle de una sesión ----------
+test('toda ruta /api/* que declara crearManejador rechaza Host ajeno, y las POST además sin Origin (descubre las nuevas sola)', async () => {
+  const fuente = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'generar.mjs'), 'utf8')
+  const m = fuente.slice(fuente.indexOf('export function crearManejador'))
+  const rutas = [...new Set([...m.matchAll(/ruta === '(\/api\/[^']+)'/g)].map((x) => x[1]))]
+  const gets = new Set([...m.matchAll(/req\.method === 'GET' && ruta === '(\/api\/[^']+)'/g)].map((x) => x[1]))
+  assert.ok(rutas.length >= 20, `encontró ${rutas.length} rutas`)
+  assert.ok(rutas.includes('/api/sesion-detalle'), 'S53 declara /api/sesion-detalle')
+  const ajeno = { host: `evil.com:${puerto}` }
+  for (const r of rutas) {
+    assert.equal((gets.has(r) ? await get(r, ajeno) : await post(r, {}, ajeno)).estado, 403, `${r} con Host ajeno`)
+    if (!gets.has(r)) assert.equal((await post(r, {}, { origin: '' })).estado, 403, `${r} sin Origin`)
+  }
+})
+
+test('/api/sesion-detalle: commits y archivos de la rama frente a la principal; rama inválida → 400; proyecto ajeno → 404', async () => {
+  const repo = join(dir, 'repo-detalle')
+  mkdirSync(repo)
+  const g = (...a) => execFileSync('git', a, { cwd: repo, stdio: 'pipe' })
+  g('init', '-q', '-b', 'main'); g('config', 'user.email', 't@t'); g('config', 'user.name', 't')
+  writeFileSync(join(repo, 'a.txt'), 'a'); g('add', '.'); g('commit', '-qm', 'base')
+  g('checkout', '-qb', 'h7-s1'); writeFileSync(join(repo, 'b.mjs'), 'b'); writeFileSync(join(repo, 'c.md'), 'c'); g('add', '.'); g('commit', '-qm', 'S1: dos archivos')
+  g('checkout', '-q', 'main')
+  const PJ = join(dir, 'proyectos.json'), original = readFileSync(PJ, 'utf8')
+  writeFileSync(PJ, JSON.stringify([...JSON.parse(original), { id: 'conrepo', nombre: 'Con repo', repo }]))
+  try {
+    const r = await get('/api/sesion-detalle?proyecto=conrepo&rama=h7-s1')
+    assert.equal(r.estado, 200)
+    assert.equal(r.json.principal, 'main')
+    assert.deepEqual(r.json.commits.map((c) => c.titulo), ['S1: dos archivos'])
+    assert.deepEqual([...r.json.commits[0].archivos].sort(), ['b.mjs', 'c.md'])
+    assert.ok(r.json.commits[0].oid && r.json.commits[0].fecha)
+    assert.deepEqual((await get('/api/sesion-detalle?proyecto=conrepo&rama=no-existe')).json.commits, [])
+    assert.equal((await get('/api/sesion-detalle?proyecto=conrepo&rama=--output%3D%2Ftmp%2Fx')).estado, 400)
+    assert.equal((await get('/api/sesion-detalle?proyecto=conrepo')).estado, 400)
+    assert.equal((await get('/api/sesion-detalle?proyecto=nadie&rama=h7-s1')).estado, 404)
+  } finally { writeFileSync(PJ, original) }
 })

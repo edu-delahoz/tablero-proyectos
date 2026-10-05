@@ -870,15 +870,26 @@ function leerRamas(repo) {
   return fusionarRamas(sh('git', ['for-each-ref', 'refs/heads', 'refs/remotes/origin',
     '--format=%(refname)%1f%(objectname)%1f%(committerdate:iso-strict)%1f%(upstream:track)'], repo) || '')
 }
+// CI de un PR a partir del statusCheckRollup de gh: falla manda sobre corre, y corre sobre ok; sin checks → null.
+const CI_FALLA = /^(FAILURE|ERROR|TIMED_OUT|CANCELLED|ACTION_REQUIRED|STARTUP_FAILURE)$/
+export function resumenCi(rollup) {
+  if (!rollup?.length) return null
+  const estado = (c) => c.state ? (CI_FALLA.test(c.state) ? 'falla' : c.state === 'SUCCESS' ? 'ok' : 'corre')
+    : c.status && c.status !== 'COMPLETED' ? 'corre' : CI_FALLA.test(c.conclusion || '') ? 'falla' : 'ok'
+  const es = rollup.map(estado)
+  return es.includes('falla') ? 'falla' : es.includes('corre') ? 'corre' : 'ok'
+}
+// Rama principal del repo: origin/HEAD, si no main.
+const principalDe = (repo) => (sh('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], repo) || '').trim() || 'main'
 function leerGit(p) {
   if (!p.repo || !existsSync(p.repo)) return null
   const rutaCache = join(DATOS, `github-${p.id}.json`)
   const cache = leerJson(rutaCache, {})
   const url = (sh('gh', ['repo', 'view', '--json', 'url', '-q', '.url'], p.repo) || '').trim() || cache.url || ''
   const prsCrudo = sh('gh', ['pr', 'list', '--state', 'all', '--limit', '40', '--json',
-    'number,title,state,isDraft,headRefName,baseRefName,url,createdAt,mergedAt,commits,body'], p.repo, 20000)
-  const prs = prsCrudo ? JSON.parse(prsCrudo).map((pr) => ({
-    ...pr, body: (pr.body || '').slice(0, 4000),
+    'number,title,state,isDraft,headRefName,baseRefName,url,createdAt,mergedAt,commits,body,statusCheckRollup'], p.repo, 20000)
+  const prs = prsCrudo ? JSON.parse(prsCrudo).map(({ statusCheckRollup, ...pr }) => ({
+    ...pr, body: (pr.body || '').slice(0, 4000), ci: resumenCi(statusCheckRollup),
     commits: (pr.commits || []).map((c) => ({ oid: c.oid, titulo: c.messageHeadline })),
   })) : cache.prs || []
   const log = sh('git', ['log', '--branches', '--remotes', '--topo-order', '-n', '80', '--date=iso-strict', '--pretty=format:%H%x1f%P%x1f%ad%x1f%an%x1f%s%x1f%D'], p.repo) || ''
@@ -889,7 +900,7 @@ function leerGit(p) {
   const rama = (sh('git', ['branch', '--show-current'], p.repo) || '').trim()
   const sinPush = (sh('git', ['log', '--branches', '--not', '--remotes', '--pretty=%H'], p.repo) || '').split('\n').filter(Boolean)
   // Ramas locales sin fusionar en la principal (origin/HEAD, si no main): las casillas hechas en ellas van «En prueba».
-  const principal = (sh('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], p.repo) || '').trim() || 'main'
+  const principal = principalDe(p.repo)
   const sinFusionar = (sh('git', ['for-each-ref', `--no-merged=${principal}`, 'refs/heads', '--format=%(refname:short)'], p.repo) || '').split('\n').filter(Boolean)
   const datos = { url, prs, commits, rama, sinPush, sinFusionar, ramas: leerRamas(p.repo), grafo: grafoRamas(commits), actualizadoGh: prsCrudo ? new Date().toISOString() : cache.actualizadoGh || null }
   writeFileSync(rutaCache, JSON.stringify({ url, prs, actualizadoGh: datos.actualizadoGh }))
@@ -1381,6 +1392,43 @@ export function columnasKanban(b, p, sesiones = []) {
   return tarjetas
 }
 
+// Kanban por sesión (S53): una tarjeta por sesión de sesiones(). hito: «## H<n>» que la contiene → H<n> del título «#»
+// («Mini backlog H7») → la sección del backlog padre que enlaza el archivo. estado: hecho (todo hecho y rama fusionada
+// o sin rama) · en-prueba (todo hecho y PR abierto o rama sin fusionar) · en-curso ([~], una sesión de Claude activa
+// que la nombra o «estás aquí») · por-hacer. texto = llano y seccion, para la vista por casillas hasta S54.
+const primeraFrase = (t) => { const f = String(t).trim().split(/(?<=[.!?])\s+/)[0]; return f.length > 110 ? `${f.slice(0, 109).trimEnd()}…` : f }
+export function kanbanSesiones(b, p, sesionesClaude = []) {
+  const texto = String(b.contenido || ''), lineas = texto.replace(/\t/g, '    ').split('\n')
+  const git = p?.git || {}, prs = git.prs || []
+  const abiertas = new Set(prs.filter((pr) => pr.state === 'OPEN').map((pr) => pr.headRefName))
+  const sinFusionar = new Set(git.sinFusionar || [])
+  const vivas = sesionesClaude.filter((s) => s.activa && (s.foco?.backlogs?.includes(b.archivo) || s.archivos?.includes(b.ruta)))
+  const arriba = b.estructura || [], nodos = aplanar(arriba)
+  const hitoTitulo = texto.match(/^#\s+(.+)$/m)?.[1].match(/\b(H\d+)\b/)?.[1] ?? null
+  return sesiones(texto).map((s) => {
+    const nodo = nodos.find((x) => x.linea === s.linea) || null
+    const raiz = arriba.filter((x) => x.linea <= s.linea).at(-1)
+    const hitoNodo = raiz && raiz !== nodo && /^H\d/.test(raiz.clave || '') ? raiz : null
+    const hito = hitoNodo?.clave || hitoTitulo || b.padre?.clave || null
+    const rama = nodo ? ramaDe(lineas, nodo, hitoNodo) : s.rama
+    const pr = rama ? prs.filter((x) => x.headRefName === rama).sort((x, y) => (y.state === 'OPEN') - (x.state === 'OPEN'))[0] : null
+    const todo = s.total ? s.hechas >= s.total : !!s.resultado
+    const nombrada = vivas.some((v) => {
+      const claves = v.foco?.claves || []
+      if (claves.length) return claves.includes(s.clave) || (!!hitoNodo && claves.includes(hitoNodo.clave))
+      return !!nodo && b.activo?.seccion === nodo.id
+    })
+    const enCurso = s.tareas.some((t) => /\[~\]/.test(lineas[t.linea] || '')) || (!!nodo && b.aqui === nodo.id) || nombrada
+    const estado = todo ? (rama && (abiertas.has(rama) || sinFusionar.has(rama)) ? 'en-prueba' : 'hecho') : enCurso ? 'en-curso' : 'por-hacer'
+    const llano = s.seEspera ? primeraFrase(s.seEspera) : s.titulo
+    return {
+      archivo: b.archivo, clave: s.clave, titulo: s.titulo, llano, texto: llano, modelo: s.modelo, rama, hito, estado,
+      hechas: s.hechas, total: s.total, seEspera: s.seEspera, resultado: s.resultado, prompt: s.prompt, tareas: s.tareas,
+      linea: s.linea, seccion: nodo?.id ?? null, ...(pr ? { pr: { numero: pr.number, url: pr.url, estado: pr.state, ci: pr.ci ?? null } } : {}),
+    }
+  })
+}
+
 async function recolectar(opciones = {}) {
   cargarProyectos()
   mkdirSync(DATOS, { recursive: true })
@@ -1407,7 +1455,7 @@ async function recolectar(opciones = {}) {
     const git = leerGit(p)
     const configuracion = estadoConfiguracion(p, { git, backlogs })
     const retomar = hechosRetomar({ transcripciones: p.transcripciones, git }, backlogs.find((b) => !b.esPlan) || null)
-    const kanban = backlogs.filter((b) => !b.esPlan).flatMap((b) => columnasKanban(b, { git }, opciones.sesiones?.[p.id] || []))
+    const kanban = backlogs.filter((b) => !b.esPlan).flatMap((b) => kanbanSesiones(b, { git }, opciones.sesiones?.[p.id] || []))
     // Badge «≠ plan»: el modelo de la fila (foto de la statusline) frente al que pedía el prompt de esa sesión.
     const bitacora = bitacoras.get(p.bitacora) || null
     for (const f of bitacora?.registro || []) if (f.proyecto === p.id) {
@@ -1553,8 +1601,23 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
       if (req.method === 'GET' && ruta === '/api/sesiones') {
         const sesiones = sesionesActivas(proyectos)
         const columnas = Object.fromEntries((cache?.datos.proyectos || []).map((p) => [p.id, p.backlogs.filter((b) => !b.esPlan)
-          .flatMap((b) => columnasKanban(b, p, sesiones[p.id] || []).map(({ archivo, linea, texto, estado }) => ({ archivo, linea, texto, estado })))]))
+          .flatMap((b) => kanbanSesiones(b, p, sesiones[p.id] || []).map(({ archivo, linea, clave, texto, estado }) => ({ archivo, linea, clave, texto, estado })))]))
         return enviar(res, 200, { sesiones, columnas })
+      }
+      // Commits y archivos de la rama de una sesión, solo al abrir su tarjeta (sin red; fuera de /api/datos y de la huella).
+      if (req.method === 'GET' && ruta === '/api/sesion-detalle') {
+        const q = new URL(req.url, `http://${host}`).searchParams, rama = q.get('rama') || ''
+        if (!/^[A-Za-z0-9._][A-Za-z0-9._/-]*$/.test(rama) || rama.includes('..')) return enviar(res, 400, { error: 'Falta la rama o no es válida.' })
+        const p = proyectos.find((x) => x.id === q.get('proyecto'))
+        if (!p?.repo || !existsSync(p.repo)) return enviar(res, 404, { error: 'Proyecto sin repo o no está en proyectos.json.' })
+        const principal = principalDe(p.repo)
+        const log = sh('git', ['log', `${principal}..${rama}`, '--name-only', '-n', '30', '--date=iso-strict', '--pretty=format:%x1e%H%x1f%ad%x1f%s', '--'], p.repo) || ''
+        const commits = log.split('\x1e').filter((x) => x.trim()).map((bloque) => {
+          const [cab, ...archivos] = bloque.split('\n')
+          const [oid, fecha, titulo] = cab.split('\x1f')
+          return { oid, fecha, titulo, archivos: archivos.filter(Boolean) }
+        })
+        return enviar(res, 200, { principal, rama, commits })
       }
       if (req.method !== 'POST') return enviar(res, 404, { error: 'no existe' })
       if (req.headers.origin !== `http://${host}` || !String(req.headers['content-type']).startsWith('application/json')) return enviar(res, 403, { error: 'origen no permitido' })

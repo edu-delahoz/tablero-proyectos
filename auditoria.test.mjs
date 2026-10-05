@@ -87,3 +87,26 @@ test('CLI: node generar.mjs --auditoria <fecha> sobre una carpeta de transcripci
   assert.match(r.stdout, /Composición del gasto/)
   assert.match(r.stdout, /Read sin límite/)
 })
+
+test('Bash sobre BACKLOG: solo el hábito malo; el extractor cuenta aparte (backlogCli)', () => {
+  const cmds = [
+    "sed -n 1,9p BACKLOG_H7.md", // malo
+    "grep -n Estado BACKLOG.md", // malo
+    "node ~/x/backlog.mjs seccion S60 BACKLOG.md", // bueno
+    "node backlog.mjs arranque S60 BACKLOG.md | grep -n Estado", // bueno aunque encadene grep
+    "backlog seccion S60 BACKLOG.md && grep -n x BACKLOG.md", // un segmento malo
+    "sed -i 's/a/b/' BACKLOG.md", // escritura, no lectura
+    "ls ~/.claude/metodologia/FORMATO_BACKLOG.md", // no lee
+  ]
+  const lineas = [L({ type: 'user', timestamp: TS, message: { role: 'user', content: 'hola' } })]
+  cmds.forEach((c, i) => {
+    lineas.push(asis(`q${i}`, { input_tokens: 1, output_tokens: 1 }, [uso(`t${i}`, 'Bash', { command: c })]))
+    lineas.push(res(`t${i}`, medio))
+  })
+  const s = auditarSesion(lineas.join('\n'), { dia: '2026-10-04' })
+  assert.deepEqual(s.bashBacklog, { n: 3, tokens: 9000 })
+  assert.deepEqual(s.backlogCli, { n: 3, tokens: 9000 })
+  const r = auditar([{ proyecto: 'p', sid: 's', texto: lineas.join('\n') }], { dia: '2026-10-04' })
+  assert.deepEqual(r.backlogCli, { n: 3, tokens: 9000 })
+  assert.match(textoAuditoria(r, '2026-10-04'), /backlog\.mjs|extractor/i)
+})

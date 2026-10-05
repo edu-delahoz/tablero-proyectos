@@ -638,6 +638,55 @@ test('columnasKanban: por hacer, en curso (sesión activa o [~]), en prueba (PR 
   assert.equal(f['Mandar correo'], 'en-curso'); assert.equal(f.Campos, 'por-hacer')
 })
 
+// ---------- S53: kanban por sesión (una tarjeta = una sesión) ----------
+test('kanbanSesiones: mini backlog «# Mini backlog H7» con «## S1…» → tarjetas con hito H7, llano, prompt, avance y los 4 estados', async () => {
+  const { kanbanSesiones } = await import('./generar.mjs')
+  const texto = fixture('kanban-mini/BACKLOG_H7.md')
+  const b = { archivo: 'BACKLOG_H7.md', ruta: '/r/BACKLOG_H7.md', contenido: texto, estructura: estructura(texto), aqui: null }
+  const git = { prs: [{ number: 12, url: 'https://gh/pr/12', headRefName: 'h7-s1', state: 'OPEN', ci: 'falla' }], sinFusionar: [] }
+  const ts = kanbanSesiones(b, { git }, [])
+  const por = Object.fromEntries(ts.map((t) => [t.clave, t]))
+  assert.deepEqual(ts.map((t) => t.clave), ['S1', 'S2', 'S3', 'S4'], 'una tarjeta por sesión, en orden; «Estado» no es tarjeta')
+  assert.ok(ts.every((t) => t.hito === 'H7'), 'el hito sale del título «# Mini backlog H7», no de la clave del «##»')
+  assert.deepEqual(Object.fromEntries(ts.map((t) => [t.clave, t.estado])), { S1: 'en-prueba', S2: 'en-curso', S3: 'por-hacer', S4: 'hecho' })
+  assert.equal(por.S1.llano, 'La tabla de personas queda migrada sin duplicados.', '1.ª frase de «Se espera»')
+  assert.ok(por.S2.llano.length <= 110 && por.S2.llano.endsWith('…'), 'frase larga recortada a 110')
+  assert.equal(por.S3.llano, 'Limpieza', 'sin «Se espera» → título sin la clave')
+  assert.equal(por.S1.prompt, 'Sesión S1 del mini backlog H7. Migra la tabla.')
+  assert.deepEqual([por.S1.hechas, por.S1.total, por.S2.hechas, por.S2.total], [2, 2, 0, 2])
+  assert.deepEqual({ modelo: por.S1.modelo, rama: por.S1.rama, archivo: por.S1.archivo, resultado: por.S1.resultado }, { modelo: 'Sonnet', rama: 'h7-s1', archivo: 'BACKLOG_H7.md', resultado: 'migrada, 0 duplicados.' })
+  assert.deepEqual(por.S1.pr, { numero: 12, url: 'https://gh/pr/12', estado: 'OPEN', ci: 'falla' }, 'PR de su rama con la CI')
+  assert.equal(por.S2.tareas.length, 2)
+  assert.equal(por.S1.texto, por.S1.llano, 'texto = llano, para la vista de casillas hasta S54')
+  // PR fusionado y rama fusionada → hecho; rama sin fusionar → en prueba.
+  assert.equal(kanbanSesiones(b, { git: { prs: [{ ...git.prs[0], state: 'MERGED' }], sinFusionar: [] } }, [])[0].estado, 'hecho')
+  assert.equal(kanbanSesiones(b, { git: { prs: [], sinFusionar: ['h7-s1'] } }, [])[0].estado, 'en-prueba')
+  // Sesión de Claude activa que nombra S3 en este archivo → en curso; en otro archivo → no.
+  const ses = { activa: true, archivos: [], foco: { claves: ['S3'], backlogs: ['BACKLOG_H7.md'] } }
+  assert.equal(kanbanSesiones(b, { git }, [ses]).find((t) => t.clave === 'S3').estado, 'en-curso')
+  assert.equal(kanbanSesiones(b, { git }, [{ ...ses, foco: { claves: ['S3'], backlogs: ['OTRO.md'] } }]).find((t) => t.clave === 'S3').estado, 'por-hacer')
+  // «Estás aquí» → en curso.
+  const aqui = { ...b, aqui: porClave(b.estructura, 'S3').id }
+  assert.equal(kanbanSesiones(aqui, { git }, []).find((t) => t.clave === 'S3').estado, 'en-curso')
+  // Hito: «## H<n>» del archivo manda; si no hay ni «##» ni título con H, la sección del padre que enlaza el archivo.
+  const conHito = '# B\n\n## H2 — Registro\n\n### S9 — Algo\n- [ ] Uno\n'
+  assert.equal(kanbanSesiones({ archivo: 'B.md', contenido: conHito, estructura: estructura(conHito) }, {}, [])[0].hito, 'H2')
+  const sinH = '# Mini backlog\n\n## S1 — Algo\n- [ ] Uno\n'
+  assert.equal(kanbanSesiones({ archivo: 'BACKLOG_X.md', contenido: sinH, estructura: estructura(sinH), padre: { archivo: 'BACKLOG.md', clave: 'H5' } }, {}, [])[0].hito, 'H5')
+})
+
+test('resumenCi: statusCheckRollup de gh → ok · falla · corre · null', async () => {
+  const { resumenCi } = await import('./generar.mjs')
+  assert.equal(resumenCi([]), null)
+  assert.equal(resumenCi(undefined), null)
+  assert.equal(resumenCi([{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' }, { __typename: 'StatusContext', state: 'SUCCESS' }]), 'ok')
+  assert.equal(resumenCi([{ status: 'COMPLETED', conclusion: 'SUCCESS' }, { status: 'IN_PROGRESS', conclusion: '' }]), 'corre')
+  assert.equal(resumenCi([{ state: 'PENDING' }]), 'corre')
+  assert.equal(resumenCi([{ status: 'IN_PROGRESS', conclusion: '' }, { status: 'COMPLETED', conclusion: 'FAILURE' }]), 'falla', 'falla manda sobre corre')
+  assert.equal(resumenCi([{ state: 'ERROR' }]), 'falla')
+  assert.equal(resumenCi([{ status: 'COMPLETED', conclusion: 'SKIPPED' }, { status: 'COMPLETED', conclusion: 'NEUTRAL' }]), 'ok')
+})
+
 // ---------- S35: elegir carpeta sin pegar rutas ----------
 const { listarCarpetas, sugerirProyectos, propuestaProyecto, proyectoNuevo } = await import('./generar.mjs')
 const { utimesSync: tocarC, symlinkSync: enlaceC } = await import('node:fs')
