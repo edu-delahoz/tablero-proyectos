@@ -92,6 +92,37 @@ test('PostToolUse Bash con salida ≥2k tokens: aviso; menor: nada', () => {
   assert.equal(correr(post('corto')).salida, null)
 })
 
+// E2b: imágenes y PDF no se leen por rangos y sus bytes no son texto → ni aviso ni log
+const BINARIOS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf']
+for (const ext of BINARIOS) writeFileSync(join(dir, `captura.${ext}`), 'x'.repeat(40000))
+const grandeSql = join(dir, 'grande.sql')
+writeFileSync(grandeSql, 'select 1;\n'.repeat(1500))
+
+test('Read sin limit de imagen o PDF grande: sin aviso y sin log', () => {
+  for (const ext of BINARIOS) {
+    const r = correr(leer(join(dir, `captura.${ext}`)))
+    assert.equal(r.salida, null, ext)
+    assert.equal(r.lineas.length, 0, ext)
+  }
+  const mayus = join(dir, 'CAPTURA.PNG')
+  writeFileSync(mayus, 'x'.repeat(40000))
+  assert.equal(correr(leer(mayus)).lineas.length, 0)
+})
+
+test('cat de imagen por Bash: sin aviso ni log', () => {
+  const r = correr(bash(`cat ${join(dir, 'captura.png')}`))
+  assert.equal(r.salida, null)
+  assert.equal(r.lineas.length, 0)
+})
+
+test('texto grande (.md/.sql) sin limit sigue avisando', () => {
+  for (const f of [grande, grandeSql]) {
+    const r = correr(leer(f))
+    assert.match(r.ctx, /grep -n/)
+    assert.equal(r.lineas.length, 1)
+  }
+})
+
 test('entrada vacía o rota: sale 0 sin ruido', () => {
   const r = spawnSync('node', [HOOK], { input: 'no es json', encoding: 'utf8' })
   assert.equal(r.status, 0)
