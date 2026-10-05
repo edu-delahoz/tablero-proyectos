@@ -1619,8 +1619,8 @@ function bloqueAuditoria(a) {
     let x = 0; const W = 640;
     const segs = AUD_PARTES.map(([k, , c]) => { const w = W * g.partes[k].pct / 100, r = `<rect x="${x}" y="0" width="${Math.max(0, w)}" height="18" fill="${c}"><title>${esc(`${k}: ${g.partes[k].pct} %`)}</title></rect>`; x += w; return r; }).join('');
     const leyenda = AUD_PARTES.map(([k, n, c]) => `<li><i style="background:${c}"></i>${n} <b>${g.partes[k].pct} %</b> <span class="suave">${kt(g.partes[k].volumen)} tokens → ${kt(g.partes[k].ponderado)} pond.</span></li>`).join('');
-    const habitos = [['Tool results >5k', { n: dia.grandes.length, tokens: dia.grandes.reduce((s, b) => s + b.volumen, 0) }], ['Bash sobre BACKLOG', dia.bashBacklog], ['`cat` completos', dia.catCompletos], ['Read sin límite (>3k)', dia.readSinLimite]];
-    const filas = habitos.map(([n, o]) => `<tr><td>${esc(n)}</td><td class="n">${o.n}</td><td class="n">${kt(o.volumen)}</td></tr>`).join('');
+    const habitos = [['Tool results >5k', { n: dia.grandes.length, volumen: dia.grandes.reduce((s, b) => s + (b.volumen ?? 0), 0) }], ['Bash sobre BACKLOG', dia.bashBacklog], ['Extractor backlog (bueno)', dia.backlogCli ?? { n: 0, volumen: 0 }], ['`cat` completos', dia.catCompletos], ['Read sin límite (>3k)', dia.readSinLimite]];
+    const filas = habitos.map(([n, o]) => `<tr><td>${esc(n)}</td><td class="n">${o.n}</td><td class="n">${kt(o.volumen ?? 0)}</td></tr>`).join('');
     cuerpo = `<p class="suave graf-nota">${dia.sesiones} sesiones · ${dia.llamadas} llamadas · ${kt(g.ponderado)} tokens ponderados (entrada ×1, escritura ×2, lectura ×0,1, salida ×5)</p>
       <svg viewBox="0 0 ${W} 18" role="img" aria-label="${esc(`Composición del gasto: ${AUD_PARTES.map(([k, n]) => `${n} ${g.partes[k].pct} %`).join(', ')}`)}">${segs}</svg>
       <ul class="graf-leyenda">${leyenda}</ul>

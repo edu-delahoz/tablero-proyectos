@@ -1,6 +1,10 @@
 #!/usr/bin/env node
-// Extractor de backlog: `seccion <clave> [archivo]` imprime solo esa sección (con nº de línea) y
-// `marcar <clave> <n> [archivo]` cambia [ ]→[x] en su casilla n (1-based). Sin archivo: BACKLOG.md del directorio actual.
+// Extractor de backlog (sin archivo: BACKLOG.md del directorio actual; el archivo es el argumento que termina en .md):
+//   seccion <c1> [c2…] [archivo]  solo esas secciones, con nº de línea
+//   estado [archivo]              el bloque «## Estado» / «## Hito actual»
+//   arranque <clave> [archivo]    Estado + sección, de un tirón (lo que lee una sesión al empezar)
+//   indice [archivo]              línea · nivel · título · abiertas/total
+//   marcar <clave> <n> [archivo]  cambia [ ]→[x] en su casilla n (1-based)
 import { readFileSync, writeFileSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { estructura, aplanar, plano } from './generar.mjs'
@@ -24,6 +28,28 @@ export function seccion(texto, clave) {
   return u && { linea: u.linea, texto: u.texto }
 }
 
+export function estado(texto) {
+  return seccion(texto, 'Estado') || seccion(texto, 'Hito actual')
+}
+
+export function arranque(texto, clave) {
+  const sec = seccion(texto, clave)
+  if (!sec) return null
+  const e = estado(texto)
+  return { linea: sec.linea, texto: e ? `${e.texto}\n\n${sec.texto}` : sec.texto }
+}
+
+export function indice(texto) {
+  const abiertas = (s) => {
+    const ts = [...s.tareas.flatMap(function plana(t) { return [t, ...t.hijas.flatMap(plana)] }), ...s.hijas.flatMap((h) => abiertas(h).ts)]
+    return { ts }
+  }
+  return aplanar(estructura(texto)).sort((a, b) => a.linea - b.linea).map((s) => {
+    const ts = abiertas(s).ts
+    return `${s.linea + 1} · ${s.nivel} · ${plano(s.titulo)} · ${ts.filter((t) => !t.hecha).length}/${ts.length}`
+  }).join('\n')
+}
+
 export function marcar(texto, clave, n) {
   const u = ubicar(texto, clave)
   if (!u) return null
@@ -38,18 +64,26 @@ export function marcar(texto, clave, n) {
 let esPrincipal = false
 try { esPrincipal = realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)) } catch {}
 if (esPrincipal) {
-  const [cmd, clave, ...resto] = process.argv.slice(2)
-  const uso = () => { console.error('Uso: backlog.mjs seccion <clave> [archivo] | marcar <clave> <n> [archivo]'); process.exit(2) }
-  if (!['seccion', 'marcar'].includes(cmd) || !clave) uso()
-  const n = cmd === 'marcar' ? Number(resto.shift()) : null
-  if (cmd === 'marcar' && !(n >= 1)) uso()
-  const archivo = resto[0] || 'BACKLOG.md'
+  const [cmd, ...args] = process.argv.slice(2)
+  const uso = () => { console.error('Uso: backlog.mjs seccion <clave…> | estado | arranque <clave> | indice | marcar <clave> <n>  [archivo.md]'); process.exit(2) }
+  if (!['seccion', 'estado', 'arranque', 'indice', 'marcar'].includes(cmd)) uso()
+  const iMd = args.findIndex((a) => /\.md$/i.test(a))
+  const archivo = iMd >= 0 ? args.splice(iMd, 1)[0] : 'BACKLOG.md'
   const texto = readFileSync(archivo, 'utf8')
-  if (cmd === 'seccion') {
-    const r = seccion(texto, clave)
-    if (!r) { console.error(`No hay sección «${clave}» en ${archivo}`); process.exit(1) }
-    console.log(`${archivo}:${r.linea}\n${r.texto}`)
+  const falta = (c) => { console.error(`No hay sección «${c}» en ${archivo}`); process.exit(1) }
+  if (cmd === 'indice') console.log(indice(texto))
+  else if (cmd === 'estado') { const r = estado(texto) || falta('Estado'); console.log(`${archivo}:${r.linea}\n${r.texto}`) }
+  else if (cmd === 'arranque') {
+    if (!args[0]) uso()
+    const r = arranque(texto, args[0]) || falta(args[0])
+    console.log(`${archivo}\n${r.texto}`)
+  } else if (cmd === 'seccion') {
+    if (!args.length) uso()
+    const rs = args.map((c) => seccion(texto, c) || falta(c))
+    console.log(`${archivo}:${rs.map((r) => r.linea).join(',')}\n${rs.map((r) => r.texto).join('\n\n')}`)
   } else {
+    const [clave, ns] = args, n = Number(ns)
+    if (!clave || !(n >= 1)) uso()
     const r = marcar(texto, clave, n)
     if (!r) { console.error(`No hay casilla ${n} en «${clave}» de ${archivo}`); process.exit(1) }
     writeFileSync(archivo, r.texto)

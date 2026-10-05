@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
-import { seccion, marcar } from './backlog.mjs'
+import { seccion, marcar, estado, arranque, indice } from './backlog.mjs'
 
 const BIN = join(dirname(fileURLToPath(import.meta.url)), 'backlog.mjs')
 const MD = `# Backlog
@@ -89,4 +89,43 @@ test('seccion: claves generales (E5b, S-CI1b) y sub-sesiones «####» dentro de 
   assert.equal(seccion(md, 'S-CI1b').texto, '### S-CI1b — verificación post-merge (Sonnet, ~10k; plugins/MCP: ninguno)\n- [x] mergear')
   assert.equal(seccion(md, 'S-CI1'), null)
   assert.equal(marcar(md, 'E5b', 2).linea, 7)
+})
+
+test('estado: bloque «## Estado» con nº de línea, sin las secciones que siguen', () => {
+  const r = estado(MD)
+  assert.equal(r.linea, 3)
+  assert.equal(r.texto, '## Estado\n- algo')
+  assert.equal(estado('# B\n\n## Hito actual\n- x\n\n## H1\n'). texto, '## Hito actual\n- x')
+  assert.equal(estado('# B\n\n## H1\n'), null)
+})
+
+test('arranque: Estado + la sección pedida; sin sección → null', () => {
+  const r = arranque(MD, 'S4b')
+  assert.match(r.texto, /^## Estado\n- algo\n/)
+  assert.match(r.texto, /### S4b[\s\S]*tercera/)
+  assert.doesNotMatch(r.texto, /ajena/)
+  assert.equal(arranque(MD, 'S99'), null)
+})
+
+test('indice: línea · nivel · título · abiertas/total', () => {
+  const l = indice(MD).split('\n')
+  assert.ok(l.includes('7 · 3 · S4b — continuación · 3/4'))
+  assert.ok(l.includes('16 · 3 · E1 — Extractor · 1/1'))
+  assert.ok(l.includes('3 · 2 · Estado · 0/0'))
+})
+
+test('CLI: seccion con varias claves; estado, arranque e indice', () => {
+  const d = mkdtempSync(join(tmpdir(), 'bk-')), f = join(d, 'BACKLOG.md')
+  writeFileSync(f, MD)
+  const run = (...a) => spawnSync(process.execPath, [BIN, ...a], { encoding: 'utf8' })
+  const dos = run('seccion', 'S4b', 'E1', f)
+  assert.equal(dos.status, 0)
+  assert.match(dos.stdout, /tercera[\s\S]*### E1/)
+  assert.doesNotMatch(dos.stdout, /ajena/)
+  assert.equal(run('seccion', 'S4b', 'S99', f).status, 1)
+  assert.match(run('estado', f).stdout, /## Estado\n- algo/)
+  const a = run('arranque', 'S4b', f)
+  assert.equal(a.status, 0)
+  assert.match(a.stdout, /## Estado[\s\S]*### S4b/)
+  assert.match(run('indice', f).stdout, /7 · 3 · S4b — continuación · 3\/4/)
 })
