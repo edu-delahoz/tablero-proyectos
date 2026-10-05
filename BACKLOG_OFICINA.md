@@ -104,7 +104,7 @@ Se espera: El PR #23 queda sin conflicto y listo para fusionar, y el verificador
 - [ ] [test] El hook aparece en la vista, verlo fallar — `servidor.test.mjs`/`metodologia.test.mjs`: con el `settings.json` real de Eduardo (copia mínima en fixtures) la etapa «sesion» de `GET /api/metodologia` y el HTML de la pestaña incluyen `hook:vigilar_prompt.mjs`; averiguar por qué no se ve aunque la API lo devuelve activo (¿caché del navegador/servidor viejo, la vista filtra por catálogo, el nodo no cabe en la etapa, o la ruta del repo `TABLERO_METODOLOGIA_REPO` cambia el origen?)
 - [ ] [código] Arreglar la causa — `metodologia.mjs` y/o `plantilla.html` (render de etapas), según lo que muestre el test; reiniciar el servidor (puerto 47321) y mirar la pestaña en el navegador
 - [ ] [código] Resolver el conflicto de #23 — `git fetch && git merge origin/develop` en `oficina-pixel` (ver qué archivos chocan, probablemente `BACKLOG.md`/`plantilla.html`/`generar.mjs`), conservar ambos lados, suite completa y `node verificar_backlog.mjs "$PWD" --formato`; push
-- [ ] [doc] Tras fusionar #23 (lo hace Eduardo o pide permiso), abrir develop → main por REST (`gh api repos/edu-delahoz/tablero-proyectos/pulls -f base=main -f head=develop …`)
+- [ ] [doc] Abrir develop → main cuando #23 esté fusionado (lo fusiona Eduardo o da permiso) — por REST (`gh api repos/edu-delahoz/tablero-proyectos/pulls -f base=main -f head=develop …`)
 
 Prompt:
 ```text
