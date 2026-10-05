@@ -439,6 +439,15 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
 .k-tarjeta.guardando { opacity: .55; }
 .k-pie { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-top: 4px; font-size: .85em; }
 .k-pie select { font: inherit; max-width: 100%; }
+.k-tarjeta.sesion { cursor: pointer; }
+.k-tarjeta.sesion.abierta { outline: 2px solid var(--acento); }
+.ci-punto { display: inline-block; width: .7em; height: .7em; border-radius: 50%; background: var(--suave); }
+.ci-ok { background: var(--verde, #2a9d4a); } .ci-mal { background: var(--rojo, #d1342f); } .ci-espera { background: var(--ambar, #d9a21b); }
+.k-vacio { padding: 12px; border: 1px dashed var(--borde); color: var(--suave); margin: 8px 0; }
+.k-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100%); overflow: auto; padding: 12px 14px; background: var(--panel); border-left: 1px solid var(--borde); box-shadow: -4px 0 16px rgba(0,0,0,.18); z-index: 20; }
+.k-panel-cab { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.k-panel .tareas { list-style: none; padding: 0; } .k-commits { padding-left: 1.1em; }
+.boton.chico { font-size: .8em; padding: 0 6px; }
 .k-etq { padding: 0 5px; border: 1px solid var(--borde); font: .8em/1.5 var(--mono); color: var(--suave); }
 /* Metodología viva (S51) */
 .meta-flujo { width: 100%; max-width: 880px; height: auto; display: block; }
@@ -453,6 +462,7 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
 .meta-detalle { margin-top: 8px; } .aviso-meta { color: var(--aviso); }
 @media (max-width: 700px) { .meta-flujo { display: none; } .meta-lista { display: block; } .meta-lista li { margin-bottom: 6px; } .meta-lista button, .meta-pieza { min-height: 44px; } }
 @media (max-width: 700px) {
+  .k-panel { width: 100%; border-left: 0; }
   .k-cols { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; padding-bottom: 6px; }
   .k-col { flex: 0 0 86%; scroll-snap-align: start; }
   .k-tarjeta:not(.abierta) .k-texto { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
@@ -724,6 +734,8 @@ function estadoResumido(txt) {
   const prim = resto.split('\n').find((l) => l.trim()) || '';
   return `<div class="estado-res">${md(prim)}${resto.trim() !== prim.trim() ? `<details><summary class="suave">Estado completo</summary>${md(txt)}</details>` : ''}</div>`;
 }
+const sesionDe = (archivo, id) => (P.kanban || []).find((x) => x.archivo === archivo && x.seccion === id);
+const sesionDeHito = (clave) => { const xs = (P.kanban || []).filter((x) => x.hito === clave && x.prompt); return xs.find((x) => x.estado === 'en-curso') || xs.find((x) => x.estado === 'por-hacer'); };
 // «❯ estás aquí: H4 — … → S3 — …» (si la sección tiene mini backlog, se encadena su «aquí»).
 // fuera = el botón navega al mapa en vez de saltar dentro de la página (Resumen).
 function lineaAqui(doc, clave, fuera) {
@@ -732,7 +744,7 @@ function lineaAqui(doc, clave, fuera) {
   const hijo = aqui.vinculo && P.backlogs.find((b) => b.archivo === aqui.vinculo);
   const sub = hijo && aplanar(hijo.estructura).find((s) => s.id === hijo.aqui);
   const destino = fuera ? `data-ir="backlogs" data-sel="${esc(clave)}" data-sec="${aqui.id}"` : `data-saltar="${idPaso(clave, aqui.id)}"`;
-  return `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> <button class="enlace" ${destino}>${esc(plano(aqui.titulo))}</button>${chips(aqui.meta)}${sub ? ` <span class="suave">→</span> <button class="enlace" data-ir="backlogs" data-sel="${esc(hijo.archivo)}" data-sec="${sub.id}">${esc(plano(sub.titulo))}</button>${chips(sub.meta)}` : ''}</p>`;
+  return `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> <button class="enlace" ${destino}>${esc(plano(aqui.titulo))}</button>${chips(aqui.meta)}${sub ? ` <span class="suave">→</span> <button class="enlace" data-ir="backlogs" data-sel="${esc(hijo.archivo)}" data-sec="${sub.id}">${esc(plano(sub.titulo))}</button>${chips(sub.meta)}` : ''} ${botonPrompt(sub ? sesionDe(hijo.archivo, sub.id) : sesionDe(doc.archivo, aqui.id))}</p>`;
 }
 function vistaMapa(doc) {
   if (doc.esPlan && doc.pareja) return mapaPlan(doc);
@@ -796,7 +808,7 @@ function mapaPlan(doc) {
   });
   return `<div class="mapa-cab"><div class="rotulo">Progreso</div>
       <div class="global">${barra(h, t, 24)}<span><strong>${h}/${t}</strong> tareas · ${pct(h, t)} %</span></div>
-      ${hitoAqui ? `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> <button class="enlace" data-saltar="${idPaso(doc.archivo, hitoAqui.clave)}">${esc(hitoAqui.clave)} — ${esc(hitoAqui.nombre || plano(aquiPar.titulo))}</button></p>` : ''}
+      ${hitoAqui ? `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> <button class="enlace" data-saltar="${idPaso(doc.archivo, hitoAqui.clave)}">${esc(hitoAqui.clave)} — ${esc(hitoAqui.nombre || plano(aquiPar.titulo))}</button> ${botonPrompt(sesionDeHito(hitoAqui.clave))}</p>` : ''}
       <p class="suave">Hitos de la tabla «Secuencia de hitos»; el avance sale de <button class="enlace" data-ir="backlogs" data-sel="${esc(par.archivo)}">${esc(par.archivo)}</button>.</p></div>
     <div class="mapa-rejilla"><div class="mapa-interior"><div class="mapa-linea">
       <ol class="linea">${pasos.join('')}</ol>${documentacion(doc.estructura)}</div>${panelFalta(par, true)}</div></div>`;
@@ -1659,7 +1671,8 @@ const KCOLS = [['por-hacer', 'Por hacer'], ['en-curso', 'En curso'], ['en-prueba
 const KMARCA = { 'por-hacer': ' ', 'en-curso': '~', hecho: 'x' };
 const kf = { hito: '', backlog: '', movidas: false };
 const kLocal = new Map(); // «archivo:linea» → estado puesto por el usuario mientras se guarda
-let kSesiones = null, kColumnas = null, kArrastre = null;
+let kSesiones = null, kColumnas = null, kArrastre = null, kAbierta = null;
+const kDetalle = new Map(); // «archivo:linea» → { principal, commits } de /api/sesion-detalle
 const kClave = (c) => `${c.archivo}:${c.linea}`;
 const haceSeg = (iso) => { const s = Math.max(1, Math.round((Date.now() - new Date(iso)) / 1000)); return s < 60 ? `hace ${s} s` : hace(iso); };
 const kSesionesP = () => (kSesiones || DATOS.sesiones || {})[P.id] || [];
@@ -1685,6 +1698,27 @@ function tarjetasKanban() {
   });
   return [...locales, ...ext];
 }
+function gastoSesion(c) {
+  const filas = c.rama ? (P.bitacora?.registro || []).filter((f) => f.rama === c.rama) : [];
+  return filas.length ? agregarBit(filas, 'rama').grupos[0] || null : null;
+}
+async function abrirSesion(clave) {
+  kAbierta = clave; pintar();
+  const c = tarjetasKanban().find((x) => !x.externa && kClave(x) === clave);
+  if (!c?.rama || kDetalle.has(clave) || !editable()) return;
+  try { kDetalle.set(clave, await (await fetch(`/api/sesion-detalle?proyecto=${encodeURIComponent(P.id)}&rama=${encodeURIComponent(c.rama)}`, { cache: 'no-store' })).json()); }
+  catch { kDetalle.set(clave, { error: 'No pude leer los commits de la rama.' }); }
+  if (kAbierta === clave) pintar();
+}
+async function marcarCasilla(clave, linea, hecha) {
+  const c = tarjetasKanban().find((x) => !x.externa && kClave(x) === clave);
+  const b = c && P.backlogs.find((x) => x.archivo === c.archivo);
+  const lineas = (b?.contenido ?? '').split('\n');
+  if (!b || !/\[[ xX~-]\]/.test(lineas[linea] ?? '')) { pintar(); return avisar('No encontré esa casilla en el archivo; recarga el tablero.', true); }
+  lineas[linea] = lineas[linea].replace(/\[[ xX~-]\]/, hecha ? '[x]' : '[ ]');
+  try { const r = await api('/api/guardar', { ruta: b.ruta, contenido: lineas.join('\n'), previo: b.contenido }); recargarDatos(r.datos); pintar(); }
+  catch (e) { pintar(); avisar(e.estado === 409 ? `${e.message} Recarga el tablero y vuelve a intentarlo.` : `No se pudo guardar: ${e.message}`, true); }
+}
 function franjaKanban() {
   const ses = kSesionesP(), viva = ses.find((s) => s.activa);
   if (viva) return `<div class="k-franja viva" id="k-franja" role="status"><span class="punto">●</span> Claude está trabajando en “${esc(corto(viva.titulo || 'sin título', 70))}”${viva.rama ? ` · rama ${esc(viva.rama)}` : ''}${viva.archivos?.[0] ? ` · tocando <code>${esc(viva.archivos[0].split('/').pop())}</code>` : ''} · ${haceSeg(viva.ultimo)}</div>`;
@@ -1696,27 +1730,49 @@ function tarjetaKanban(c) {
     const pie = `${c.item.tipo ? `<span class="k-etq">${esc(c.item.tipo)}</span>` : ''}<span class="k-etq">${esc(c.integ.nombre || c.integ.id)}</span>${c.item.asignado ? `<span class="k-etq">${esc(c.item.asignado)}</span>` : ''}`;
     return `<div class="k-tarjeta externa${c.hecha ? ' hecha' : ''}" title="Solo lectura: cambiar el estado desde aquí llega con el modo «participar»"><span class="k-texto">${c.item.url ? `<a href="${esc(c.item.url)}" target="_blank" rel="noopener">${esc(c.texto)} ↗</a>` : esc(c.texto)}</span><div class="k-pie">${pie}</div></div>`;
   }
-  const clave = [c.hito, c.clave].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' › ');
-  const k = esc(kClave(c)), ed = editable() && c.estado !== 'movida';
-  const destinos = ed ? `<select data-mover="${k}" aria-label="Mover a…"><option value="">Mover a…</option>${KCOLS.filter(([e]) => e !== 'en-prueba' && e !== c.estado).map(([e, t]) => `<option value="${e}">${t}</option>`).join('')}</select>` : '';
-  return `<div class="k-tarjeta${c.hecha ? ' hecha' : ''}${kLocal.has(kClave(c)) ? ' guardando' : ''}" data-k-tarjeta="${k}"${ed ? ' draggable="true"' : ''}${c.estado === 'en-prueba' ? ' title="En prueba es derivada: la tarjeta está hecha y su rama tiene un PR abierto o commits sin fusionar"' : ''}>
-    <span class="k-texto"${c.texto.length > 160 ? ` title="${esc(plano(c.texto))}"` : ''}>${inline(corto(c.texto, 160))}${chipsExternos(c.marcas)}</span>
-    <div class="k-pie">${clave ? `<span class="k-etq">${esc(clave)}</span>` : ''}${c.sub ? `<span class="k-etq">${c.sub.hechas}/${c.sub.total}</span>` : ''}${c.sec ? estrella(c.sec) : ''}${destinos}</div></div>`;
+  return tarjetaSesion(c);
+}
+const CI_K = { ok: ['ci-ok', 'CI en verde'], falla: ['ci-mal', 'CI con fallas'], corre: ['ci-espera', 'CI corriendo'] };
+function tarjetaSesion(c) {
+  const ci = c.pr && CI_K[c.pr.ci], total = c.total ? ` · ${c.hechas}/${c.total}` : '';
+  const chip = [c.clave, c.modelo].filter(Boolean).join(' · ') + total;
+  return `<div class="k-tarjeta sesion${c.estado === 'hecho' ? ' hecha' : ''}${kAbierta === kClave(c) ? ' abierta' : ''}" data-k-sesion="${esc(kClave(c))}" tabindex="0" role="button" aria-label="Abrir ${esc(c.clave || 'sesión')}">
+    <span class="k-texto">${esc(corto(c.llano || c.texto, 110))}</span>
+    <div class="k-pie"><span class="k-etq">${esc(chip)}</span>${ci ? `<span class="ci-punto ${ci[0]}" title="${ci[1]}" role="img" aria-label="${ci[1]}"></span>` : ''}${c.pr ? `<span class="k-etq">PR #${c.pr.numero}</span>` : ''}</div></div>`;
+}
+// Botón «⧉ Prompt de SX»: copia el prompt de arranque de la sesión (data-prompt) sin abrir nada.
+function botonPrompt(s) {
+  if (!s || !s.prompt) return '';
+  return `<button class="boton chico" type="button" data-prompt="${esc(s.prompt)}" title="Copiar el prompt de arranque de ${esc(s.clave || 'la sesión')}">⧉ Prompt de ${esc(s.clave || 'la sesión')}</button>`;
+}
+function panelSesion(c, det, gasto) {
+  const prompt = c.prompt ? `<div class="prompt-copiable"><div class="prompt-cab"><span class="rotulo">Prompt de ${esc(c.clave || 'la sesión')}</span><button class="boton" type="button" data-copiar aria-label="Copiar prompt">Copiar</button></div><pre tabindex="0">${esc(c.prompt)}</pre></div>` : '';
+  const espera = c.seEspera || c.resultado ? `<div class="espera-resultado">${c.seEspera ? `<div class="espera"><div class="rotulo">Se espera</div><p>${inline(c.seEspera)}</p></div>` : ''}${c.resultado ? `<div class="resultado"><div class="rotulo">Resultado</div><p>${inline(c.resultado)}</p></div>` : ''}</div>` : '';
+  const casillas = (c.tareas || []).length ? `<div class="rotulo">Casillas ${c.hechas}/${c.total}</div><ul class="tareas">${c.tareas.map((t) => `<li class="tarea${t.hecha ? ' hecha' : ''}"><label><input type="checkbox" data-linea="${t.linea}" data-k-casilla="${esc(kClave(c))}"${t.hecha ? ' checked' : ''}${editable() ? '' : ' disabled'}> <span class="texto">${casillaFormato(t.texto)}</span></label></li>`).join('')}</ul>` : '';
+  const ci = c.pr && CI_K[c.pr.ci];
+  const git = `<div class="k-git">${c.rama ? badgeRama(c.rama) : ''}${c.pr ? ` <a class="etq" href="${esc(c.pr.url)}" target="_blank" rel="noopener">PR #${c.pr.numero} ${esc(String(c.pr.estado || '').toLowerCase())}</a>` : ''}${ci ? ` <span class="ci-punto ${ci[0]}" aria-hidden="true"></span> ${ci[1]}` : ''}</div>`;
+  const commits = !c.rama ? '' : !det ? '<p class="suave">Cargando commits…</p>' : det.error ? `<p class="suave">${esc(det.error)}</p>`
+    : det.commits.length ? `<div class="rotulo">Commits frente a ${esc(det.principal)}</div><ul class="k-commits">${det.commits.map((m) => `<li><code>${esc(m.oid.slice(0, 7))}</code> ${esc(m.titulo)}<div class="suave">${esc((m.archivos || []).join(', '))}</div></li>`).join('')}</ul>` : '<p class="suave">Sin commits propios todavía.</p>';
+  const costo = gasto ? `<p class="suave">Costo ${usd(gasto.costo)} · ${Math.round(gasto.minutos)} min</p>` : '';
+  return `<aside id="k-panel" class="k-panel" role="dialog" aria-label="Detalle de ${esc(c.clave || 'la sesión')}"><div class="k-panel-cab"><strong>${esc(plano(c.titulo || c.llano))}</strong><button class="boton" type="button" data-k-cerrar aria-label="Cerrar detalle">✕</button></div>
+    ${prompt}${espera}${casillas}${git}${commits}${costo}</aside>`;
 }
 function vistaKanban() {
   const todas = tarjetasKanban();
   if (!todas.length) return '<div class="vacio">Este proyecto aún no tiene tareas para mostrar como tablero.</div>';
-  const hitos = [...new Set(todas.map((c) => c.hito).filter(Boolean))], backs = [...new Set(todas.map((c) => c.archivo).filter(Boolean))];
+  const hitos = [...new Set(todas.map((c) => c.hito).filter(Boolean))], backs = [...new Set(todas.filter((c) => !kf.hito || c.hito === kf.hito).map((c) => c.archivo).filter(Boolean))];
   const visibles = todas.filter((c) => (!kf.hito || c.hito === kf.hito) && (!kf.backlog || c.archivo === kf.backlog) && (kf.movidas || c.estado !== 'movida'));
   const nMov = todas.filter((c) => c.estado === 'movida').length;
   const col = ([e, t]) => { const xs = visibles.filter((c) => c.estado === e); return `<section class="k-col" data-kanban-col="${e}" aria-label="${t}"><h3><span>${t}</span><span class="suave">${xs.length}</span></h3>${xs.map(tarjetaKanban).join('') || '<div class="suave">—</div>'}</section>`; };
   const movidas = visibles.filter((c) => c.estado === 'movida');
+  const abierta = kAbierta && todas.find((c) => !c.externa && kClave(c) === kAbierta);
   return `${franjaKanban()}<div class="k-filtros">
     ${hitos.length > 1 ? `<label>Hito <select data-k-filtro="hito"><option value="">Todos</option>${hitos.map((h) => `<option${kf.hito === h ? ' selected' : ''}>${esc(h)}</option>`).join('')}</select></label>` : ''}
     ${backs.length > 1 ? `<label>Backlog <select data-k-filtro="backlog"><option value="">Todos</option>${backs.map((h) => `<option${kf.backlog === h ? ' selected' : ''}>${esc(h)}</option>`).join('')}</select></label>` : ''}
     ${nMov ? `<label><input type="checkbox" data-k-filtro="movidas"${kf.movidas ? ' checked' : ''}> ver movidas (${nMov})</label>` : ''}
     <span class="suave">${editable() ? 'Arrastra una tarjeta o usa «Mover a…».' : 'Abre el tablero con el servidor para mover tarjetas.'}</span></div>
-  <div class="k-cols">${KCOLS.map(col).join('')}</div>
+  ${visibles.length ? '' : `<div class="k-vacio" role="status">Ninguna sesión con ${[kf.hito && `el hito ${esc(kf.hito)}`, kf.backlog && `el backlog ${esc(kf.backlog)}`].filter(Boolean).join(' y ')}. Cambia o quita un filtro.</div>`}
+  <div class="k-cols">${KCOLS.map(col).join('')}</div>${abierta ? panelSesion(abierta, kDetalle.get(kClave(abierta)), gastoSesion(abierta)) : ''}
   ${kf.movidas && movidas.length ? `<h3>Movidas</h3>${movidas.map(tarjetaKanban).join('')}` : ''}`;
 }
 async function moverTarjeta(clave, destino) {
@@ -1745,12 +1801,23 @@ document.addEventListener('drop', (e) => { const c = e.target.closest?.('[data-k
 document.addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset?.mover) { const d = t.value; t.value = ''; if (d) moverTarjeta(t.dataset.mover, d); return; }
+  if (t.dataset?.kCasilla) { marcarCasilla(t.dataset.kCasilla, Number(t.dataset.linea), t.checked); return; }
   const f = t.dataset?.kFiltro;
-  if (f) { kf[f] = f === 'movidas' ? t.checked : t.value; if (f === 'hito') sel.tablero = t.value; pintar(); }
+  if (f) { if (f === 'hito') kf.backlog = ''; kf[f] = f === 'movidas' ? t.checked : t.value; if (f === 'hito') sel.tablero = t.value; pintar(); }
 });
 document.addEventListener('click', (e) => {
-  const t = e.target.closest?.('.k-tarjeta');
+  const p = e.target.closest?.('[data-prompt]');
+  if (p) { copiarTexto(p.dataset.prompt).then((ok) => avisar(ok ? 'Prompt copiado.' : 'No se pudo copiar el prompt.', !ok)); return; }
+  if (e.target.closest?.('[data-k-cerrar]')) { kAbierta = null; pintar(); return; }
+  const s = e.target.closest?.('[data-k-sesion]');
+  if (s && !e.target.closest('a, button, select')) { abrirSesion(s.dataset.kSesion); return; }
+  const t = e.target.closest?.('.k-tarjeta:not(.sesion)');
   if (t && !e.target.closest('a, button, select')) t.classList.toggle('abierta');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && kAbierta) { kAbierta = null; pintar(); return; }
+  const s = (e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-k-sesion]') && e.target;
+  if (s) { e.preventDefault(); abrirSesion(s.dataset.kSesion); }
 });
 // Sondeo propio (5 s, solo en esta pestaña y con la página visible): no entra en la huella de /api/version.
 if (editable()) {
@@ -2026,7 +2093,7 @@ function tarjetaEnCurso(p, compacta = false) {
   return `<section class="tarjeta en-curso" aria-label="Plan en curso">
     <h2><span>${c.completo ? `✓ ${esc(titulo)} completo` : `▶ En curso · ${esc(titulo)}`}</span><small>${plan ? hace(plan.modificado) : hace(b.modificado)}</small></h2>
     <div class="chips-proy">${compacta ? `<span class="etq">${esc(p.nombre)}</span>` : ''}${c.rama ? `<span class="etq" title="Rama">⎇ ${esc(c.rama)}</span>` : ''}${plan ? `<span class="etq" title="${esc(plan.nombre)}">Plan${c.planDe ? ` (de ${esc(c.planDe)})` : ''}: ${esc(corto(plan.titulo.replace(/^Plan\s*[:—–-]\s*/i, ''), 60))}</span>` : ''}${chips({ modelo: aqui.meta?.modelo || destacado?.modelo })}</div>
-    ${etiquetasFormato(hito, aqui, tarea)}
+    ${etiquetasFormato(hito, aqui, tarea)}${destacado ? `<p>${botonPrompt({ clave: destacado.clave, prompt: destacado.texto })}</p>` : ''}
     ${queSeBusca(hito, plan, compacta)}
     ${compacta ? '' : bloqueEspera(aqui)}
     ${segmentos(b, sesiones, c.completo || siguiente ? null : aqui.id)}

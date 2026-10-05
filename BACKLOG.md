@@ -130,12 +130,13 @@ Después: **S54**
 
 ### S54 — Kanban por sesión: vista y prompt actual · **Sonnet** · rama `kanban-sesiones` · ~70k
 Se espera: En la pestaña Tablero cada tarjeta es una sesión con una línea en llano; al tocarla se abre un panel con el prompt para copiar arriba y el resto del detalle; en Resumen hay un botón «Prompt de SX» junto a «estás aquí». Se comprueba con las pruebas de render y mirando el IEP (H7 + BACKLOG_H7.md muestra S0–S7).
-- [ ] [test] Render de tarjeta y panel, verlo fallar — `servidor.test.mjs` (extraer funciones con `vm` como en S51): tarjeta con llano y chip clave·modelo·x/y; panel con prompt + «Copiar», Se espera/Resultado, casillas con `casillaFormato`, rama/PR/CI; filtro hito+backlog vacío muestra aviso; botón «Prompt de» en la tarjeta de backlog del Resumen
-- [ ] Tarjeta de sesión en llano — `plantilla.html` `vistaKanban`/`tarjetaKanban` (`:1694`): línea llano, chip, avance, punto de CI; sin arrastre de sesiones
-- [ ] Panel de detalle al tocar la tarjeta — `plantilla.html`: lateral (pantalla completa ≤700px), orden prompt → Se espera/Resultado → casillas marcables (`POST /api/guardar`) → rama/PR/CI → commits y archivos (`/api/sesion-detalle` al abrir) → costo/tiempo (reusar `gasto` de `enCurso`)
-- [ ] Filtros en cascada — `plantilla.html`: elegir hito limita los backlogs; combinación vacía lo dice
-- [ ] Prompt actual a la vista — `plantilla.html`: botón «⧉ Prompt de SX» junto a «❯ estás aquí» (`:727`, `:799`, tarjetas de `:1840`) y arriba en `tarjetaEnCurso` (`:2015`)
+- [x] [test] Render de tarjeta y panel, verlo fallar (3 fallaban) — `servidor.test.mjs` (extraer funciones con `vm` como en S51): tarjeta con llano y chip clave·modelo·x/y; panel con prompt + «Copiar», Se espera/Resultado, casillas con `casillaFormato`, rama/PR/CI; filtro hito+backlog vacío muestra aviso; botón «Prompt de» en la tarjeta de backlog del Resumen
+- [x] Tarjeta de sesión en llano — `plantilla.html` `vistaKanban`/`tarjetaKanban` (`:1694`): línea llano, chip, avance, punto de CI; sin arrastre de sesiones
+- [x] Panel de detalle al tocar la tarjeta — `plantilla.html`: lateral (pantalla completa ≤700px), orden prompt → Se espera/Resultado → casillas marcables (`POST /api/guardar`) → rama/PR/CI → commits y archivos (`/api/sesion-detalle` al abrir) → costo/tiempo (reusar `gasto` de `enCurso`)
+- [x] Filtros en cascada — `plantilla.html`: elegir hito limita los backlogs; combinación vacía lo dice
+- [x] Prompt actual a la vista — `plantilla.html`: botón «⧉ Prompt de SX» junto a «❯ estás aquí» (`:727`, `:799`, tarjetas de `:1840`) y arriba en `tarjetaEnCurso` (`:2015`)
 - [ ] Mirarlo en el navegador con datos del IEP — 1200 y 390 px; `node --test 2>&1 | tail -40` en verde
+Resultado: parcial. Tarjeta, panel, cascada de filtros y «⧉ Prompt de SX» hechos; `node --test` 338 ok / 0 fallos. Sin revisar en navegador (1200/390 px) — queda esa casilla. Se quitó el arrastre y «Mover a…» de las sesiones (tests viejos ajustados); los manejadores de arrastre quedan inertes.
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S54 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S54 BACKLOG.md`). Rama `kanban-sesiones`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.

@@ -507,7 +507,7 @@ test('vista: la plantilla trae la tarjeta «Para retomar» y «Qué se busca» e
 
 test('vista: la plantilla trae la pestaña «Tablero» (kanban), la franja de Claude y «Mover a»', async () => {
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
-  for (const marca of ["['tablero', 'Tablero']", 'function vistaKanban', "'/api/sesiones'", 'data-kanban-col', 'Claude está trabajando', 'Mover a', 'scroll-snap', 'sin sesión activa', 'data-mover', 'draggable', 'derivada']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+  for (const marca of ["['tablero', 'Tablero']", 'function vistaKanban', "'/api/sesiones'", 'data-kanban-col', 'Claude está trabajando', 'scroll-snap', 'sin sesión activa', 'derivada']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
 })
 
 test('vista: la plantilla trae el selector de carpeta (Elegir…, recientes de Claude, explorar)', async () => {
@@ -907,4 +907,66 @@ test('/api/sesion-detalle: commits y archivos de la rama frente a la principal; 
     assert.equal((await get('/api/sesion-detalle?proyecto=conrepo')).estado, 400)
     assert.equal((await get('/api/sesion-detalle?proyecto=nadie&rama=h7-s1')).estado, 404)
   } finally { writeFileSync(PJ, original) }
+})
+
+// ---------- S54: kanban por sesión — tarjeta, panel de detalle, filtros y botón «Prompt de» ----------
+const sesionKanban = {
+  archivo: 'BACKLOG_H7.md', clave: 'S1', titulo: 'S1 — Alta de personas', llano: 'Se pueden dar de alta personas desde la pantalla.', modelo: 'Sonnet',
+  hito: 'H7', rama: 'h7-s1', estado: 'en-curso', hechas: 1, total: 3, linea: 12, seccion: 's1',
+  seEspera: 'Se pueden dar de alta personas.', resultado: 'Quedó el alta con validación.',
+  prompt: 'Sesión S1 de BACKLOG_H7.md. Primera casilla: el test.',
+  tareas: [
+    { hecha: true, texto: '[test] Prueba el alta — `alta.test.mjs` con tres casos', linea: 13 },
+    { hecha: false, texto: '[fix] Valida la cédula — `alta.mjs` regla de 10 dígitos', linea: 14 },
+  ],
+  pr: { numero: 7, url: 'https://github.com/x/y/pull/7', estado: 'OPEN', ci: 'ok' },
+}
+function ctxKanban(html, extra = {}) {
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+  const ctx = { esc, inline: esc, plano: (s) => String(s ?? ''), corto: (s, n = 160) => String(s).slice(0, n), editable: () => true,
+    chipsExternos: () => '', estrella: () => '', hace: () => 'hace 1 min', etqPR: (pr) => `<a class="pr">#${pr.numero}</a>`, badgeRama: (r) => `<code>${esc(r)}</code>`,
+    CASILLA: () => ['☐', '☑'], KCOLS: [['por-hacer', 'Por hacer'], ['en-curso', 'En curso'], ['en-prueba', 'En prueba'], ['hecho', 'Hecho']],
+    kClave: (c) => `${c.archivo}:${c.linea}`, kAbierta: null, kDetalle: new Map(), gastoSesion: () => null, ...extra }
+  vm.createContext(ctx)
+  vm.runInContext(html.match(/^const CI_K = .*$/m)[0], ctx)
+  for (const f of ['partesFormato', 'casillaFormato', ...(extra.funciones || [])]) vm.runInContext(funcionDe(html, f), ctx)
+  return ctx
+}
+test('kanban por sesión (S54): tarjeta en llano con chip clave·modelo·x/y y punto de CI; sin arrastre', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  const ctx = ctxKanban(html, { funciones: ['botonPrompt', 'tarjetaSesion'] })
+  const out = ctx.tarjetaSesion(sesionKanban)
+  assert.ok(out.includes('Se pueden dar de alta personas desde la pantalla.'), 'línea en llano')
+  assert.match(out, /S1[^<]*·[^<]*Sonnet[^<]*·[^<]*1\/3/, 'chip clave · modelo · x/y')
+  assert.match(out, /class="[^"]*\bci-ok\b/, 'punto de CI en verde')
+  assert.match(out, /data-k-sesion="BACKLOG_H7\.md:12"/, 'abre el panel por archivo:línea')
+  assert.ok(!out.includes('draggable'), 'las sesiones no se arrastran')
+  assert.match(ctx.tarjetaSesion({ ...sesionKanban, pr: { ...sesionKanban.pr, ci: 'falla' } }), /\bci-mal\b/, 'CI roto en rojo')
+})
+test('kanban por sesión (S54): el panel pone el prompt con «Copiar» arriba, luego Se espera/Resultado, casillas, rama/PR/CI y commits', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  const ctx = ctxKanban(html, { funciones: ['botonPrompt', 'panelSesion'], haceSeg: () => 'hace 1 min' })
+  const det = { principal: 'main', commits: [{ oid: 'abc1234def', fecha: '2026-10-05T10:00:00Z', titulo: 'S1: alta', archivos: ['alta.mjs', 'alta.test.mjs'] }] }
+  const out = ctx.panelSesion(sesionKanban, det)
+  const pos = (re) => { const i = out.search(re); assert.ok(i >= 0, `falta ${re}`); return i }
+  const iPrompt = pos(/Sesión S1 de BACKLOG_H7\.md/), iCopiar = pos(/data-copiar/), iEspera = pos(/Se espera/), iRes = pos(/Resultado/), iCas = pos(/class="llano"/), iRama = pos(/h7-s1/), iCommit = pos(/S1: alta/)
+  assert.ok(iPrompt < iEspera && iCopiar < iEspera, 'prompt y «Copiar» antes de Se espera')
+  assert.ok(iEspera < iRes && iRes < iCas && iCas < iRama && iRama < iCommit, 'orden: espera → resultado → casillas → rama → commits')
+  assert.match(out, />[^<]*Copiar[^<]*</, 'botón «Copiar»')
+  assert.match(out, /data-linea="14"/, 'casilla marcable (POST /api/guardar por línea)')
+  assert.ok(out.includes('class="etq-formato"') && out.includes('<details class="tecnico">'), 'casillas con casillaFormato')
+  assert.ok(out.includes('https://github.com/x/y/pull/7') && out.includes('alta.test.mjs'), 'PR y archivos')
+  assert.ok(!/Resultado/.test(ctx.panelSesion({ ...sesionKanban, resultado: null }, null)), 'sin resultado no hay bloque Resultado')
+  assert.ok(ctx.panelSesion({ ...sesionKanban, prompt: null }, null).length > 0 && !ctx.panelSesion({ ...sesionKanban, prompt: null }, null).includes('data-copiar'), 'sin prompt no hay Copiar')
+})
+test('kanban por sesión (S54): filtro hito+backlog sin sesiones lo dice; botón «Prompt de SX» en las tarjetas del Resumen', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  const ctx = ctxKanban(html, { funciones: ['botonPrompt', 'vistaKanban'], kf: { hito: 'H9', backlog: 'BACKLOG_H7.md', movidas: false },
+    tarjetasKanban: () => [sesionKanban, { ...sesionKanban, hito: 'H9', archivo: 'BACKLOG_H9.md', clave: 'S9', linea: 3 }], tarjetaSesion: () => '<div class="k-tarjeta"></div>', tarjetaKanban: () => '<div class="k-tarjeta"></div>',
+    franjaKanban: () => '' })
+  assert.match(ctx.vistaKanban(), /class="k-vacio"[^>]*>[^<]*Ninguna sesión/, 'aviso de combinación vacía')
+  assert.match(ctx.botonPrompt({ clave: 'S54', prompt: 'x' }), /Prompt de S54/, 'botón con la clave')
+  assert.equal(ctx.botonPrompt({ clave: 'S54', prompt: null }), '', 'sin prompt no hay botón')
+  const usos = html.match(/botonPrompt\(/g) || []
+  assert.ok(usos.length >= 4, `botonPrompt se usa en «estás aquí» (×3) y en tarjetaEnCurso; usos: ${usos.length}`)
 })
