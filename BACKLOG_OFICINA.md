@@ -90,7 +90,7 @@ Se espera: La pestaña Oficina muestra por defecto solo la sala del proyecto act
 - [x] [test] Suite completa en verde y vista en el navegador — `node --test 2>&1 | tail -20`, `node verificar_backlog.mjs "$PWD" --formato`; reiniciar el servidor y mirar Oficina (1280 y 390 px) y Flujo
 - [x] [doc] PRs con permiso ya dado — `oficina-pixel → develop`, luego `develop → main` (si GraphQL de `gh` está limitado, REST `gh api repos/…/pulls`); marcar en `BACKLOG.md` la casilla de H23 «Oficina: aspecto gráfico» como hecha con referencia a este backlog
 
-Resultado: salas plegables hechas (el servidor marca `actual` según el cwd del servidor; botón por sala, estado en `localStorage`; sin sala actual, todas abiertas) y `vigilar_prompt.mjs` sale en la etapa Sesión (los hooks que solo viven en `settings.json` del usuario ahora son piezas del grafo). Tests: 3 fallaban antes del código; suite 375 pasan / 0 fallan / 2 omitidos. No pude hacer clic en el navegador: verificado por API (`/api/oficina` con `actual`, `/api/metodologia` con el hook activo) y por prueba del HTML.
+Resultado: PR #23 (oficina-pixel → develop) abierto; develop → main no se puede abrir hasta que #23 se fusione (hoy develop = main, «No commits between»). Salas plegables hechas (el servidor marca `actual` según el cwd del servidor; botón por sala, estado en `localStorage`; sin sala actual, todas abiertas) y `vigilar_prompt.mjs` sale en la etapa Sesión (los hooks que solo viven en `settings.json` del usuario ahora son piezas del grafo). Tests: 3 fallaban antes del código; suite 375 pasan / 0 fallan / 2 omitidos. No pude hacer clic en el navegador: verificado por API (`/api/oficina` con `actual`, `/api/metodologia` con el hook activo) y por prueba del HTML.
 
 Prompt:
 ```text
