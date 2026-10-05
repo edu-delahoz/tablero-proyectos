@@ -48,19 +48,28 @@ Sin archivo usa `BACKLOG.md` del directorio actual; clave inexistente → códig
 
 ### Tablero (kanban)
 
-Cada casilla de primer nivel del backlog es una tarjeta (`p.kanban`, con `archivo`, `linea`, `seccion`, `clave`,
-`hito` y `sub` con el avance de sus hijas). Columnas y de dónde sale cada una:
+Cada **sesión** del backlog es una tarjeta (`kanbanSesiones` → `p.kanban`, desde S53): `{ archivo, clave, titulo,
+llano, modelo, rama, hito, estado, hechas, total, seEspera, resultado, prompt, tareas, linea, seccion, pr? }`.
+`llano` es la primera frase de «Se espera» (≤ 110) o, si no hay, el título sin la clave. `pr` es el PR de su rama
+(`{ numero, url, estado, ci }`, con `ci` = `ok | falla | corre | null` resumido del `statusCheckRollup` de `gh`).
+El `hito` sale, en este orden, del `## H<n>` que contiene la sesión, de una `H<n>` en el título `#` del archivo
+(«# Mini backlog H7», cuyas sesiones son `## S0…`) o de la sección del backlog padre que enlaza el archivo
+(`BACKLOG_H7.md` → `## H7`). Columnas y de dónde sale cada una (derivadas: las sesiones no se arrastran):
 
-- **Por hacer**: `- [ ]`.
-- **En curso**: `- [~]` (puesta a mano), o una sesión de Claude activa (`.jsonl` tocado hace < 5 min) que trabaja
-  ese backlog (lo nombra en un prompt o editó su archivo) y esa sección: por la clave (`S3c`, `H2`) que nombran
-  sus prompts o, si no nombran ninguna, por el frente activo del backlog.
-- **En prueba**: `- [x]` cuya rama (la del título de la sección, la del hito o «Rama \`x\`» bajo el título del
+- **Por hacer**: ninguna de las demás.
+- **En curso**: alguna casilla `- [~]`, la sesión es la del «estás aquí», o una sesión de Claude activa (`.jsonl`
+  tocado hace < 5 min) que trabaja ese backlog (lo nombra en un prompt o editó su archivo) y la nombra por su clave
+  (o la de su `## H<n>`) o, si no nombra ninguna, es el frente activo del backlog.
+- **En prueba**: todas sus casillas hechas y su rama (la del título, la del hito o «Rama \`x\`» bajo el título del
   hito) tiene un PR abierto o no está fusionada en la principal (`origin/HEAD`, si no `main`).
-- **Hecho**: `- [x]` sin nada de lo anterior. `- [-]` = movida (fuera de los conteos y de las columnas normales).
+- **Hecho**: todas sus casillas hechas (o sin casillas y con «Resultado») sin nada de lo anterior.
+
+`GET /api/sesion-detalle?proyecto=<id>&rama=<rama>` → `{ principal, rama, commits: [{ oid, fecha, titulo,
+archivos }] }`: `git log <principal>..<rama> --name-only -n 30`, sin red, solo al abrir una tarjeta; no entra en
+`/api/datos` ni en la huella de `/api/version`. Rama inválida → 400; proyecto sin repo → 404.
 
 `GET /api/sesiones` → `{ sesiones: { [proyecto]: [{ sid, titulo, rama, inicio, ultimo, activa, archivos,
-ultimoPrompt, foco }] }, columnas: { [proyecto]: [{ archivo, linea, texto, estado }] } }`. Es barato a propósito
+ultimoPrompt, foco }] }, columnas: { [proyecto]: [{ archivo, linea, clave, texto, estado }] } }` (una por sesión). Es barato a propósito
 (la vista lo sondea cada 5 s): solo los `.jsonl` de las últimas 24 h, de cada uno 64 KB de cabeza y 64 KB de cola,
 con caché por mtime y tamaño, y las columnas se recalculan sobre los datos ya construidos. La actividad de Claude
 **no entra** en la huella de `/api/version`. Sin servidor (`file://`) las mismas sesiones viajan en `datos.sesiones`.
