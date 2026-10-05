@@ -42,6 +42,10 @@ process.env.TABLERO_METODOLOGIA_REPO = join(dirname(fileURLToPath(import.meta.ur
 mkdirSync(join(dir, '.claude', 'hooks'), { recursive: true })
 writeFileSync(join(dir, '.claude', 'hooks', 'vigilar_contexto.sh'), '')
 writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify({ env: { API_KEY: 'sk-SECRETO-SRV' }, hooks: { PostToolUse: [{ hooks: [{ type: 'command', command: '~/.claude/hooks/vigilar_contexto.sh' }] }] } }))
+// Estudio (S55): nunca el claude real; el falso registra args/cwd/stdin de cada llamada.
+process.env.TABLERO_CLAUDE_BIN = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'claude-falso.mjs')
+const REGISTRO_CLAUDE = join(dir, 'claude-falso.log')
+process.env.CLAUDE_FALSO_REGISTRO = REGISTRO_CLAUDE
 
 const fuera = new Map([['E1', { id: 'E1', titulo: 'Desde afuera', hecha: false, columna: 'Todo', url: 'https://x/E1' }]])
 let n = 0
@@ -76,7 +80,7 @@ before(async () => {
   srv = createServer((q, r) => manejador(q, r))
   await new Promise((ok) => srv.listen(0, '127.0.0.1', ok))
   puerto = srv.address().port
-  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso, trello: trelloFalso, 'azure-devops': adoFalso }, codigo: 'c1', alSalir: () => { salidas++ } })
+  manejador = crearManejador({ puerto, adaptadores: { 'github-projects': falso, trello: trelloFalso, 'azure-devops': adoFalso }, codigo: 'c1', alSalir: () => { salidas++ }, tiempoEstudio: 1500 })
 })
 after(() => srv.close())
 
@@ -969,4 +973,73 @@ test('kanban por sesión (S54): filtro hito+backlog sin sesiones lo dice; botón
   assert.equal(ctx.botonPrompt({ clave: 'S54', prompt: null }), '', 'sin prompt no hay botón')
   const usos = html.match(/botonPrompt\(/g) || []
   assert.ok(usos.length >= 4, `botonPrompt se usa en «estás aquí» (×3) y en tarjetaEnCurso; usos: ${usos.length}`)
+})
+
+// ---------- S55: estudio de un plan con un Claude de solo lectura (el falso de fixtures/) ----------
+function postCrudo(ruta, cuerpo) {
+  return new Promise((ok, mal) => {
+    const datos = JSON.stringify(cuerpo)
+    const q = request({ host: '127.0.0.1', port: puerto, path: ruta, method: 'POST', headers: { host: `127.0.0.1:${puerto}`, origin: `http://127.0.0.1:${puerto}`, 'content-type': 'application/json', 'content-length': Buffer.byteLength(datos) } }, (r) => {
+      let t = ''
+      r.on('data', (c) => { t += c })
+      r.on('end', () => ok({ estado: r.statusCode, tipo: r.headers['content-type'], eventos: t.split('\n').filter(Boolean).map((l) => JSON.parse(l)) }))
+    })
+    q.on('error', mal)
+    q.end(datos)
+  })
+}
+const llamadasClaude = () => existsSync(REGISTRO_CLAUDE) ? readFileSync(REGISTRO_CLAUDE, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []
+
+test('estudio (S55): responde en streaming (ndjson) con sesión, texto y fin; sigue la conversación con --resume', async () => {
+  const r = await postCrudo('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, accion: 'tecnico' })
+  assert.equal(r.estado, 200)
+  assert.match(r.tipo, /application\/x-ndjson/)
+  assert.deepEqual(r.eventos.map((e) => e.tipo), ['sesion', 'texto', 'texto', 'herramienta', 'fin'])
+  assert.equal(r.eventos[0].sesionId, 'sesion-falsa-1')
+  const [primera] = llamadasClaude().slice(-1)
+  assert.ok(primera.args.includes('-p') && primera.args.includes('--disallowedTools'))
+  assert.equal(primera.cwd, (await import('node:fs')).realpathSync(dir), 'sin repo: la carpeta del plan')
+  assert.match(primera.entrada, /BACKLOG_PRUEBA\.md[\s\S]*técnic/i)
+  const r2 = await postCrudo('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: '¿Y la S1?', sesionId: 'sesion-falsa-1' })
+  assert.equal(r2.estado, 200)
+  const [segunda] = llamadasClaude().slice(-1)
+  assert.equal(segunda.args[segunda.args.indexOf('--resume') + 1], 'sesion-falsa-1')
+  assert.equal(segunda.entrada, '¿Y la S1?')
+})
+
+test('estudio (S55): plan fuera del proyecto, sin pregunta o sesión inválida → 400; sin Origin → 403; nunca lanza claude', async () => {
+  const antes = llamadasClaude().length
+  const otro = join(dir, 'otro.md'); writeFileSync(otro, '# fuera\n')
+  assert.equal((await post('/api/estudio', { proyecto: 'prueba', plan: otro, pregunta: 'x' })).estado, 400)
+  assert.equal((await post('/api/estudio', { proyecto: 'eap10', plan: BACKLOG, pregunta: 'x' })).estado, 400, 'el plan es de otro proyecto')
+  assert.equal((await post('/api/estudio', { proyecto: 'prueba', plan: BACKLOG })).estado, 400)
+  assert.equal((await post('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'x', sesionId: '--dangerously' })).estado, 400)
+  assert.equal((await post('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'x' }, { origin: '' })).estado, 403)
+  assert.equal(llamadasClaude().length, antes)
+})
+
+test('estudio (S55): un proceso por plan (409 mientras corre) y tiempo máximo con evento de error', async () => {
+  const colgado = postCrudo('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'colgar' })
+  await new Promise((ok) => setTimeout(ok, 300))
+  assert.equal((await post('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'otra' })).estado, 409)
+  const r = await colgado
+  assert.equal(r.estado, 200)
+  assert.equal(r.eventos.at(-1).tipo, 'error')
+  assert.match(r.eventos.at(-1).error, /tiempo/i)
+  assert.equal((await postCrudo('/api/estudio', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'ya libre' })).estado, 200)
+})
+
+test('estudio (S55): guardar añade la respuesta a datos/estudio/<proyecto>/<plan>.md y GET guía la devuelve', async () => {
+  const guia = join(dir, 'datos', 'estudio', 'prueba', 'BACKLOG_PRUEBA.md')
+  assert.deepEqual((await get(`/api/estudio/guia?proyecto=prueba&plan=${encodeURIComponent(BACKLOG)}`)).json, { ok: true, ruta: guia, contenido: null })
+  assert.equal((await post('/api/estudio/guardar', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'Extrae lo técnico', respuesta: 'Node.' })).estado, 200)
+  assert.equal((await post('/api/estudio/guardar', { proyecto: 'prueba', plan: BACKLOG, pregunta: '¿Y S1?', respuesta: 'Base.' })).estado, 200)
+  const t = readFileSync(guia, 'utf8')
+  assert.match(t, /^# Guía de estudio — BACKLOG_PRUEBA\.md/)
+  assert.match(t, /— Extrae lo técnico\n\nNode\.\n[\s\S]*— ¿Y S1\?\n\nBase\.\n$/)
+  assert.equal((await get(`/api/estudio/guia?proyecto=prueba&plan=${encodeURIComponent(BACKLOG)}`)).json.contenido, t)
+  assert.equal((await post('/api/estudio/guardar', { proyecto: 'prueba', plan: join(dir, 'otro.md'), pregunta: 'x', respuesta: 'y' })).estado, 400)
+  assert.equal((await post('/api/estudio/guardar', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'x', respuesta: '' })).estado, 400)
+  assert.equal((await get(`/api/estudio/guia?proyecto=prueba&plan=${encodeURIComponent(join(dir, 'otro.md'))}`)).estado, 400)
+  assert.equal(readFileSync(BACKLOG, 'utf8').includes('Node.'), false, 'nunca toca el plan')
 })

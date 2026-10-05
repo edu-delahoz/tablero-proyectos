@@ -233,6 +233,19 @@ bitácora) trae `estado` `activa | instalada | falta` (con `motivo`) mirando `~/
 proyectos conectados (con sesiones de Claude) la usan. Las etapas van `ok | parcial | falta`. Nunca expone el
 contenido de `settings.json`; las rutas salen con `~`.
 
+**Estudiar un plan (`estudio.mjs`).** `POST /api/estudio` `{ proyecto, plan, pregunta | accion, sesion?, rama?, sesionId? }`
+lanza `claude -p` de **solo lectura** (`Read Grep Glob` y `git log/show/diff`; `Edit Write NotebookEdit` prohibidas;
+sin MCP ni hooks del usuario) con un prompt de tutor que explica el plan sin proponer mejoras. `plan` debe ser la
+`ruta` de un plan o backlog de ese proyecto (si no → 400); `cwd` = `repo` del proyecto (o la carpeta del plan) y
+`--add-dir` si el plan está fuera. `accion`: `tecnico`, `pedidos`, `sesion` (con `sesion: "S3b"`) o `quedo`
+(con `rama?`). Con `sesionId` sigue la conversación (`--resume`). Responde en streaming `application/x-ndjson`:
+`{tipo:'sesion',sesionId}`, `{tipo:'texto',texto}` (trozos), `{tipo:'herramienta',nombre,detalle}`,
+`{tipo:'fin',sesionId,texto,error}` o `{tipo:'error',error}`. Un proceso por plan (otro a la vez → 409) y
+tiempo máximo de 10 min. `POST /api/estudio/guardar` `{ proyecto, plan, pregunta, respuesta }` añade
+`## <fecha> — <pregunta>` y la respuesta a `datos/estudio/<proyecto>/<plan>.md` (nunca a `~/.claude/plans`);
+`GET /api/estudio/guia?proyecto&plan` la devuelve (`contenido: null` si aún no hay). `TABLERO_CLAUDE_BIN`
+cambia el binario (los tests usan `fixtures/claude-falso.mjs`).
+
 **Crear backlog.** `POST /api/backlog/crear` `{ proyecto, archivo?, carpeta? }` crea `archivo`
 (por defecto `BACKLOG.md`) con una plantilla mínima (título, `## Estado`, `## S1` con una casilla) en la
 primera carpeta `docs` del proyecto, o en `carpeta` si es una de ellas. Nunca sobrescribe (existe → 409);

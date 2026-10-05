@@ -27,6 +27,7 @@ import { parsearBitacora, sidsPorProyecto, asociar, conFeatures, editarFila, has
 import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
 import { semaforoLlamadas, semaforoCtx, eficienciaDe } from './eficiencia.mjs'
 import { metodologia } from './metodologia.mjs'
+import { argsEstudio, promptEstudio, preguntaDe, lanzarEstudio, sesionValida, rutaGuia, anadirAGuia } from './estudio.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
@@ -1533,7 +1534,7 @@ export const PUERTO = Number(process.env.TABLERO_PUERTO) || 47321
 const URL_LOCAL = `http://127.0.0.1:${PUERTO}/`
 const INACTIVIDAD_MS = 6 * 3600e3
 // Huella del código del servidor (mtimes): la del arranque viaja en /api/version; si la del disco cambia, se recicla.
-const CODIGO = ['generar.mjs', 'plantilla.html', 'bitacora.mjs', 'coherencia.mjs']
+const CODIGO = ['generar.mjs', 'plantilla.html', 'bitacora.mjs', 'coherencia.mjs', 'estudio.mjs']
 export function huellaCodigo(dir = AQUI) {
   return CODIGO.map((f) => statSync(join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0).join(':')
 }
@@ -1546,8 +1547,9 @@ const proyectosMetodologia = (vista) => proyectos.map((p) => {
 })
 const local = (dir) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(dir)
 // Manejador HTTP (exportado para los tests: puerto y adaptadores inyectables).
-export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alUsar = () => {}, codigo = CODIGO_ARRANQUE, alSalir = () => {} } = {}) {
+export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alUsar = () => {}, codigo = CODIGO_ARRANQUE, alSalir = () => {}, tiempoEstudio = 10 * 60e3 } = {}) {
   let cache = null
+  const estudios = new Map() // `${proyecto}\n${plan}` → proceso de claude en curso (uno por plan)
   const fresco = async (forzar) => { if (forzar || !cache || Date.now() - cache.t > 15000) cache = { t: Date.now(), ...(await construir(true, { adaptadores })) }; return cache }
   const permitidas = async () => new Set((await fresco()).datos.proyectos.flatMap((p) => [...p.backlogs.map((b) => b.ruta), ...p.planes.map((x) => x.ruta), p.notas?.ruta, p.bitacora?.ruta]).filter(Boolean))
   const enviar = (res, codigo, cuerpo, tipo = 'application/json; charset=utf-8') => {
@@ -1580,6 +1582,12 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
     })
     if (errores.length) throw Object.assign(new ErrorConfig(errores.join(' ')), { errores })
     return limpia
+  }
+  // Estudio (S55): el plan tiene que ser un plan o backlog que el tablero ya muestra de ese proyecto.
+  const planDe = async (proyecto, plan) => {
+    const v = (await fresco()).datos.proyectos.find((x) => x.id === proyecto)
+    if (!v || typeof plan !== 'string' || ![...v.backlogs, ...v.planes].some((x) => x.ruta === plan)) return null
+    return proyectos.find((x) => x.id === proyecto) || null
   }
   const escribirConfig = (p, cambio) => {
     escribirAtomico(CONFIG, aplicarCambio(readFileSync(CONFIG, 'utf8'), p.id, cambio))
@@ -1619,6 +1627,14 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         })
         return enviar(res, 200, { principal, rama, commits })
       }
+      // Guía de estudio guardada de un plan (contenido null si aún no hay).
+      if (req.method === 'GET' && ruta === '/api/estudio/guia') {
+        const q = new URL(req.url, `http://${host}`).searchParams
+        const p = await planDe(q.get('proyecto'), q.get('plan'))
+        if (!p) return enviar(res, 400, { error: 'Ese plan no es de ese proyecto (o el proyecto no existe).' })
+        const guia = rutaGuia(DATOS, p.id, q.get('plan'))
+        return enviar(res, 200, { ok: true, ruta: guia, contenido: existsSync(guia) ? readFileSync(guia, 'utf8') : null })
+      }
       if (req.method !== 'POST') return enviar(res, 404, { error: 'no existe' })
       if (req.headers.origin !== `http://${host}` || !String(req.headers['content-type']).startsWith('application/json')) return enviar(res, 403, { error: 'origen no permitido' })
       if (ruta === '/api/salir') {
@@ -1641,6 +1657,44 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
         leerNotas(p) // crea el archivo con la plantilla si no existe
         writeFileSync(p.notas, anadirNota(readFileSync(p.notas, 'utf8'), texto.slice(0, 4000)))
         return enviar(res, 200, { ok: true, datos: (await fresco(true)).datos })
+      }
+      // Estudio: claude -p de solo lectura sobre el plan; reenvía sus eventos como ndjson (sesion, texto, herramienta, fin|error).
+      if (ruta === '/api/estudio') {
+        if (!local(req.socket.remoteAddress)) return enviar(res, 403, { error: 'solo desde esta máquina' })
+        const p = await planDe(b.proyecto, b.plan)
+        if (!p) return enviar(res, 400, { error: 'Ese plan no es de ese proyecto (o el proyecto no existe).' })
+        if (b.sesionId != null && !sesionValida(b.sesionId)) return enviar(res, 400, { error: 'La sesión de Claude no es válida.' })
+        const pregunta = preguntaDe(b)
+        if (!pregunta) return enviar(res, 400, { error: 'Falta la pregunta o la acción no existe (la sesión X necesita su clave, p. ej. S3b).' })
+        const clave = `${p.id}\n${b.plan}`
+        if (estudios.has(clave)) return enviar(res, 409, { error: 'Claude ya está respondiendo sobre este plan: espera a que termine.' })
+        const cwd = p.repo && existsSync(p.repo) ? p.repo : dirname(b.plan)
+        const sesionId = b.sesionId || undefined
+        let fin = false
+        const escribir = (e) => { if (e.tipo === 'fin') fin = true; if (!res.destroyed) res.write(JSON.stringify(e) + '\n') }
+        res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
+        const proc = lanzarEstudio({ bin: process.env.TABLERO_CLAUDE_BIN || 'claude', args: argsEstudio({ plan: b.plan, cwd, sesionId }), entrada: promptEstudio({ plan: b.plan, pregunta, sesionId }), cwd, ms: tiempoEstudio, alEvento: escribir })
+        estudios.set(clave, proc)
+        res.on('close', proc.detener) // si la vista se cierra, se corta el proceso
+        const r = await proc.hecho
+        estudios.delete(clave)
+        if (r.porTiempo) escribir({ tipo: 'error', error: `Se acabó el tiempo (${Math.round(tiempoEstudio / 1000)} s): Claude se cortó.` })
+        else if (!fin) { escribir({ tipo: 'error', error: r.error || `Claude terminó sin respuesta (código ${r.codigo}).` }); registrar(`estudio ${p.id}: ${r.error || r.codigo}`) }
+        return res.end()
+      }
+      // Guía de estudio: añade la pregunta y la respuesta al final de datos/estudio/<proyecto>/<plan>.md (nunca toca el plan).
+      if (ruta === '/api/estudio/guardar') {
+        const p = await planDe(b.proyecto, b.plan)
+        if (!p) return enviar(res, 400, { error: 'Ese plan no es de ese proyecto (o el proyecto no existe).' })
+        const pregunta = typeof b.pregunta === 'string' ? b.pregunta.trim().slice(0, 300) : ''
+        const respuesta = typeof b.respuesta === 'string' ? b.respuesta.trim() : ''
+        if (!pregunta || !respuesta || respuesta.length > 200000) return enviar(res, 400, { error: 'Faltan la pregunta o la respuesta.' })
+        const guia = rutaGuia(DATOS, p.id, b.plan)
+        mkdirSync(dirname(guia), { recursive: true })
+        const d = new Date(), fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const contenido = anadirAGuia(existsSync(guia) ? readFileSync(guia, 'utf8') : null, { plan: b.plan, pregunta, respuesta, fecha })
+        writeFileSync(guia, contenido)
+        return enviar(res, 200, { ok: true, ruta: guia, contenido })
       }
       // Bitácora: solo Calidad/Seguridad/Notas de la fila de esa sesión; 409 si el archivo cambió desde que se cargó.
       if (ruta === '/api/bitacora') {
