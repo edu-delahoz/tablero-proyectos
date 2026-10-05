@@ -24,6 +24,7 @@ import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
 import { parsearBitacora, sidsPorProyecto, asociar, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
 import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
+import { semaforoLlamadas, semaforoCtx, eficienciaDe } from './eficiencia.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
@@ -1063,7 +1064,25 @@ function leerBitacoras() {
   if (!rutas.length) return new Map()
   const jsonl = new Map()
   const mapa = sidsPorProyecto(proyectos, TRANSCRIPCIONES, jsonl)
-  return new Map(rutas.map((ruta) => [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa, jsonl) }]))
+  const metricas = leerMetricasSesion()
+  return new Map(rutas.map((ruta) => {
+    const bit = asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa, jsonl)
+    // Columnas «llamadas/prompt» y «ctx final» (solo filas con <sid>.metricas.json) y panel de eficiencia.
+    const porSid = new Map(metricas.map((m) => [String(m.sid).slice(0, 8), m]))
+    for (const f of bit.registro) {
+      const m = f.sid && porSid.get(f.sid)
+      if (!m || !m.prompts) continue
+      const llamadasPorPrompt = Math.round((m.llamadas / m.prompts) * 10) / 10
+      Object.assign(f, { llamadasPorPrompt, semaforoLlamadas: semaforoLlamadas(llamadasPorPrompt), ctxFinalK: Math.round(m.ctxFinal / 1000), semaforoCtx: semaforoCtx(m.ctxFinal), grandes: m.resultadosGrandes?.length || 0 })
+    }
+    return [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...bit, eficiencia: eficienciaDe(metricas, bit.registro) }]
+  }))
+}
+
+// <sid>.metricas.json que escribe registrar_sesion.sh en session-metrics (llamadas, ctxFinal, % de 5 h/7 d…).
+function leerMetricasSesion(dir = join(homedir(), '.claude', 'session-metrics')) {
+  if (!existsSync(dir)) return []
+  return readdirSync(dir).filter((f) => f.endsWith('.metricas.json')).flatMap((f) => { try { return [JSON.parse(readFileSync(join(dir, f), 'utf8'))] } catch { return [] } })
 }
 
 // Guía «Configurar este proyecto»: un paso por pieza, con lo que ya hay a mano (sin red: GitHub sale de p.git, que ya leyó gh).

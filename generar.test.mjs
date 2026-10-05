@@ -724,3 +724,59 @@ test('proyectoNuevo: sin docs y con repo → docs = [repo]; sin id y con repo �
   assert.deepEqual(proyectoNuevo({ id: 'g', nombre: 'G', repo: join(dev, 'Gamma'), docs: [join(dev, 'alfa')] }, []).docs, [join(dev, 'alfa')])
   assert.equal(proyectoNuevo({ nombre: 'G', repo: join(dev, 'Gamma') }, [{ id: 'gamma' }]).id, 'gamma-2')
 })
+
+// ---- E5: vistas de eficiencia (umbrales, calibración por ventana, costo por tipo) ----
+const { semaforoLlamadas, semaforoCtx, calibrar, quedan, costoPorTipo, eficienciaDe } = await import('./eficiencia.mjs')
+
+test('E5: umbrales de llamadas por prompt y de contexto final', () => {
+  assert.deepEqual([14, 15, 30, 31].map(semaforoLlamadas), ['verde', 'ambar', 'ambar', 'rojo'])
+  assert.deepEqual([99999, 100000, 130000, 130001].map(semaforoCtx), ['verde', 'ambar', 'ambar', 'rojo'])
+  assert.equal(semaforoLlamadas(null), null)
+})
+
+const lim = (p5, p7, r5 = 1000, r7 = 9000) => ({ five_hour: { used_percentage: p5, resets_at: r5 }, seven_day: { used_percentage: p7, resets_at: r7 } })
+const mets = [
+  { sid: 'aaaaaaaa-1', limites: { inicio: lim(0, 40, 500, 9000), fin: lim(10, 41, 500, 9000) } },
+  { sid: 'bbbbbbbb-2', limites: { inicio: null, fin: lim(5, 45, 1000, 9000) } },
+  { sid: 'cccccccc-3', limites: { inicio: lim(5, 45, 1000, 9000), fin: lim(10, 50, 1000, 9000) } },
+]
+const filas = [
+  { sid: 'aaaaaaaa', tarea: 'BACKLOG/S1', costo: 30, minutos: 5 }, { sid: 'bbbbbbbb', tarea: 'BACKLOG/S2', costo: 8, minutos: 4 },
+  { sid: 'cccccccc', tarea: 'BACKLOG/S2', costo: 12, minutos: 6 }, { sid: 'dddddddd', tarea: 'BACKLOG/S3b', costo: 4, minutos: 3 }, { sid: 'eeeeeeee', tarea: 'libre', costo: 1, minutos: 1 },
+]
+
+test('E5: calibración por ventana — $ por 1 %, ventana vigente y su fecha', () => {
+  const c = calibrar(mets, filas)
+  // 5 h: la ventana vigente es la de resets_at 1000: $20 (b + c) con 10 % → $2 por 1 %.
+  assert.equal(c.cinco.porPct, 2)
+  assert.equal(c.cinco.pct, 10)
+  assert.equal(c.cinco.resetsAt, 1000)
+  assert.equal(c.cinco.fecha, new Date(1000e3).toISOString())
+  // 7 d: una sola ventana, $50 con 50 % → $1 por 1 %.
+  assert.equal(c.siete.porPct, 1)
+  assert.equal(calibrar([], filas).cinco, null)
+})
+
+test('E5: «quedan ~N sesiones tipo X» = (100 − %) × $/1 % ÷ mediana', () => {
+  assert.equal(quedan({ pct: 10, porPct: 2 }, 6), 30)
+  assert.equal(quedan({ pct: 10, porPct: 2 }, 0), null)
+  assert.equal(quedan(null, 6), null)
+})
+
+test('E5: costo por tipo — suma filas de la misma tarea, mediana, p90 y % de ventana 5 h', () => {
+  const t = costoPorTipo(filas, { porPct5h: 2 })
+  const sn = t.find((x) => x.tipo === 'Sn')
+  assert.equal(sn.n, 2)               // S1 ($30) y S2 ($8 + $12 = $20)
+  assert.equal(sn.mediana, 25)
+  assert.equal(sn.pct5h, 12.5)
+  assert.equal(t.find((x) => x.tipo === 'Snb').n, 1)
+  assert.equal(t.find((x) => x.tipo === 'otro').n, 1)
+})
+
+test('E5: plantilla.html muestra las advertencias y la calibración del panel de límites', () => {
+  const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
+  for (const txt of ['El % incluye uso fuera de Claude Code', '$ por 1 % se recalcula en cada ventana', 'Última ventana usada', 'sesiones tipo', 'Costo por tipo de tarea']) assert.ok(html.includes(txt), txt)
+  const e = eficienciaDe(mets, filas)
+  assert.equal(e.limites.cinco.porPct, 2)
+  assert.ok(e.quedan.some((q) => q.tipo === 'Sn' && q.cinco != null))
+})

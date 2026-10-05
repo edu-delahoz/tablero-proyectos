@@ -361,6 +361,11 @@ a.chip-ext:hover { border-color: var(--azul); }
 .bit-tabla th, .bit-tabla td { text-align: left; vertical-align: top; padding: 5px 8px; border-top: 1px solid var(--borde); }
 .bit-tabla th { color: var(--suave); font-weight: 600; white-space: nowrap; }
 .bit-tabla td.n { white-space: nowrap; }
+.sem { font-family: var(--mono); white-space: nowrap; }
+.sem.verde { color: var(--ok); } .sem.ambar { color: var(--aviso); } .sem.rojo { color: var(--peligro); font-weight: 700; }
+.limites { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); margin: 6px 0; }
+.limites > div { border: 1px solid var(--borde); padding: 8px 12px; min-width: 0; }
+.limites b { font-family: var(--mono); font-size: 1.15em; }
 .bit-tabla tr.pend { background: color-mix(in srgb, var(--aviso) 9%, transparent); }
 .bit-tabla select, .bit-tabla input { font: inherit; font-family: var(--mono); background: var(--fondo); color: var(--texto); border: 1px solid var(--borde); padding: 2px 4px; max-width: 100%; }
 .bit-tabla input { min-width: 12ch; width: 100%; }
@@ -1363,6 +1368,24 @@ function accionFi(a, boton) {
 // ---------- Bitácora ----------
 const bitPendientes = () => (P?.bitacora?.registro || []).filter((f) => f.pendiente && f.sid && f.proyecto === P.id).length;
 const nf = new Intl.NumberFormat('es', { maximumFractionDigits: 2 });
+const celdaSem = (v, sem, u, nota = '') => `<td class="n">${v == null ? '<span class="suave">—</span>' : `<span class="sem ${sem}" title="${esc(nota)}">${nf.format(v)}${u}${sem === 'rojo' ? ' ●' : sem === 'ambar' ? ' ▲' : ' ✓'}</span>`}</td>`;
+// Panel de límites (PLAN_EFICIENCIA 2c): % usado, reinicio, calibración vigente y «quedan ~N sesiones tipo X».
+function panelEficiencia(e) {
+  if (!e) return '';
+  const { cinco, siete } = e.limites;
+  const tarjeta = (t, v, clave) => !v ? `<div><div class="rotulo">${t}</div><p class="suave">Sin datos aún.</p></div>` : `<div><div class="rotulo">${t}</div>
+    <p><b>${nf.format(v.pct)} %</b> usado · reinicia ${esc(new Date(v.resetsAt * 1000).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' }))}</p>
+    <p>${v.porPct ? `<b>$${nf.format(v.porPct)}</b> por 1 %` : 'Calibración: aún sin consumo en esta ventana'} <span class="suave">(${v.sesiones} sesiones, $${nf.format(v.costo)})</span></p>
+    ${e.quedan.filter((q) => q[clave] != null).map((q) => `<p class="suave">Quedan ~${q[clave]} sesiones tipo ${esc(q.tipo)} (mediana $${nf.format(q.mediana)})</p>`).join('')}</div>`;
+  const fecha = (cinco || siete) ? new Date(((cinco || siete).resetsAt) * 1000).toLocaleDateString('es', { dateStyle: 'medium' }) : '—';
+  return `<section class="tarjeta" style="margin-bottom:18px"><h2><span>Límites restantes</span><small>Última ventana usada: ${esc(fecha)}</small></h2>
+    <div class="limites">${tarjeta('Ventana de 5 h', cinco, 'cinco')}${tarjeta('Ventana de 7 d', siete, 'siete')}</div>
+    <p class="suave">El % incluye uso fuera de Claude Code (claude.ai). $ por 1 % se recalcula en cada ventana (5 h y 7 d), con la fecha de la última ventana usada arriba; las sesiones que cruzan ventanas cuentan en la del cierre.</p></section>`;
+}
+function tablaPorTipo(e) {
+  if (!e?.porTipo?.length) return '';
+  return `<section class="tarjeta" style="margin-bottom:18px"><h2><span>Costo por tipo de tarea</span><small>filas de una misma tarea sumadas</small></h2><div class="bit-tabla" role="region" aria-label="Costo por tipo de tarea" tabindex="0"><table><thead><tr><th>Tipo</th><th>Tareas</th><th>Mediana $</th><th>p90 $</th><th>Minutos</th><th>% ventana 5 h</th></tr></thead><tbody>${e.porTipo.map((t) => `<tr><td>${esc(t.tipo)}</td><td class="n">${t.n}</td><td class="n">$${nf.format(t.mediana)}</td><td class="n">$${nf.format(t.p90)}</td><td class="n">${t.minutos}</td><td class="n">${t.pct5h == null ? '—' : `${nf.format(t.pct5h)} %`}</td></tr>`).join('')}</tbody></table></div></section>`;
+}
 function vistaBitacora() {
   const b = P.bitacora;
   const propias = b.registro.filter((f) => f.proyecto === P.id);
@@ -1383,15 +1406,15 @@ function vistaBitacora() {
   const fila = (f) => {
     const edit = f.pendiente && f.sid && f.proyecto === P.id && editable();
     const ctx = f.contexto ? `${f.contexto.ini != null ? f.contexto.ini + 'k→' : ''}${f.contexto.fin != null ? f.contexto.fin + 'k' : ''} ${f.contexto.semaforo || ''}` : f.contextoTxt;
-    return `<tr${f.pendiente ? ' class="pend"' : ''} data-sid="${esc(f.sid || '')}"><td class="n">${esc(f.fecha)}</td><td>${esc(f.tarea)}${f.proyecto && f.proyecto !== P.id ? ` <span class="suave">(${esc(f.proyecto)})</span>` : ''}</td><td class="n">${esc(f.modelo)}${f.modeloDistinto ? ` <span class="chip ch-aviso" title="El plan pedía ${esc(f.modeloPlan)}">≠ plan</span>` : ''}</td><td class="n">${esc(f.duracion)}</td><td class="n">${esc(f.costoTxt)}</td><td class="n">${esc(ctx)}</td>
+    return `<tr${f.pendiente ? ' class="pend"' : ''} data-sid="${esc(f.sid || '')}"><td class="n">${esc(f.fecha)}</td><td>${esc(f.tarea)}${f.proyecto && f.proyecto !== P.id ? ` <span class="suave">(${esc(f.proyecto)})</span>` : ''}</td><td class="n">${esc(f.modelo)}${f.modeloDistinto ? ` <span class="chip ch-aviso" title="El plan pedía ${esc(f.modeloPlan)}">≠ plan</span>` : ''}</td><td class="n">${esc(f.duracion)}</td><td class="n">${esc(f.costoTxt)}</td><td class="n">${esc(ctx)}</td>${celdaSem(f.llamadasPorPrompt, f.semaforoLlamadas, '')}${celdaSem(f.ctxFinalK, f.semaforoCtx, 'k', f.grandes ? `${f.grandes} resultado(s) de herramienta >5k` : '')}
       ${edit ? celdaEdit(f) : `<td>${f.pendiente ? '<span class="etq DRAFT">pendiente</span>' : esc(f.calidad)}</td><td>${f.pendiente ? '' : esc(f.seguridad)}</td><td>${f.pendiente && f.sid && !f.proyecto ? '<span class="suave">sin proyecto</span> ' : ''}${esc(f.pendiente && f.notas === PENDIENTE_TXT ? '' : f.notas)}${f.pendiente && !f.sid ? ' <span class="suave">sin sid: no editable</span>' : ''}</td>`}</tr>`;
   };
-  return `${bloqueGastos(base)}<section class="tarjeta"><h2><span>${esc(b.ruta.split('/').pop())}</span><small>${hace(b.modificado)}</small></h2>
+  return `${panelEficiencia(b.eficiencia)}${bloqueGastos(base)}${tablaPorTipo(b.eficiencia)}<section class="tarjeta"><h2><span>${esc(b.ruta.split('/').pop())}</span><small>${hace(b.modificado)}</small></h2>
     <div class="bit-totales"><span><b>${base.length}</b> sesiones</span><span><b>$${nf.format(costo)}</b> costo</span><span><b>${horas}</b> duración</span><span><b>${conCtx.length ? Math.round(100 * rojas / conCtx.length) : 0}%</b> con contexto 🔴</span></div>
     <div class="bit-filtros"><label><input type="checkbox" data-bit-filtro="todas"${bitFiltro.todas ? ' checked' : ''}> Todas las sesiones (no solo este proyecto)</label><label><input type="checkbox" data-bit-filtro="pendientes"${bitFiltro.pendientes ? ' checked' : ''}> Solo pendientes</label><span>${acciones(b.ruta)}</span></div>
     ${!editable() && bitPendientes() ? '<p class="suave">Para completar filas aquí abre el tablero con Tablero.app (o <code>node generar.mjs --abrir</code>).</p>' : ''}
-    <div class="bit-tabla" role="region" aria-label="Registro de sesiones" tabindex="0"><table><thead><tr><th>Fecha</th><th>Tarea</th><th>Modelo</th><th>Duración</th><th>Costo</th><th>Contexto</th><th>Calidad</th><th>Seguridad</th><th>Notas</th></tr></thead>
-    <tbody>${filas.length ? filas.map(fila).join('') : '<tr><td colspan="9" class="suave">Sin filas con este filtro.</td></tr>'}</tbody></table></div></section>
+    <div class="bit-tabla" role="region" aria-label="Registro de sesiones" tabindex="0"><table><thead><tr><th>Fecha</th><th>Tarea</th><th>Modelo</th><th>Duración</th><th>Costo</th><th>Contexto</th><th title="Llamadas por prompt: verde &lt;15, ámbar 15–30, rojo &gt;30">Llam./prompt</th><th title="Contexto al cierre: verde &lt;100k, ámbar 100–130k, rojo &gt;130k">Ctx final</th><th>Calidad</th><th>Seguridad</th><th>Notas</th></tr></thead>
+    <tbody>${filas.length ? filas.map(fila).join('') : '<tr><td colspan="11" class="suave">Sin filas con este filtro.</td></tr>'}</tbody></table></div></section>
     ${b.semanal?.filas?.length ? `<section class="tarjeta" style="margin-top:18px"><h2><span>Resumen semanal</span></h2><div class="bit-tabla" role="region" aria-label="Resumen semanal" tabindex="0"><table><thead><tr>${b.semanal.columnas.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${b.semanal.filas.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>` : ''}
     ${b.lecciones?.length ? `<section class="tarjeta" style="margin-top:18px"><h2><span>Lecciones aprendidas</span><small>${b.lecciones.length}</small></h2>${b.lecciones.map((l) => `<div class="fila"><span>${inline(l.texto)}</span><span class="suave">${esc(l.fecha)}</span></div>`).join('')}</section>` : ''}`;
 }
