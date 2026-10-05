@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `kanban-sesiones` (sin PR) · diagnóstico de «Bash sobre BACKLOG», solo análisis (sin código ni tests). Plan: `~/.claude/plans/quiero-que-me-respondas-vectorized-owl.md`. Definida **H21 / S60** (Sonnet). Siguiente: **S60** (independiente de S54–S59).
+- Para retomar (2026-10-05): Se revisó por qué la auditoría sigue marcando muchas lecturas del backlog con Bash. Ya bajaron un 80 % respecto a ayer; lo que queda es en parte ruido de la propia métrica y en parte que el prompt de arranque todavía pide grep para el Estado y que el extractor no sabe leer el Estado, un índice ni varias secciones. Queda escrita una sesión corta que completa el extractor, limpia la métrica, arregla el «NaNk» de la tarjeta y cambia los prompts. Nada roto.
 - 2026-10-05 · rama `kanban-sesiones` (sin PR) · S53 hecha, suite en verde (335 pasan, 2 omitidos; los 5 nuevos fallaban 5 de 337). `generar.mjs`: `kanbanSesiones(b, p, sesionesClaude)` sobre `sesiones()` (hito `## H<n>` → `H<n>` del `#` → `b.padre.clave`; estado por-hacer/en-curso/en-prueba/hecho; `pr {numero,url,estado,ci}`), `resumenCi(statusCheckRollup)`, `principalDe(repo)`, `GET /api/sesion-detalle?proyecto&rama` (400 rama inválida, 404 sin repo). `p.kanban` y `/api/sesiones` (`{archivo,linea,clave,texto,estado}`) por sesión. Fixture `fixtures/kanban-mini/BACKLOG_H7.md`. Test transversal de rutas en `servidor.test.mjs` (regex sobre `crearManejador`; el helper `post` ahora omite Origin si se pasa `origin: ''`). Trampa para S54: `columnasKanban` queda exportada solo para su test; la vista (`tarjetasKanban`, «Mover a», arrastre) aún asume casillas: quitar arrastre y `KMARCA` por tarjeta, y decidir si se borra `columnasKanban`. Siguiente: **S54** (Sonnet).
 - Para retomar (2026-10-05): El servidor ya entrega una tarjeta por sesión con su hito correcto (el mini backlog H7 del IEP ya sale), su línea en llano, su prompt, su estado y la CI de su PR, y se pueden pedir los commits de su rama. La vista todavía dibuja las tarjetas a la antigua: lo siguiente es rehacerla (S54).
 - 2026-10-05 · rama `kanban-sesiones` (sale de `formato-backlog`, sin PR) · plan de H18–H20 hecho, solo análisis (sin código ni tests). Plan: `~/.claude/plans/quiero-que-planes-estos-luminous-parasol.md`; secciones S53–S59 con casillas abajo. Causa del kanban vacío con «H7 + BACKLOG_H7.md»: `columnasKanban` (`generar.mjs:1349`) toma el hito de la clave del `##`, y en el mini backlog las sesiones son `## S0…S7` → `hito: 'S2c'`. Siguiente: **S53** (Opus).
@@ -107,6 +109,26 @@
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H21 — Lectura exacta del backlog
+Historia: Como Eduardo, quiero que las sesiones lean el Estado y su sección del backlog de un tirón y que la auditoría no cuente eso como mal hábito, para gastar menos contexto sin perder calidad.
+Origen: tarjeta «Malos hábitos del día» (2026-10-05: «Bash sobre BACKLOG» 122 llamadas / 120k, frente a 586 / 613k el 04-10). Plan: `~/.claude/plans/quiero-que-me-respondas-vectorized-owl.md`. Plugins/MCP: ninguno.
+Diagnóstico: (1) la métrica cuenta comandos enteros que mencionan «BACKLOG» (incluye `backlog.mjs seccion` encadenado, `sed -i`, `ls FORMATO_BACKLOG.md`): ~25k de ruido; (2) el prompt de `/relevo` pide «Estado con `grep -n`»; (3) IEP lee `BACKLOG_H7.md`/`BACKLOG_MVP.md` por rangos `sed -n` (~30k); (4) sesiones de plan arman índice con `grep -nE "^#"` y varios `sed -n` (~35k). Decisión: **no** hay hook que bloquee sed/grep sobre BACKLOG (dejaría ciega a una sesión que lo necesite).
+
+### S60 — Extractor completo y métrica limpia · **Sonnet** · rama `lectura-backlog` (sale de `kanban-sesiones`) · ~45k
+Se espera: Al arrancar, una sesión lee Estado + su sección con un solo `backlog arranque SX <ruta>`, y la tarjeta de auditoría ya no cuenta ese comando como mal hábito (y muestra un número en «Tool results >5k», no `NaNk`). Se comprueba con `node generar.mjs --auditoria 2026-10-05` antes y después.
+Resultado:
+- [ ] [test] Pruebas del extractor y del contador; verlas fallar y anotar cuántas — `backlog.test.mjs`: `estado`, `arranque`, `indice`, `seccion` con varias claves; `auditoria.test.mjs`: `node backlog.mjs …` encadenado con grep no cuenta, `sed -i` no cuenta, `ls FORMATO_BACKLOG.md` no cuenta, `sed -n 1,9p BACKLOG_H7.md` sí cuenta, `backlogCli` suma
+- [ ] [código] El backlog se lee de un tirón al arrancar — `backlog.mjs`: `estado [archivo]` (bloque «## Estado»/«Hito actual» con nº de línea), `arranque <clave> [archivo]` (Estado + sección), `indice [archivo]` (línea · nivel · título · abiertas/total), `seccion <c1> [c2…] [archivo]` (archivo = el que termina en `.md`); comando global `backlog` (symlink en `~/.claude/bin` o como `tablero`)
+- [ ] [código] La métrica deja de contar el hábito bueno — `auditoria.mjs:42`: contar solo si un segmento (`;`, `&&`, `|`) es `sed -n`/`grep`/`awk` sobre un `BACKLOG*.md`; excluir `backlog.mjs`/`backlog` y `sed -i`; contador nuevo `backlogCli` (n, tokens) y su fila en la tarjeta de `plantilla.html`
+- [ ] [arreglo] La fila «Tool results >5k» muestra un número — `plantilla.html:1575` da `NaNk`: ver si `dia.grandes[i]` trae `volumen` o `tokens` (posible forma vieja en caché de `/api/datos`) y usar el campo correcto con `?? 0`
+- [ ] [docs] Los prompts de arranque usan el extractor en vez de grep — `~/.claude/skills/relevo/SKILL.md:18,34`, `~/.claude/metodologia/FORMATO_BACKLOG.md` (Prompt), prompt de arranque de este backlog y los prompts de las sesiones abiertas de IEP (`BACKLOG_H7.md`, `BACKLOG_MVP.md`)
+- [ ] [verificación] Cifras antes/después — `node generar.mjs --auditoria 2026-10-05` (esperado: «Bash sobre BACKLOG» baja de 122 a ≲ 85 solo por la métrica; `backlogCli` ≈ 19); anotarlas en «Resultado:». Re-medir tras 2–3 días en S59 (objetivo ≤ 40 llamadas / ≤ 40k)
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S60 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S60 BACKLOG.md`) y trabaja solo esa sesión, en la rama `lectura-backlog` (sale de `kanban-sesiones`). Tests primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
 
 ## H18 — Kanban por sesión y prompt a la vista
 Historia: Como Eduardo, quiero que cada tarjeta del tablero sea una sesión explicada en una línea en llano y que al tocarla vea su prompt y su detalle, para entender qué se hace y encontrar el prompt actual sin buscar.
