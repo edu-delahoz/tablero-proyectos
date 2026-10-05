@@ -204,7 +204,7 @@ Origen: 2026-10-05, en la ventana de `metodologia-claude` se pegó el prompt de 
 ### S61b — Re-medir la lectura del backlog · **Sonnet** · rama `develop` (sin código) · ~15k
 Se espera: Hay cifras reales de «Bash sobre BACKLOG» tras usar `arranque` unos días, anotadas frente al objetivo (≤ 40 llamadas / ≤ 40k). Se comprueba con `node generar.mjs --auditoria <fecha>` y el «Resultado:» de esta sección.
 - [ ] [verificación] Re-medir la lectura — desde 2026-10-07: `node generar.mjs --auditoria <fecha>`; anotar llamadas y tokens de «Bash sobre BACKLOG» en «Resultado:» y si se cumple el objetivo
-- [ ] [docs] Si no se cumple, abrir una casilla en el backlog con la causa (qué sesiones siguen leyendo con grep/sed) — sin cambiar código en esta sesión
+- [ ] [docs] Si no se cumple, queda una casilla con la causa — abrirla en el backlog indicando qué sesiones siguen leyendo con grep/sed, sin cambiar código
 
 Prompt:
 ```text
