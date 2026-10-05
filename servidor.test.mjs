@@ -949,7 +949,7 @@ test('kanban por sesión (S54): tarjeta en llano con chip clave·modelo·x/y y p
 })
 test('kanban por sesión (S54): el panel pone el prompt con «Copiar» arriba, luego Se espera/Resultado, casillas, rama/PR/CI y commits', async () => {
   const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
-  const ctx = ctxKanban(html, { funciones: ['botonPrompt', 'panelSesion'], haceSeg: () => 'hace 1 min' })
+  const ctx = ctxKanban(html, { funciones: ['botonPrompt', 'botonEstudiar', 'panelSesion'], haceSeg: () => 'hace 1 min' })
   const det = { principal: 'main', commits: [{ oid: 'abc1234def', fecha: '2026-10-05T10:00:00Z', titulo: 'S1: alta', archivos: ['alta.mjs', 'alta.test.mjs'] }] }
   const out = ctx.panelSesion(sesionKanban, det)
   const pos = (re) => { const i = out.search(re); assert.ok(i >= 0, `falta ${re}`); return i }
@@ -1042,4 +1042,42 @@ test('estudio (S55): guardar añade la respuesta a datos/estudio/<proyecto>/<pla
   assert.equal((await post('/api/estudio/guardar', { proyecto: 'prueba', plan: BACKLOG, pregunta: 'x', respuesta: '' })).estado, 400)
   assert.equal((await get(`/api/estudio/guia?proyecto=prueba&plan=${encodeURIComponent(join(dir, 'otro.md'))}`)).estado, 400)
   assert.equal(readFileSync(BACKLOG, 'utf8').includes('Node.'), false, 'nunca toca el plan')
+})
+
+// ---------- S56: vista del estudio — botón «Estudiar», chat con acciones rápidas, guardar y pestaña «Guía» ----------
+const ctxEstudio = (html, extra = {}) => {
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+  const ctx = { esc, md: (t) => `<div class="md">${esc(t)}</div>`, ...extra }
+  vm.createContext(ctx)
+  vm.runInContext(html.match(/^const ACCIONES_ESTUDIO = .*$/m)[0], ctx)
+  for (const f of ['botonEstudiar', 'panelEstudio', ...(extra.funciones || [])]) vm.runInContext(funcionDe(html, f), ctx)
+  return ctx
+}
+test('estudio (S56): botón «Estudiar» en Planes, en el backlog y en el detalle de una tarjeta del kanban', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  const ctx = ctxEstudio(html)
+  const b = ctx.botonEstudiar('/x/plan.md', { sesion: 'S3b', rama: 'h7-s3b' })
+  assert.match(b, /data-estudiar="\/x\/plan\.md"/)
+  assert.match(b, /data-estudiar-sesion="S3b"/)
+  assert.match(b, /data-estudiar-rama="h7-s3b"/)
+  assert.match(b, />[^<]*Estudiar[^<]*</)
+  assert.ok(!/data-estudiar-sesion/.test(ctx.botonEstudiar('/x/plan.md')), 'sin sesión no manda sesión')
+  assert.ok((html.match(/botonEstudiar\(/g) || []).length >= 4, 'se usa en planes(), backlogs() y panelSesion() (más su definición)')
+})
+test('estudio (S56): el panel trae las acciones rápidas del servidor, pregunta libre, «Guardar en la guía» y la pestaña «Guía»', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  const ctx = ctxEstudio(html)
+  const ac = { tecnico: 'Extrae lo técnico', pedidos: '¿Qué le pide a Claude cada paso?', sesion: 'Explícame la sesión X', quedo: 'Muéstrame cómo quedó' }
+  for (const [k, e] of Object.entries(ac)) assert.ok(html.includes(e), `etiqueta «${e}» (${k})`)
+  const est = { plan: '/x/plan.md', sesion: 'S3b', mensajes: [{ rol: 'yo', texto: 'Extrae lo técnico' }, { rol: 'claude', texto: 'Usa **Node**', fin: true }], cargando: false, pestana: 'chat', guia: null }
+  const out = ctx.panelEstudio(est)
+  assert.match(out, /data-estudio-accion="tecnico"/)
+  assert.match(out, /data-estudio-accion="sesion"/)
+  assert.match(out, /<textarea[^>]*data-estudio-pregunta/)
+  assert.match(out, /data-estudio-guardar="1"[^>]*>[^<]*Guardar en la guía/, 'guarda la respuesta terminada')
+  assert.match(out, /data-estudio-pestana="guia"[^>]*>[^<]*Guía/)
+  assert.ok(!/data-estudio-guardar/.test(ctx.panelEstudio({ ...est, mensajes: [{ rol: 'yo', texto: 'x' }, { rol: 'claude', texto: 'a medias', fin: false }] })), 'sin «Guardar» mientras llega')
+  const g = ctx.panelEstudio({ ...est, pestana: 'guia', guia: '# Guía de estudio\n\nNode.' })
+  assert.ok(g.includes('Guía de estudio'), 'muestra el .md guardado')
+  assert.match(ctx.panelEstudio({ ...est, pestana: 'guia', guia: null }), /Aún no guardaste nada/)
 })

@@ -446,6 +446,10 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
 .ci-ok { background: var(--verde, #2a9d4a); } .ci-mal { background: var(--rojo, #d1342f); } .ci-espera { background: var(--ambar, #d9a21b); }
 .k-vacio { padding: 12px; border: 1px dashed var(--borde); color: var(--suave); margin: 8px 0; }
 .k-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100%); overflow: auto; padding: 12px 14px; background: var(--panel); border-left: 1px solid var(--borde); box-shadow: -4px 0 16px rgba(0,0,0,.18); z-index: 20; }
+.est-yo { background: var(--panel2, rgba(127,127,127,.15)); padding: 6px 10px; border-radius: 6px; margin: 8px 0 4px; }
+.est-msgs { max-height: 50vh; overflow: auto; } .est-acciones { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.est-pestanas { display: flex; gap: 6px; margin-bottom: 8px; } .est-pestanas [aria-current=true] { font-weight: bold; text-decoration: underline; }
+#estudio textarea { width: 100%; box-sizing: border-box; }
 .k-panel-cab { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
 .k-panel .tareas { list-style: none; padding: 0; } .k-commits { padding-left: 1.1em; }
 .boton.chico { font-size: .8em; padding: 0 6px; }
@@ -492,6 +496,7 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
     <nav id="pestanas" aria-label="Secciones"></nav>
     <div id="panel-crear" aria-live="polite"></div>
     <main id="contenido"></main>
+    <div id="estudio"></div>
   </div>
   <footer id="barra-estado" aria-label="Barra de estado"></footer>
 </div>
@@ -1756,8 +1761,91 @@ function panelSesion(c, det, gasto) {
     : det.commits.length ? `<div class="rotulo">Commits frente a ${esc(det.principal)}</div><ul class="k-commits">${det.commits.map((m) => `<li><code>${esc(m.oid.slice(0, 7))}</code> ${esc(m.titulo)}<div class="suave">${esc((m.archivos || []).join(', '))}</div></li>`).join('')}</ul>` : '<p class="suave">Sin commits propios todavía.</p>';
   const costo = gasto ? `<p class="suave">Costo ${usd(gasto.costo)} · ${Math.round(gasto.minutos)} min</p>` : '';
   return `<aside id="k-panel" class="k-panel" role="dialog" aria-label="Detalle de ${esc(c.clave || 'la sesión')}"><div class="k-panel-cab"><strong>${esc(plano(c.titulo || c.llano))}</strong><button class="boton" type="button" data-k-cerrar aria-label="Cerrar detalle">✕</button></div>
-    ${prompt}${espera}${casillas}${git}${commits}${costo}</aside>`;
+    ${prompt}${espera}${casillas}${git}${commits}${costo}<p>${botonEstudiar(c.archivo, { sesion: c.clave, rama: c.rama })}</p></aside>`;
 }
+// ---- Estudio (S56): chat de solo lectura sobre un plan/backlog (POST /api/estudio, ndjson) ----
+// Etiquetas = ACCIONES[*].etiqueta de estudio.mjs (el servidor es quien arma la pregunta).
+const ACCIONES_ESTUDIO = [['tecnico', 'Extrae lo técnico'], ['pedidos', '¿Qué le pide a Claude cada paso?'], ['sesion', 'Explícame la sesión X'], ['quedo', 'Muéstrame cómo quedó']];
+function botonEstudiar(ruta, o = {}) {
+  return `<button class="boton" type="button" data-estudiar="${esc(ruta)}"${o.sesion ? ` data-estudiar-sesion="${esc(o.sesion)}"` : ''}${o.rama ? ` data-estudiar-rama="${esc(o.rama)}"` : ''} title="Pregúntale a un Claude de solo lectura sobre este plan">Estudiar</button>`;
+}
+function panelEstudio(e) {
+  const ultima = e.mensajes[e.mensajes.length - 1];
+  const puedeGuardar = !e.cargando && ultima && ultima.rol === 'claude' && ultima.fin && ultima.texto;
+  const msgs = e.mensajes.map((m, i) => m.rol === 'yo' ? `<div class="est-yo">${esc(m.texto)}</div>`
+    : `<div class="est-claude">${m.texto ? md(m.texto) : '<span class="suave">Pensando…</span>'}${(m.herramientas || []).length ? `<div class="suave">${m.herramientas.map((h) => esc(h)).join(' · ')}</div>` : ''}${m.error ? `<p class="suave" style="color:var(--aviso)">${esc(m.error)}</p>` : ''}</div>`).join('');
+  const acciones = ACCIONES_ESTUDIO.filter(([k]) => k !== 'sesion' || e.sesion).map(([k, t]) => `<button class="boton" type="button" data-estudio-accion="${k}"${e.cargando ? ' disabled' : ''}>${esc(k === 'sesion' ? t.replace('X', e.sesion) : t)}</button>`).join('');
+  const chat = `<div class="est-msgs" aria-live="polite">${msgs || '<p class="suave">Elige una acción o pregunta lo que quieras: Claude solo lee, no edita nada.</p>'}</div>
+    <div class="est-acciones">${acciones}</div>
+    <textarea rows="2" data-estudio-pregunta placeholder="Pregunta sobre este plan…"${e.cargando ? ' disabled' : ''}></textarea>
+    <p><button class="boton" type="button" data-estudio-enviar${e.cargando ? ' disabled' : ''}>Preguntar</button>${puedeGuardar ? ' <button class="boton" type="button" data-estudio-guardar="1">Guardar en la guía</button>' : ''}</p>`;
+  const guia = e.guia ? md(e.guia) : '<p class="suave">Aún no guardaste nada de este plan en la guía.</p>';
+  return `<aside id="est-panel" class="k-panel" role="dialog" aria-label="Estudiar el plan"><div class="k-panel-cab"><strong>Estudiar · ${esc(String(e.plan).split('/').pop())}</strong><button class="boton" type="button" data-estudio-cerrar aria-label="Cerrar">✕</button></div>
+    <div class="est-pestanas"><button type="button" data-estudio-pestana="chat" aria-current="${e.pestana !== 'guia'}">Chat</button><button type="button" data-estudio-pestana="guia" aria-current="${e.pestana === 'guia'}">Guía</button></div>
+    ${e.pestana === 'guia' ? guia : chat}</aside>`;
+}
+const ESTUDIOS = new Map(); let estudioAbierto = null;
+function pintarEstudio() {
+  const host = $('#estudio'); if (!host) return;
+  const e = estudioAbierto && ESTUDIOS.get(estudioAbierto);
+  const previo = host.querySelector('textarea')?.value || '';
+  host.innerHTML = e ? panelEstudio(e) : '';
+  const t = host.querySelector('textarea'); if (t && previo) t.value = previo;
+  const m = host.querySelector('.est-msgs'); if (m) m.scrollTop = m.scrollHeight;
+}
+async function abrirEstudio(ref, sesion, rama) {
+  const r = [...P.planes, ...P.backlogs].find((x) => x.ruta === ref || x.archivo === ref);
+  if (!r) return;
+  if (!ESTUDIOS.has(r.ruta)) ESTUDIOS.set(r.ruta, { plan: r.ruta, mensajes: [], cargando: false, pestana: 'chat', guia: null, sesionId: null });
+  const e = ESTUDIOS.get(r.ruta); e.sesion = sesion || e.sesion || null; e.rama = rama || e.rama || null;
+  estudioAbierto = r.ruta; pintarEstudio();
+  try { e.guia = (await (await fetch(`/api/estudio/guia?proyecto=${encodeURIComponent(P.id)}&plan=${encodeURIComponent(r.ruta)}`, { cache: 'no-store' })).json()).contenido; pintarEstudio(); } catch {}
+}
+async function preguntarEstudio(cuerpo, etiqueta) {
+  const e = ESTUDIOS.get(estudioAbierto); if (!e || e.cargando) return;
+  const m = { rol: 'claude', texto: '', fin: false, herramientas: [] };
+  e.mensajes.push({ rol: 'yo', texto: etiqueta }, m); e.cargando = true; e.ultimaPregunta = etiqueta; pintarEstudio();
+  try {
+    const r = await fetch('/api/estudio', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ proyecto: P.id, plan: e.plan, sesionId: e.sesionId || undefined, ...cuerpo }) });
+    if (!r.ok) { m.error = (await r.json().catch(() => ({}))).error || `Error ${r.status}`; }
+    else {
+      const lector = r.body.getReader(), dec = new TextDecoder(); let resto = '';
+      const evento = (ev) => {
+        if (ev.tipo === 'sesion' && ev.sesionId) e.sesionId = ev.sesionId;
+        else if (ev.tipo === 'texto') m.texto += ev.texto;
+        else if (ev.tipo === 'herramienta') m.herramientas.push(`${ev.nombre} ${ev.detalle || ''}`.trim());
+        else if (ev.tipo === 'fin') { if (ev.sesionId) e.sesionId = ev.sesionId; if (!m.texto && ev.texto) m.texto = ev.texto; m.fin = !ev.error; if (ev.error) m.error = ev.texto || 'Claude respondió con un error.'; }
+        else if (ev.tipo === 'error') m.error = ev.error;
+      };
+      for (;;) {
+        const { done, value } = await lector.read(); if (done) break;
+        resto += dec.decode(value, { stream: true });
+        const ls = resto.split('\n'); resto = ls.pop();
+        for (const l of ls) { try { evento(JSON.parse(l)); } catch {} }
+        pintarEstudio();
+      }
+    }
+  } catch (x) { m.error = 'No pude hablar con el servidor.'; }
+  e.cargando = false; pintarEstudio();
+}
+async function guardarEstudio() {
+  const e = ESTUDIOS.get(estudioAbierto); const m = e?.mensajes[e.mensajes.length - 1]; if (!e || !m?.fin) return;
+  try {
+    const r = await fetch('/api/estudio/guardar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ proyecto: P.id, plan: e.plan, pregunta: e.ultimaPregunta, respuesta: m.texto }) });
+    const j = await r.json(); if (!r.ok) throw new Error(j.error);
+    e.guia = j.contenido; avisar('Guardado en la guía.'); pintarEstudio();
+  } catch (x) { avisar(x.message || 'No se pudo guardar.', true); }
+}
+document.addEventListener('click', (ev) => {
+  const t = ev.target.closest?.('button'); if (!t) return;
+  const d = t.dataset;
+  if (d.estudiar) abrirEstudio(d.estudiar, d.estudiarSesion, d.estudiarRama);
+  else if (d.estudioCerrar !== undefined) { estudioAbierto = null; pintarEstudio(); }
+  else if (d.estudioPestana) { const e = ESTUDIOS.get(estudioAbierto); if (e) { e.pestana = d.estudioPestana; pintarEstudio(); } }
+  else if (d.estudioAccion) { const e = ESTUDIOS.get(estudioAbierto); const et = ACCIONES_ESTUDIO.find(([k]) => k === d.estudioAccion)[1].replace('X', e.sesion || 'X'); preguntarEstudio({ accion: d.estudioAccion, sesion: e.sesion || undefined, rama: e.rama || undefined }, et); }
+  else if (d.estudioEnviar !== undefined) { const a = $('#estudio textarea'); const q = a?.value.trim(); if (q) { a.value = ''; preguntarEstudio({ pregunta: q }, q); } }
+  else if (d.estudioGuardar) guardarEstudio();
+});
 function vistaKanban() {
   const todas = tarjetasKanban();
   if (!todas.length) return '<div class="vacio">Este proyecto aún no tiene tareas para mostrar como tablero.</div>';
@@ -1931,7 +2019,7 @@ const VISTAS = {
     const actual = P.backlogs.find((b) => b.archivo === sel.backlogs) || P.backlogs[0];
     return `<div class="archivos" aria-label="Archivos">${P.backlogs.map((b) => `<button data-sel="${esc(b.archivo)}" aria-current="${b === actual}">${esc(b.archivo)}${b.total ? `<span class="n">${b.hechas}/${b.total}</span>` : ''}</button>`).join('')}${editable() ? '<button class="boton" type="button" data-crear="backlog" title="Crear un backlog secundario con nombre; el principal no se toca">＋ Otro backlog</button>' : ''}</div>
       ${modo.backlogs !== 'documento' && editando !== actual.ruta ? barraBusqueda('backlogs', true) : ''}
-      ${editando === actual.ruta ? vistaEditor(actual.ruta) : `${barraVista(actual, 'backlogs')}
+      ${editando === actual.ruta ? vistaEditor(actual.ruta) : `${barraVista(actual, 'backlogs')}<p>${botonEstudiar(actual.ruta)}</p>
       ${modo.backlogs === 'documento' ? `<div class="tarjeta">${md(actual.contenido)}</div>` : vistaMapa(actual)}`}`;
   },
   planes() {
@@ -1940,7 +2028,7 @@ const VISTAS = {
     return `${barraBusqueda('planes', false)}<div class="lateral">
       <div class="tarjeta lista">${P.planes.map((p) => `<button data-sel="${esc(p.nombre)}" data-busca="${esc((p.titulo + ' ' + p.nombre + ' ' + p.contenido).toLowerCase())}" aria-current="${p === actual}">
         <strong>${esc(p.titulo)}</strong><br><span class="suave">${fecha(p.modificado)} · ${esc(p.carpetas.join(', '))}</span></button>`).join('')}</div>
-      <div style="min-width:0">${editando === actual.ruta ? vistaEditor(actual.ruta) : `<p class="suave hash" style="margin-top:0;overflow-wrap:anywhere">${esc(actual.ruta)}</p>${barraVista(actual, 'planes')}
+      <div style="min-width:0">${editando === actual.ruta ? vistaEditor(actual.ruta) : `<p class="suave hash" style="margin-top:0;overflow-wrap:anywhere">${esc(actual.ruta)}</p>${barraVista(actual, 'planes')}<p>${botonEstudiar(actual.ruta)}</p>
         ${modo.planes === 'documento' ? `<div class="tarjeta">${md(actual.contenido)}</div>` : vistaMapa(actual)}`}</div></div>`;
   },
   historial() {

@@ -29,9 +29,11 @@ export function argsEstudio({ plan, cwd, sesionId } = {}) {
   ]
 }
 
+// Primer mensaje de las sesiones del tutor: el tablero las reconoce por él para no contarlas como trabajo.
+export const MARCA_ESTUDIO = 'Plan a estudiar:'
 export function promptEstudio({ plan, pregunta, sesionId }) {
   if (sesionId) return pregunta
-  return `Plan a estudiar: ${plan}\nLéelo completo con Read antes de responder.\n\n${pregunta}`
+  return `${MARCA_ESTUDIO} ${plan}\nLéelo completo con Read antes de responder.\n\n${pregunta}`
 }
 
 // Acciones rápidas de la vista (S56 pinta los botones con `etiqueta`).

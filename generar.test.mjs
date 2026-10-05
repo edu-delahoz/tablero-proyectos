@@ -864,3 +864,20 @@ test('E5c: plantilla.html — tarjeta «Auditoría» con selector de día, compo
   const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
   for (const txt of ['Auditoría', 'Opus frente a Sonnet', 'sesgo de selección', 'data-aud-dia']) assert.ok(html.includes(txt), txt)
 })
+
+test('las sesiones del tutor de estudio («Plan a estudiar:») no cuentan como trabajo: ni activas ni «última sesión»', async () => {
+  const { hechosRetomar } = await import('./generar.mjs')
+  const tr = tmpS(join(tmpdirS(), 'tablero-est-'))
+  mkdirS(join(tr, '-Users-x-est'), { recursive: true })
+  const u = (t) => JSON.stringify({ type: 'user', timestamp: '2026-10-05T10:00:00Z', message: { role: 'user', content: t } }) + '\n'
+  const real = join(tr, '-Users-x-est', 'real0000.jsonl'), tutor = join(tr, '-Users-x-est', 'tutor000.jsonl')
+  escribirS(real, u('arregla el login') + JSON.stringify({ aiTitle: 'Login' }) + '\n')
+  escribirS(tutor, u('Plan a estudiar: /x/BACKLOG.md\nLéelo completo con Read antes de responder.\n\nExtrae lo técnico') + JSON.stringify({ aiTitle: 'Estudio' }) + '\n')
+  const ahora = Date.parse('2026-10-05T10:05:00Z')
+  utimesSync(real, new Date(ahora - 3600e3), new Date(ahora - 3600e3))
+  utimesSync(tutor, new Date(ahora - 60e3), new Date(ahora - 60e3)) // el tutor es el más reciente
+  const r = sesionesActivas([{ id: 'e', transcripciones: '-Users-x-est' }], tr, { ahora })
+  assert.deepEqual(r.e.map((s) => s.sid), ['real0000'], 'el tutor no sale entre las sesiones activas (ni en el kanban)')
+  const h = hechosRetomar({ transcripciones: '-Users-x-est' }, null, { transcripciones: tr, ahora: new Date(ahora) })
+  assert.equal(h.ultimaSesionClaude.titulo, 'Login', 'la última sesión de Claude ignora al tutor')
+})

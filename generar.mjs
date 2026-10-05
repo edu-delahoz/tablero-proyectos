@@ -27,7 +27,7 @@ import { parsearBitacora, sidsPorProyecto, asociar, conFeatures, editarFila, has
 import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
 import { semaforoLlamadas, semaforoCtx, eficienciaDe } from './eficiencia.mjs'
 import { metodologia } from './metodologia.mjs'
-import { argsEstudio, promptEstudio, preguntaDe, lanzarEstudio, sesionValida, rutaGuia, anadirAGuia } from './estudio.mjs'
+import { MARCA_ESTUDIO, argsEstudio, promptEstudio, preguntaDe, lanzarEstudio, sesionValida, rutaGuia, anadirAGuia } from './estudio.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
@@ -1213,7 +1213,7 @@ export function estadoConfiguracion(p, { git = null, backlogs = [], transcripcio
 // (customTitle, si no aiTitle), leyendo solo las primeras ~20 líneas.
 function ultimaSesionDe(prefijo, dir) {
   if (!prefijo || !existsSync(dir)) return null
-  let ult = null
+  const cand = []
   for (const d of readdirSync(dir)) {
     if (d !== prefijo && !d.startsWith(`${prefijo}-`)) continue
     let archivos = []
@@ -1222,21 +1222,24 @@ function ultimaSesionDe(prefijo, dir) {
       if (!f.endsWith('.jsonl')) continue
       const ruta = join(dir, d, f)
       const mtime = statSync(ruta, { throwIfNoEntry: false })?.mtimeMs
-      if (mtime != null && (!ult || mtime > ult.mtime)) ult = { ruta, mtime }
+      if (mtime != null) cand.push({ ruta, mtime })
     }
   }
-  if (!ult) return null
-  let titulo = null
-  try {
-    const fd = openSync(ult.ruta, 'r')
+  // Las sesiones del tutor de estudio no cuentan: se baja hasta la primera que sea trabajo.
+  for (const c of cand.sort((a, b) => b.mtime - a.mtime)) {
     try {
-      const buf = Buffer.alloc(64 * 1024)
-      const lineas = buf.toString('utf8', 0, readSync(fd, buf, 0, buf.length, 0)).split('\n').slice(0, 20)
-      const objs = lineas.flatMap((l) => { try { return [JSON.parse(l)] } catch { return [] } })
-      titulo = objs.find((o) => o?.customTitle)?.customTitle || objs.find((o) => o?.aiTitle)?.aiTitle || null
-    } finally { closeSync(fd) }
-  } catch {}
-  return { titulo, fecha: new Date(ult.mtime).toISOString() }
+      const fd = openSync(c.ruta, 'r')
+      try {
+        const buf = Buffer.alloc(64 * 1024)
+        const lineas = buf.toString('utf8', 0, readSync(fd, buf, 0, buf.length, 0)).split('\n').slice(0, 20)
+        const objs = lineas.flatMap((l) => { try { return [JSON.parse(l)] } catch { return [] } })
+        if (esDeEstudio(objs)) continue
+        const titulo = objs.find((o) => o?.customTitle)?.customTitle || objs.find((o) => o?.aiTitle)?.aiTitle || null
+        return { titulo, fecha: new Date(c.mtime).toISOString() }
+      } finally { closeSync(fd) }
+    } catch { return { titulo: null, fecha: new Date(c.mtime).toISOString() } }
+  }
+  return null
 }
 // p: { transcripciones, git }; b: el backlog principal (con estructura, aqui y, si hay, activo).
 export function hechosRetomar(p, b, { transcripciones = TRANSCRIPCIONES, ahora = new Date() } = {}) {
@@ -1283,6 +1286,7 @@ const textoUsuario = (o) => {
   const t = typeof c === 'string' ? c : Array.isArray(c) && !c.some((x) => x?.type === 'tool_result') ? c.filter((x) => x?.type === 'text').map((x) => x.text).join('\n') : ''
   return t && t.trim() && !t.trimStart().startsWith('<') ? t.trim() : null
 }
+const esDeEstudio = (objs) => (objs.map(textoUsuario).find(Boolean) || '').startsWith(MARCA_ESTUDIO)
 function resumenSesion(ruta, size) {
   const fd = openSync(ruta, 'r')
   const leer = (desde, largo) => { const buf = Buffer.alloc(largo); return buf.toString('utf8', 0, readSync(fd, buf, 0, largo, desde)) }
@@ -1297,6 +1301,7 @@ function resumenSesion(ruta, size) {
     }
   } finally { closeSync(fd) }
   if (!cabeza.length && !cola.length) return null
+  if (esDeEstudio(cabeza)) return null
   const todas = cabeza === cola ? cola : [...cabeza, ...cola]
   const ultimo = (f) => { for (let i = todas.length - 1; i >= 0; i--) { const v = f(todas[i]); if (v) return v } return null }
   const archivos = []
