@@ -22,6 +22,7 @@ import { validarIntegracion, aplicarCambio, anadirProyecto, editarProyecto, escr
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
+import { auditoriaDe } from './auditoria.mjs'
 import { parsearBitacora, sidsPorProyecto, asociar, conFeatures, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
 import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
 import { semaforoLlamadas, semaforoCtx, eficienciaDe } from './eficiencia.mjs'
@@ -1076,7 +1077,8 @@ function leerBitacoras() {
       const llamadasPorPrompt = Math.round((m.llamadas / m.prompts) * 10) / 10
       Object.assign(f, { llamadasPorPrompt, semaforoLlamadas: semaforoLlamadas(llamadasPorPrompt), ctxFinalK: Math.round(m.ctxFinal / 1000), semaforoCtx: semaforoCtx(m.ctxFinal), grandes: m.resultadosGrandes?.length || 0 })
     }
-    return [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...bit, eficiencia: eficienciaDe(metricas, bit.registro) }]
+    const texto = readFileSync(ruta, 'utf8')
+    return [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...bit, eficiencia: eficienciaDe(metricas, bit.registro), auditoria: auditoriaDe(TRANSCRIPCIONES, texto) }]
   }))
 }
 

@@ -139,6 +139,8 @@ node generar.mjs --auditoria 2026-10-04 --utc      # cortado en UTC (como las ci
 node generar.mjs --auditoria 2026-10-04 --modelos  # añade Opus frente a Sonnet (lee ../BITACORA.md; --bitacora <ruta>)
 ```
 
+**También en la pestaña Bitácora**: tarjeta «Auditoría» con selector de los últimos 7 días (hora local), composición del gasto, malos hábitos y «Opus frente a Sonnet» (se calcula al generar; sin transcripciones no aparece).
+
 Lee `~/.claude/projects/*/*.jsonl` (`auditoria.mjs`, que reutiliza `metricas_jsonl.mjs`) e imprime:
 composición del gasto (entrada ×1, escritura de caché ×2, lectura de caché ×0,1, salida ×5),
 tool results >5k, Bash con `sed -n/grep/awk` sobre `BACKLOG*`, `cat` completos y Read sin límite.

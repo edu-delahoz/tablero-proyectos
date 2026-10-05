@@ -148,3 +148,20 @@ export function textoModelos(m) {
   if (!m.length) L.push('(sin filas Sn con effort medio)')
   return L.join('\n')
 }
+
+// Pestaña Bitácora: auditoría de los últimos `dias` días (hora local, el más reciente primero) + Opus frente a Sonnet.
+// Sin transcripciones → null (la tarjeta no se muestra).
+export function auditoriaPanel(archivos, textoBitacora, { hoy = diaLocal(Date.now()), dias = 7 } = {}) {
+  if (!archivos.length) return null
+  const lista = Array.from({ length: dias }, (_, i) => new Date(Date.parse(hoy) - i * 864e5).toISOString().slice(0, 10))
+  // /api/datos no debe llevar la palabra «token» (guarda contra fugas) → `volumen`; y sin `entrada` (comandos de la sesión).
+  const limpiar = (v) => JSON.parse(JSON.stringify(v, (k, x) => (k === 'entrada' && typeof x === 'string' ? undefined : x)).replace(/"tokens":/g, '"volumen":'))
+  return { dias: lista.map((dia) => limpiar(auditar(archivos, { dia }))), modelos: textoBitacora ? porModelo(textoBitacora) : [] }
+}
+
+// Lee las transcripciones una vez (desde el día más antiguo) y arma el panel.
+export function auditoriaDe(raiz, textoBitacora, opciones = {}) {
+  const dias = opciones.dias ?? 7, hoy = opciones.hoy ?? diaLocal(Date.now())
+  const desde = new Date(Date.parse(hoy) - (dias - 1) * 864e5).toISOString().slice(0, 10)
+  return auditoriaPanel(leerTranscripciones(desde, raiz), textoBitacora, { hoy, dias })
+}

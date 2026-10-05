@@ -791,3 +791,25 @@ test('E5: plantilla.html muestra las advertencias y la calibración del panel de
   assert.equal(e.limites.cinco.porPct, 2)
   assert.ok(e.quedan.some((q) => q.tipo === 'Sn' && q.cinco != null))
 })
+
+// ---------- E5c: Auditoría en la pestaña Bitácora ----------
+test('E5c: auditoriaPanel — últimos N días con las cinco secciones de auditar y porModelo; sin transcripciones → null', async () => {
+  const { auditoriaPanel } = await import('./auditoria.mjs')
+  const L = (o) => JSON.stringify(o)
+  const texto = [L({ type: 'assistant', timestamp: '2026-10-04T15:00:00.000Z', requestId: 'r1', message: { model: 'claude-opus-5-5', usage: { input_tokens: 100, cache_creation_input_tokens: 1000, cache_read_input_tokens: 10000, output_tokens: 200 }, content: [] } })].join('\n')
+  const bit = '| Fecha | Tarea | Modelo | Costo |\n|---|---|---|---|\n'
+  const a = auditoriaPanel([{ proyecto: 'p', sid: 's1', texto }], bit, { hoy: '2026-10-04', dias: 7 })
+  assert.equal(a.dias.length, 7)
+  assert.deepEqual(a.dias.map((d) => d.dia), ['2026-10-04', '2026-10-03', '2026-10-02', '2026-10-01', '2026-09-30', '2026-09-29', '2026-09-28'])
+  const d = a.dias[0]
+  for (const k of ['gasto', 'grandes', 'bashBacklog', 'catCompletos', 'readSinLimite']) assert.ok(k in d, k)
+  assert.equal(d.llamadas, 1)
+  assert.equal(a.dias[1].llamadas, 0)
+  assert.ok(Array.isArray(a.modelos))
+  assert.equal(auditoriaPanel([], bit, { hoy: '2026-10-04' }), null)
+})
+
+test('E5c: plantilla.html — tarjeta «Auditoría» con selector de día, composición, malos hábitos y Opus frente a Sonnet', () => {
+  const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'plantilla.html'), 'utf8')
+  for (const txt of ['Auditoría', 'Opus frente a Sonnet', 'sesgo de selección', 'data-aud-dia']) assert.ok(html.includes(txt), txt)
+})
