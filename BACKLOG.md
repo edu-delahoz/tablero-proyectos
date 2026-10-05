@@ -2,7 +2,7 @@
 
 ## Estado
 - 2026-10-05 · rama `alerta-prompt` (sale de `develop` con el PR #19) · S62 hecha salvo la prueba real en ventana nueva: hook `vigilar_prompt.mjs` instalado (symlink + `UserPromptSubmit`), tests primero (fallaban 17 de 17, ahora pasan); suite 384 pasan / 0 fallan / 2 omitidos, formato OK. Commits locales sin push ni PR (también en `metodologia-claude-code`, rama `oficina-agentes`).
-- Para retomar (2026-10-05): ya existe el aviso que sale cuando pegas el prompt de otra sesión (ya hecha, rama o worktree en uso por otra ventana, o cambio de hilo) y está instalado. Falta probarlo a mano en una ventana nueva con el prompt de S58 (debe avisar) y el de S62 (no debe avisar). Después, decidir los PR de las dos ramas.
+- Para retomar (2026-10-05): ya existe el aviso que sale cuando pegas el prompt de otra sesión (ya hecha, rama o worktree en uso por otra ventana, o cambio de hilo) y está instalado. Falta probarlo a mano en una ventana nueva con el prompt de S58 (debe avisar) y el de S62 (no debe avisar). Después, S64: explicar E2 y cerrar los PR de las dos ramas.
 - 2026-10-05 · rama `oficina-agentes` (sin PR nuevo) · S61 hecha salvo PRs (esperan permiso) y la re-medición (→ S61b, desde 2026-10-07): `git merge lectura-backlog` hecho, «Estado» resuelto a mano, suite 366 pasan / 0 fallan / 2 omitidos, formato OK. El hook `acotar_lectura` pasa a bloqueo el 2026-10-12.
 - Para retomar (2026-10-05, S61): la rama de la oficina ya trae el extractor del backlog y todo funciona. Falta que Eduardo diga si abrir los PR, y re-medir la lectura del backlog a partir del 7 de octubre.
 - 2026-10-05 · rama `recarga-codigo` (sale de `develop`) · Arreglo «el Tablero no abre las tarjetas»: no era la vista, la pestaña de Chrome tenía el código de antes del merge (texto «Arrastra una tarjeta o usa «Mover a…»»); con Cmd+Shift+R abrió. `plantilla.html`: `decidirCodigo` + el sondeo de `/api/version` recarga la pestaña cuando cambia `codigo` (espera si hay edición). Test primero (fallaba 1 de 1); suite 367 pasan, 0 fallan. Pruebas de Eduardo: Estudio bien, Oficina bien por ahora; móvil sin probar (→ H23). S61 sigue abierta: el aviso de «PR #16 mergeado» no la cierra, su merge es dentro de `.wt-oficina`.
@@ -214,6 +214,19 @@ Resultado parcial (2026-10-05, Sonnet): `vigilar_prompt.mjs` (en `metodologia-cl
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S62 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S62 BACKLOG.md`), en la rama `alerta-prompt` (sale de `oficina-agentes` una vez cerrada S61). Primera casilla: `vigilar_prompt.test.mjs`, verlo fallar y anotar cuántos fallan. Instalar el hook en settings.json pide mi permiso. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+### S64 — Explicar E2 y cerrar los PR pendientes · **Sonnet** · rama `alerta-prompt` · ~25k
+Se espera: Eduardo entiende en qué punto está E2 (el hook `acotar_lectura`, cuándo y con qué datos se decide pasarlo a bloqueo) y queda todo limpio: S62 cerrada con su prueba real, los PR de tablero y de `metodologia-claude-code` mergeados en `develop` y las ramas sin trabajo suelto. Se comprueba con `node verificar_backlog.mjs "$PWD"` sin avisos y `git status` limpio en los dos repos.
+- [ ] [explicación] Qué pasa con E2, sin tocar nada — leer `node backlog.mjs seccion E2 BACKLOG.md` y `~/.claude/session-metrics/acotar_lectura.jsonl` (solo conteos: avisos por día, tokens medios, cuántos `habriaBloqueado`); explicarle a Eduardo en llano qué hace el hook, qué lleva registrado y qué falta (el hook sigue en modo aviso; el pase a bloqueo se decide con 7 días de log, desde el 2026-10-11/12). No cambiar `MODO` salvo que Eduardo lo pida
+- [ ] [verificación] Cerrar S62 con la prueba real de Eduardo — preguntarle el resultado (prompt de S58 avisa, el de S62 no); anotarlo en «Resultado:» de S62 y marcar su última casilla; si falló, no abrir PR y arreglar el hook primero
+- [ ] [docs] PR del tablero con permiso de Eduardo — `alerta-prompt → develop` por REST (`gh api repos/edu-delahoz/tablero-proyectos/pulls`, GraphQL de `gh` puede estar limitado); el hook bloquea el PR si hay casillas abiertas en la rama; mergear cuando Eduardo lo diga
+- [ ] [docs] PR de `metodologia-claude-code` con permiso de Eduardo — `oficina-agentes → develop` (trae el hook `vigilar_prompt.mjs` y la regla de `CLAUDE.md`); mergear cuando Eduardo lo diga y confirmar que los symlinks de `~/.claude/hooks/` siguen resolviendo
+- [ ] [docs] Dejar limpio — borrar las ramas ya mergeadas (local y remota, preguntando antes), `git status` limpio en los dos repos, Estado y «Para retomar» al día; lo que Eduardo decida no hacer se marca `[-]` con motivo (S61b, la re-medición desde el 2026-10-07, sigue abierta aparte)
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S64 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S64 BACKLOG.md`), en la rama `alerta-prompt`. Primero explícame qué pasa con E2 (solo lectura), luego cerramos S62 con mi prueba y los PR de tablero y de metodologia-claude-code; pregúntame antes de crear o mergear cada PR y antes de borrar ramas. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 
 ## H18 — Kanban por sesión y prompt a la vista
