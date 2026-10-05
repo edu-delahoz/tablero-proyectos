@@ -70,10 +70,25 @@ Se espera: Ningún personaje se encima con otro (prueba en `oficina.test.mjs`) y
 - [x] [test] (añadido en S-OF2b) Nadie se encima, verlo fallar (falló 1: sofá, casillas (1,7) y (1,8)) — `oficina.test.mjs`: con 2 agentes en la zona sofá y 2 en terminal, `distribuirOficina` no deja dos casillas en la misma columna y filas contiguas (el sprite de pie mide 24 px, la casilla 16)
 - [x] [código] (añadido en S-OF2b) Separar casillas — `oficina.mjs` (`distribuirOficina`/casillas de zona): saltar la fila contigua o desplazar de columna; mantener la estabilidad (solo se mueve quien cambia de zona)
 - [x] [test] Suite completa en verde — `node --test 2>&1 | tail -20` y `node verificar_backlog.mjs "$PWD" --formato` limpio
-- [ ] [test] Prueba con sesiones vivas — Eduardo abre 2–3 sesiones (una con `buscador`, una pidiendo permiso); comprobar placas, salas, globo «!» y que nadie se encima; anotar aquí lo que falle como casillas «(añadido en S-OF3)»
-- [ ] [doc] PR con permiso de Eduardo — `oficina-pixel → develop` (si GraphQL de `gh` está limitado, REST `gh api repos/…/pulls`); al cerrar, marcar en `BACKLOG.md` la casilla de H23 «Oficina: aspecto gráfico» como hecha con referencia a este backlog
+- [x] [test] Prueba con sesiones vivas — Eduardo miró la Oficina con sus sesiones reales y pidió dos ajustes (pasan a S-OF4)
 
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S-OF3 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG_OFICINA.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S-OF3 BACKLOG_OFICINA.md`), rama `oficina-pixel`. Primera casilla: test de que nadie se encima en `oficina.test.mjs` (verlo fallar), luego el arreglo en `oficina.mjs`. Corre la suite, acompáñame a mirar la Oficina con sesiones vivas y anota lo que falle; pregúntame antes de abrir el PR. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Resultado: Nadie se encima: la prueba nueva fallaba en el sofá (1 fallo) y pasa; suite 374 pasan / 0 fallan / 2 omitidos. Con sesiones reales Eduardo pidió dos ajustes (solo la oficina del proyecto abierto, y el hook de prompt ausente en «Metodología viva»); el PR espera a S-OF4.
+Después: **S-OF4**
+
+### S-OF4 — Oficina por proyecto, hook visible y PRs · **Sonnet** · rama `oficina-pixel` · ~40k · plugins: ninguno
+Se espera: La pestaña Oficina muestra por defecto solo la sala del proyecto actual y deja expandir las demás con un clic; en «Metodología viva», la etapa Sesión (hooks) incluye `vigilar_prompt.mjs`. Se comprueba con la suite en verde, abriendo el tablero en el navegador y con los PRs `oficina-pixel → develop` y `develop → main` abiertos (Eduardo ya autorizó ambos).
+- [ ] [test] Salas plegables, verlo fallar y anotar cuántos fallan — `oficina.test.mjs`/`servidor.test.mjs`: el servidor marca la sala del proyecto actual (p. ej. campo `actual` en la sala, según `cwd`/proyecto del tablero) y el resto vienen plegables; sin proyecto actual se muestran todas
+- [ ] [test] El inventario incluye `vigilar_prompt.mjs`, verlo fallar — `metodologia.test.mjs`: con `UserPromptSubmit` en settings aparece `hook:vigilar_prompt.mjs` en la etapa «sesion» (hoy no sale en el grafo; averiguar si `metodologia.mjs` ignora ese evento o solo falta en `INFO`)
+- [ ] [código] Mostrar solo la sala del proyecto, el resto plegado — `plantilla.html` (`htmlOficina`): cabecera de cada sala con botón expandir/plegar, recordar el estado en el navegador, que el canvas solo dibuje salas abiertas y las placas/globos sigan sin taparse; en móvil la lista agrupa igual
+- [ ] [código] Hook de prompt en el grafo — `metodologia.mjs`: añadir `'hook:vigilar_prompt.mjs': ['sesion', 'Avisa si el prompt parece de otra sesión.']` y arreglar la detección si ese evento no se lee
+- [ ] [test] Suite completa en verde y vista en el navegador — `node --test 2>&1 | tail -20`, `node verificar_backlog.mjs "$PWD" --formato`; reiniciar el servidor y mirar Oficina (1280 y 390 px) y Flujo
+- [ ] [doc] PRs con permiso ya dado — `oficina-pixel → develop`, luego `develop → main` (si GraphQL de `gh` está limitado, REST `gh api repos/…/pulls`); marcar en `BACKLOG.md` la casilla de H23 «Oficina: aspecto gráfico» como hecha con referencia a este backlog
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S-OF4 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG_OFICINA.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S-OF4 BACKLOG_OFICINA.md`), rama `oficina-pixel`. Primeras casillas: los dos tests (salas plegables e inventario con `vigilar_prompt.mjs`), verlos fallar, luego el código. Al final reinicia el tablero, corre la suite y abre los PRs oficina-pixel → develop y develop → main (Eduardo ya los autorizó). Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
