@@ -197,9 +197,10 @@ Modelo: Sonnet. Sesión S51 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-
 
 ### S52 — Cierre y medición · **Sonnet**, con Eduardo (tras ≥ 8 sesiones con el formato) · ~40k
 Se espera: Decisión anotada de mantener o recortar la línea en llano según costo y calidad; PRs abiertos.
-- [ ] Todo en verde — suite completa, `scripts/probar.sh`, `verificar_backlog.mjs --formato` en los 5 proyectos
-- [ ] Comparar con la línea base de S44 — regla +10 % / +15 % de arriba; anotar la decisión
-- [ ] PRs y notas — `formato-backlog` → `develop` en ambos repos; responder la nota del prompt siguiente en `../notas/NOTAS_TABLERO.md`
+Resultado: Todo en verde (suite 331 pasan, 2 omitidos; `probar.sh` 20/20; `--formato` sin avisos en IEP, tablero, EAP10 y Squalo; metodologia-claude-code no tiene backlog). Costo: las 5 secciones migradas en S49 (S24b, E2, S41–S43) pasaron de 7.591 a 8.693 caracteres, **+14,5 %** (sobre el +10 %, bajo el +15 %); calidad sin casos medibles aún. **Decisión (Eduardo): mantener la línea en llano en casillas**; volver a medir tras ~5 sesiones más. PRs `formato-backlog` → `develop` en ambos repos.
+- [x] Todo en verde — suite completa, `scripts/probar.sh`, `verificar_backlog.mjs --formato` en los 5 proyectos
+- [x] Comparar con la línea base de S44 — regla +10 % / +15 % de arriba; anotar la decisión
+- [x] PRs y notas — `formato-backlog` → `develop` en ambos repos; responder la nota del prompt siguiente en `../notas/NOTAS_TABLERO.md`
 
 Cómo ejecutarlo: S44 → S45 → (S46, S47, S48, S49 en cualquier orden) → S52; S50 → S51 son independientes de S45–S49. `/clear` entre sesiones.
 
