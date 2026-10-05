@@ -1,0 +1,53 @@
+# Backlog — Oficina pixel
+
+## Estado
+- 2026-10-05 · rama `oficina-pixel` (sale de `develop`, sin PR) · backlog creado en la sesión de plan, sin código ni tests; formato OK. Backlog propio a petición de Eduardo: no va en `BACKLOG.md` (solo S-OF3 marcará allí la casilla de H23). Trampa: el hito debe llamarse `H<número>` (`H1`), con `H-OF1` el validador lo toma por sesión. Siguiente: **S-OF1**. Plan: `~/.claude/plans/quiero-que-planes-una-snazzy-salamander.md`.
+- Para retomar (2026-10-05): Se planeó rehacer la Oficina con aspecto tipo Pixel Agents: salas por proyecto, personajes distintos con su placa «proyecto · SX», sin solapes y sin emojis. Nada de código todavía; lo primero son las pruebas de los datos (S-OF1).
+
+## H1 — Oficina estilo Pixel Agents
+Historia: Como Eduardo, quiero ver la Oficina como un juego pixel (vista desde arriba, salas con muebles) donde cada agente es un personaje distinto con el nombre de su sesión, para saber de un vistazo qué sesión hace qué sin que se tapen unos a otros.
+Origen: 2026-10-05, captura de la Oficina actual (personajes iguales y encimados, emojis 💤/💭 que se ven mal) frente a una captura de Pixel Agents. Atiende la casilla «Oficina: aspecto gráfico más trabajado» de H23 en `BACKLOG.md`. Plugins/MCP: ninguno.
+Decisiones con Eduardo: pixel art **propio en canvas** (sprites como matrices dentro de `plantilla.html`, sin archivos ni licencias externas); placa **«proyecto · SX»** bajo cada personaje (SX del prompt de arranque; si no hay, la rama), subagentes con el mismo color de camiseta que su principal y su tipo («buscador»); **una sala por proyecto**, con casillas de cuadrícula y nunca dos personajes en la misma; estados con **poses y globos pixel** (escribiendo = teclea en su escritorio, leyendo = en el estante, quieto = sentado con la pantalla apagada, esperando = globo «!» que parpadea, pensando = tres puntos pixel), **ningún emoji**.
+Rama `oficina-pixel` (sale de `develop`, que ya trae la oficina por el PR #19).
+
+### S-OF1 — Oficina pixel: datos y distribución · **Opus** · rama `oficina-pixel` · ~55k · plugins: ninguno
+Se espera: `GET /api/oficina` devuelve, además de lo de hoy, las salas por proyecto y, por agente, su placa (SX o rama), su apariencia y una casilla propia que nunca comparte con otro. Se comprueba con `oficina.test.mjs` y `servidor.test.mjs` en verde.
+- [ ] [test] Pruebas de placa, apariencia y reparto, verlas fallar — `oficina.test.mjs`: «Sesión S65 de …» → `etiqueta` «S65»; sin SX → rama; sin rama → título; subagente hereda la `camiseta` de su principal y varía pelo; 8 agentes en 2 proyectos → 2 salas y 8 casillas distintas; si uno cambia de acción, los demás no se mueven; nuevo agente no desplaza a los que estaban. `servidor.test.mjs:710` (`/api/oficina`): trae `salas` y por agente `etiqueta`, `apariencia`, `casilla`, sin prompts. Anotar cuántas fallaban
+- [ ] La sesión se reconoce por su número del backlog — `generar.mjs` `resumenSesion` (~1292): campo `sesion` desde la cabeza del transcript con `/Sesión (S[\w-]*\d+[a-z]?) de/`; `oficina.mjs` `etiquetaDe(resumen)`: `sesion` → primera `S…` de `foco.claves` → `rama` → `titulo`
+- [ ] Cada sesión tiene su propio personaje — `oficina.mjs` `aparienciaDe(sid, agente)`: hash determinista → `{ camiseta, pelo, piel, peinado }` de paletas fijas; subagentes con la `camiseta` del sid
+- [ ] Una sala por proyecto, sin personajes encimados — `oficina.mjs` `distribuirOficina(agentes)`: salas en orden estable (por `desde`), un escritorio por principal, zonas por acción (estante, terminal, escritorio, sofá); si la casilla está ocupada, la libre más cercana; asignación estable entre sondeos
+- [ ] El servidor entrega todo junto — `generar.mjs` `oficina()` (~1414): unir `resumenCacheado` por sid (etiqueta), apariencia y reparto; `{ agentes, salas }`; pruebas de arriba en verde y suite completa `node --test 2>&1 | tail -20`
+
+Prompt:
+```text
+Modelo: Opus. Sesión S-OF1 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG_OFICINA.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S-OF1 BACKLOG_OFICINA.md`), rama `oficina-pixel` (ya creada desde `develop`). Primera casilla: los tests de placa, apariencia y reparto sin solapes en `oficina.test.mjs` y `servidor.test.mjs`; verlos fallar y anotar cuántos. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S-OF2**
+
+### S-OF2 — Oficina pixel: escena en canvas · **Opus** · rama `oficina-pixel` · ~75k · plugins: ninguno
+Se espera: La pestaña Oficina muestra salas pixel por proyecto con muebles y personajes distintos, cada uno con su placa «proyecto · SX», que caminan a su sitio sin taparse y sin emojis; en móvil, una lista con mini-avatar. Se comprueba con el test de `plantilla.html` en verde y capturas de Chrome headless a 1280 y 390 px.
+- [ ] [test] Prueba de la escena nueva, verla fallar — `generar.test.mjs` (patrón de `:827`, lee `plantilla.html`): hay `<canvas` en `htmlOficina`, no queda ninguno de `💤 💭 📖 ✍️ ⌨️ 🔎 ⏳` ni `ICONO_OFICINA`, la placa usa `etiqueta`, la lista móvil pinta avatar; anotar cuántas fallaban
+- [ ] Salas y muebles en pixel — `plantilla.html`: `<canvas>` con `image-rendering: pixelated`, tiles de 16 px escalados ×2/×3 según ancho; suelo distinto por sala (madera, baldosa, moqueta), paredes, escritorio con monitor, estante con libros, terminal, sofá, planta, puerta por sala
+- [ ] Personajes distintos con sus poses — sprites como matrices + paleta (16×24: de pie, caminando 2 cuadros, sentado tecleando, leyendo), recoloreados con `apariencia`; pantalla apagada si está quieto
+- [ ] Caminan a su sitio sin taparse — bucle `requestAnimationFrame` solo con la pestaña visible; interpolar casilla anterior → nueva; entrada por la puerta de su sala; `sondearOficina` (~1982) solo actualiza el estado que lee el bucle; `prefers-reduced-motion` salta a la casilla
+- [ ] Placa con la sesión y detalle al tocar — capa HTML encima del canvas: placa «tablero · S65» (subagente: su tipo, con el color de su sesión); al pasar el ratón o tocar, tarjeta con proyecto, sesión, rama, acción y archivo
+- [ ] Globos pixel en lugar de emojis — dibujar en canvas «!» parpadeando (esperando) y «…» (pensando); borrar `ICONO_OFICINA`, `LUGAR_OFICINA` y el CSS `.personaje/.etq/.globo` (~131–139)
+- [ ] En móvil, lista con mini-avatar — `<700px`: cada fila con canvas 16×24 del personaje, placa y acción en texto
+- [ ] [test] Revisión a ojo — Chrome headless con eventos simulados (como S58b) a 1280 y 390 px, con 8 agentes en 2 proyectos: sin solapes y placas legibles; suite `node --test 2>&1 | tail -20` en verde
+
+Prompt:
+```text
+Modelo: Opus. Sesión S-OF2 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG_OFICINA.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S-OF2 BACKLOG_OFICINA.md`), rama `oficina-pixel`. Primera casilla: el test de `plantilla.html` (canvas, sin emojis, placa «proyecto · SX»), verlo fallar. Solo se tocan `plantilla.html` y su test. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S-OF3**
+
+### S-OF3 — Prueba con sesiones vivas y PR · **Sonnet** · rama `oficina-pixel` · ~25k · plugins: ninguno
+Se espera: Eduardo ve la Oficina con 2–3 sesiones reales (una lanza un buscador, otra pide permiso) y cada personaje se reconoce por su placa; lo que vea mal queda anotado aquí. Se comprueba con la suite en verde y el PR `oficina-pixel → develop` abierto con su permiso.
+- [ ] [test] Suite completa en verde — `node --test 2>&1 | tail -20` y `node verificar_backlog.mjs "$PWD" --formato` limpio
+- [ ] [test] Prueba con sesiones vivas — Eduardo abre 2–3 sesiones (una con `buscador`, una pidiendo permiso); comprobar placas, salas, globo «!» y que nadie se encima; anotar aquí lo que falle como casillas «(añadido en S-OF3)»
+- [ ] [doc] PR con permiso de Eduardo — `oficina-pixel → develop` (si GraphQL de `gh` está limitado, REST `gh api repos/…/pulls`); al cerrar, marcar en `BACKLOG.md` la casilla de H23 «Oficina: aspecto gráfico» como hecha con referencia a este backlog
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S-OF3 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG_OFICINA.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S-OF3 BACKLOG_OFICINA.md`), rama `oficina-pixel`. Corre la suite, acompáñame a mirar la Oficina con sesiones vivas y anota lo que falle; pregúntame antes de abrir el PR. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
