@@ -1,6 +1,26 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `oficina-agentes` · S59b hecha: Tablero y Estudio revisados a ojo (1200 y 390 px, sin fallos), PR #14 `kanban-sesiones`, #15 `estudio-plan`, #16 `oficina-agentes` abiertos hacia `develop` por API REST (`gh pr create` usa GraphQL y estaba limitado). Sin cambios de código. Falta: probar a mano y mergear en orden.
+- Para retomar (2026-10-05, S59b): las tres vistas nuevas se ven bien a escritorio y móvil y los tres PR están abiertos. Falta que Eduardo pruebe a mano el chat «Estudiar» y la Oficina con una sesión viva (no se pudo ver en la revisión) y luego mergear los PR en orden, uno a uno. Nada roto.
+- 2026-10-05 · rama `oficina-agentes` (sin PR) · S59 hecha en parte, suite en verde (361 pasan, 2 omitidos; `probar.sh` 20/20; formato OK). `/api/metodologia` ya no llama a `fresco()`/`construir` (que pedía PRs a `gh`, ~15 s): `proyectosMetodologia()` lee backlogs/notas/bitácora del disco (`generar.mjs` ~1619) y responde en 14 ms. Test nuevo en `servidor.test.mjs` (en el entorno de test ya pasaba sin el cambio: no hay red). Falta → **S59b**.
+- Para retomar (2026-10-05, S59): la pestaña Metodología ya carga al instante; la lentitud venía de reconstruir todo el tablero con consultas a GitHub. Oficina se ve bien a escritorio y móvil. Falta mirar Tablero y Estudio y abrir los tres PR (GitHub tenía el límite de uso agotado). Nada roto.
+- 2026-10-05 · rama `oficina-agentes` (tablero y `metodologia-claude-code`, sin PR) · S57 hecha salvo instalar el hook en el settings real (→ S57b), suite en verde (359 pasan, 2 omitidos; los tests nuevos fallaban 8: 6 de `oficina.test.mjs` sin módulo, 1 de `servidor.test.mjs` `/api/oficina` 404, 1 de `metodologia.test.mjs` catálogo). Nuevo `oficina.mjs` (`accionDe`, `estadoOficina(eventos, colas, ahora)`, `VIGENCIA` 30 min principal / 10 min subagente); `generar.mjs`: `colasOficina` (cola de 16 KB de los .jsonl recientes y de `<sid>/subagents/agent-*.jsonl` con `agentType` del `.meta.json`), `proyectoDe` (carpeta de transcripciones, luego cwd dentro de repo/docs), `GET /api/oficina`, `resumenCacheado` extraído de `sesionesActivas`. Hook `claude/hooks/eventos_agentes.mjs` en metodologia-claude-code (+ `settings.base.json` en 10 eventos, `instalar.sh`, `desinstalar.sh`). Decisión: los eventos van a `~/.claude/oficina/eventos.jsonl` (`OFICINA_EVENTOS`), no a `~/.claude/tablero/` (que es un enlace al repo). Trampas: `Notification` no salta con `claude -p`; `--allowedTools` se come el prompt (va por stdin); Notification se codifica como `evento: "Notification:<tipo>"`. S57b hecha (hook instalado, ~21 ms, 359 verde); siguiente **S57c** (permiso real), luego **S58**.
+- 2026-10-05 · rama `oficina-agentes` (sin PR) · S58b hecha (vista en Chrome headless con eventos simulados, 1280 y 390 px), suite en verde (360 pasan, 2 omitidos). `plantilla.html`: etiqueta de personaje solo con icono, zonas propias para esperando/pensando/quieto. Trampa: `/api/metodologia` tarda ~18 s (la vista queda en «Leyendo…»). Siguiente: S59.
+- Para retomar (2026-10-05, S58b): la oficina se ve bien con muchos agentes (sin solapes) y en móvil sale la lista. Falta verla con una sesión viva (entrada por la puerta, movimiento) y la carga de Metodología tarda ~18 s. Sigue el cierre de H18–H20. Nada roto.
+- 2026-10-05 · rama `oficina-agentes` (sin PR) · S58 hecha salvo mirarla en el navegador (→ S58b), suite en verde (360 pasan, 2 omitidos; el test nuevo fallaba 1 de 1). `plantilla.html`: `htmlOficina` + CSS `.oficina`, conmutador `data-meta-vista` Flujo|Oficina, `sondearOficina` cada 1,5 s (solo pestaña visible, parcha el DOM para que caminen). Trampa: el worktree `.wt-oficina` no trae `proyectos.json` (ignorado por git); sin copiarlo falla 1 test de `auditoria.test.mjs`.
+- Para retomar (2026-10-05, S58): la oficina ya tiene su escena animada en la pestaña Metodología (Flujo | Oficina) y la suite pasa. Falta mirarla en el navegador con una sesión real (lee, edita, lanza un buscador, pide permiso) y pulir lo que se vea mal. Nada roto.
+- Para retomar (2026-10-05, S57c): la oficina ya distingue bien quién espera un permiso (el subagente, no el principal); los datos de S57 están completos y verificados con eventos reales. Sigue la escena animada (S58). Queda un worktree `../.wt-oficina` con esta rama, sin limpiar a propósito.
+- Para retomar (2026-10-05, S57b): el hook de la oficina ya está instalado y registra eventos reales; solo falta comprobar, en una sesión interactiva, qué aviso llega al pedir un permiso.
+- Para retomar (2026-10-05): El tablero ya sabe qué hace en este momento cada Claude y cada subagente (leyendo, escribiendo, ejecutando, buscando, esperando tu permiso, pensando o quieto), a partir de un aviso que guarda solo el nombre de la herramienta y del archivo, nunca lo que escribes. Falta instalar ese aviso en tu Claude Code (pide tu permiso) y comprobar con una sesión real el globo de «esperando aprobación»; después viene la escena animada. Nada roto.
+- 2026-10-05 · rama `estudio-plan` (sin PR) · S56 hecha salvo la prueba manual en navegador, suite en verde (352 pasan, 2 omitidos; los 3 tests nuevos fallaban: 2 de `servidor.test.mjs`, 1 de `generar.test.mjs`). `plantilla.html`: `botonEstudiar`, `panelEstudio`, estado `ESTUDIOS`, lectura ndjson de `/api/estudio`, guardar/«Guía»; `generar.mjs`/`estudio.mjs`: `MARCA_ESTUDIO` excluye al tutor de `sesionesActivas` y `ultimaSesionDe`. Siguiente: probar a mano (casilla abierta en S56) y **S57**.
+- Para retomar (2026-10-05): Ya se puede estudiar un plan desde el tablero: el botón «Estudiar» abre un chat con un Claude que solo lee, con acciones rápidas, y las respuestas se guardan en una guía. Las sesiones de ese tutor ya no aparecen como trabajo tuyo. Falta probarlo a mano en el navegador con el plan de H7 del IEP; después sigue la siguiente sesión del backlog.
+- 2026-10-05 · rama `estudio-plan` (sin PR) · S55 hecha, suite en verde (349 pasan, 2 omitidos; los tests nuevos fallaban 11: 7 de `estudio.test.mjs` + 4 de `servidor.test.mjs`). Nuevo `estudio.mjs` (args de solo lectura, prompt por stdin, acciones, `eventoDe`, `lanzarEstudio`, guía) y rutas `POST /api/estudio` (ndjson), `POST /api/estudio/guardar`, `GET /api/estudio/guia` en `generar.mjs`; `fixtures/claude-falso.mjs` (ejecutable); README. Trampas: `--allowedTools` es variádico (el prompt va por stdin); stream-json con `-p` exige `--verbose`; sin `--settings '{"disableAllHooks":true}'` el SessionEnd del usuario corre en cada respuesta; las sesiones del tutor quedan en las transcripciones del repo (casilla en S56). Siguiente: **S56** (Sonnet).
+- Para retomar (2026-10-05): El servidor ya sabe abrir un Claude que solo lee, le pasa el plan elegido y devuelve la respuesta mientras se escribe; también guarda lo útil en una guía por plan. Se probó una vez con el Claude real y se negó a escribir, como debe. Falta la parte visible: el botón «Estudiar», el chat y la guía en el tablero. Nada roto.
+- 2026-10-05 · rama `kanban-sesiones` (sin PR) · S54b hecha, suite en verde (338 pasan, 2 omitidos). Revisión visual a 1200 y 390 px: arreglado `.k-tarjeta.sesion { display:block }` (otra regla `.sesion` la hacía inline-flex y el pie quedaba en columna) y el rótulo viejo de arrastre. Siguiente: **S55** (Opus, rama `estudio-plan`).
+- Para retomar (2026-10-05): El Tablero por sesión ya se ve bien en pantalla ancha y en móvil: tarjetas legibles, panel con prompt y botón Copiar, y el botón de prompt junto a «estás aquí». Lo siguiente es la parte de estudiar un plan con un Claude de solo lectura. Nada roto.
+- 2026-10-05 · rama `kanban-sesiones` (sin PR) · S54 hecha salvo la revisión en navegador, suite en verde (338 pasan, 2 omitidos; los 3 tests nuevos fallaban 3 de 3). `plantilla.html`: `tarjetaSesion`, `panelSesion`, `botonPrompt`, `abrirSesion`, `marcarCasilla`, filtro de backlogs en cascada y aviso `.k-vacio`; se quitó «Mover a…»/arrastre de sesiones (los manejadores de arrastre quedan inertes). Siguiente: **S54b** (revisión visual) y **S55**.
+- Para retomar (2026-10-05): El Tablero ya dibuja una tarjeta por sesión con su línea en llano y, al tocarla, abre un panel con el prompt para copiar, lo que se espera, las casillas marcables, la rama/PR/CI y los commits; hay un botón «Prompt de SX» junto a «estás aquí». Falta mirarlo en el navegador con los datos del IEP en pantalla ancha y de móvil. Nada roto.
 - 2026-10-05 · rama `lectura-backlog` (sale de `kanban-sesiones`, sin PR) · S60 hecha, suite en verde (340 pasan, 2 omitidos; los 5 tests nuevos fallaban 5 de 5). `backlog.mjs`: `estado`, `arranque`, `indice`, `seccion` con varias claves (el archivo es el argumento `.md`); `auditoria.mjs`: «Bash sobre BACKLOG» solo cuenta `sed -n`/`grep`/`awk` sobre `BACKLOG*.md` por segmento y `backlogCli` cuenta el extractor aparte; `plantilla.html`: `NaNk` arreglado (`volumen`). Prompts de arranque cambiados a `arranque`. Sin comando global `backlog` (no hay `~/.claude/bin`). Esta rama sale de S53: el avance S54–S57c vive en `kanban-sesiones` y `oficina-agentes` (worktree `.wt-oficina`, S58 siguiente y en curso), no aquí. Siguiente en esa línea: **S58**; re-medir el hábito de lectura en S59.
 - Para retomar (2026-10-05): Una sesión ahora lee el Estado y su sección con un solo comando, y la tarjeta de auditoría ya no castiga ese hábito bueno ni muestra «NaNk». Los prompts de relevo e IEP ya lo piden así. Falta ver en 2–3 días si baja de verdad el gasto en lecturas del backlog. Nada roto.
 - 2026-10-05 · rama `kanban-sesiones` (sin PR) · diagnóstico de «Bash sobre BACKLOG», solo análisis (sin código ni tests). Plan: `~/.claude/plans/quiero-que-me-respondas-vectorized-owl.md`. Definida **H21 / S60** (Sonnet). Siguiente: **S60** (independiente de S54–S59).
@@ -154,12 +174,13 @@ Después: **S54**
 
 ### S54 — Kanban por sesión: vista y prompt actual · **Sonnet** · rama `kanban-sesiones` · ~70k
 Se espera: En la pestaña Tablero cada tarjeta es una sesión con una línea en llano; al tocarla se abre un panel con el prompt para copiar arriba y el resto del detalle; en Resumen hay un botón «Prompt de SX» junto a «estás aquí». Se comprueba con las pruebas de render y mirando el IEP (H7 + BACKLOG_H7.md muestra S0–S7).
-- [ ] [test] Render de tarjeta y panel, verlo fallar — `servidor.test.mjs` (extraer funciones con `vm` como en S51): tarjeta con llano y chip clave·modelo·x/y; panel con prompt + «Copiar», Se espera/Resultado, casillas con `casillaFormato`, rama/PR/CI; filtro hito+backlog vacío muestra aviso; botón «Prompt de» en la tarjeta de backlog del Resumen
-- [ ] Tarjeta de sesión en llano — `plantilla.html` `vistaKanban`/`tarjetaKanban` (`:1694`): línea llano, chip, avance, punto de CI; sin arrastre de sesiones
-- [ ] Panel de detalle al tocar la tarjeta — `plantilla.html`: lateral (pantalla completa ≤700px), orden prompt → Se espera/Resultado → casillas marcables (`POST /api/guardar`) → rama/PR/CI → commits y archivos (`/api/sesion-detalle` al abrir) → costo/tiempo (reusar `gasto` de `enCurso`)
-- [ ] Filtros en cascada — `plantilla.html`: elegir hito limita los backlogs; combinación vacía lo dice
-- [ ] Prompt actual a la vista — `plantilla.html`: botón «⧉ Prompt de SX» junto a «❯ estás aquí» (`:727`, `:799`, tarjetas de `:1840`) y arriba en `tarjetaEnCurso` (`:2015`)
-- [ ] Mirarlo en el navegador con datos del IEP — 1200 y 390 px; `node --test 2>&1 | tail -40` en verde
+- [x] [test] Render de tarjeta y panel, verlo fallar (3 fallaban) — `servidor.test.mjs` (extraer funciones con `vm` como en S51): tarjeta con llano y chip clave·modelo·x/y; panel con prompt + «Copiar», Se espera/Resultado, casillas con `casillaFormato`, rama/PR/CI; filtro hito+backlog vacío muestra aviso; botón «Prompt de» en la tarjeta de backlog del Resumen
+- [x] Tarjeta de sesión en llano — `plantilla.html` `vistaKanban`/`tarjetaKanban` (`:1694`): línea llano, chip, avance, punto de CI; sin arrastre de sesiones
+- [x] Panel de detalle al tocar la tarjeta — `plantilla.html`: lateral (pantalla completa ≤700px), orden prompt → Se espera/Resultado → casillas marcables (`POST /api/guardar`) → rama/PR/CI → commits y archivos (`/api/sesion-detalle` al abrir) → costo/tiempo (reusar `gasto` de `enCurso`)
+- [x] Filtros en cascada — `plantilla.html`: elegir hito limita los backlogs; combinación vacía lo dice
+- [x] Prompt actual a la vista — `plantilla.html`: botón «⧉ Prompt de SX» junto a «❯ estás aquí» (`:727`, `:799`, tarjetas de `:1840`) y arriba en `tarjetaEnCurso` (`:2015`)
+- [x] Mirarlo en el navegador con datos del IEP (hecho en S54b) — 1200 y 390 px; `node --test 2>&1 | tail -40` en verde
+Resultado: parcial. Tarjeta, panel, cascada de filtros y «⧉ Prompt de SX» hechos; `node --test` 338 ok / 0 fallos. Sin revisar en navegador (1200/390 px) — queda esa casilla. Se quitó el arrastre y «Mover a…» de las sesiones (tests viejos ajustados); los manejadores de arrastre quedan inertes.
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S54 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S54 BACKLOG.md`). Rama `kanban-sesiones`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
@@ -170,13 +191,28 @@ Después: **S55**
 Historia: Como Eduardo, quiero conversar con Claude sobre un plan que él hizo para que me saque lo técnico, me explique qué le pido en cada paso y me muestre cómo quedó el código, sin intentar mejorar el plan, para estudiarlo y entenderlo.
 Decisiones con Eduardo: motor = Claude Code local (`claude -p`, solo lectura, su suscripción); lo útil se guarda como guía `.md` en `datos/estudio/<proyecto>/<plan>.md` (no en `~/.claude/plans`, que el tablero lee como planes). Plugins/MCP: ninguno.
 
+
+### S54b — Kanban por sesión: revisión visual · **Sonnet** · rama `kanban-sesiones` · ~25k
+Se espera: El Tablero del IEP se ve bien a 1200 y 390 px: tarjetas legibles, panel lateral (pantalla completa en móvil), «Copiar» funciona y el botón «Prompt de SX» aparece. Se comprueba abriendo el tablero con el servidor y mirando ambas anchuras.
+- [x] [doc] Mirarlo con datos del IEP — abrir el tablero local, pestaña Tablero del IEP, 1200 y 390 px; anotar lo que falle como casillas «(añadido en S54b)»
+- [x] [fix] Corregir lo que se vea mal — `plantilla.html` CSS `.k-panel`, `.k-tarjeta.sesion`; `node --test 2>&1 | tail -40` en verde
+Resultado: revisado con Chrome headless a 1200 y 390 px: panel lateral (pantalla completa en móvil), «Copiar» y «Prompt de S3b» funcionan. Fallo hallado y corregido: otra regla `.sesion` daba `display:inline-flex` a la tarjeta y el pie quedaba en columna estrecha; ahora `display:block` y chips `nowrap`. Rótulo viejo «Arrastra una tarjeta…» cambiado. Suite 338 pasan, 2 omitidos.
+Prompt:
+```text
+Modelo: Sonnet. Sesión S54b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S54b BACKLOG.md`). Rama `kanban-sesiones`. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S55**
+
 ### S55 — Estudio: servidor · **Opus** · rama `estudio-plan` · ~70k
 Se espera: `POST /api/estudio` responde en streaming con un Claude de solo lectura que explica el plan elegido y puede seguir la conversación; las respuestas se guardan en la guía. Se comprueba con un `claude` falso en los tests, sin llamar al real.
-- [ ] [test] Estudio con un Claude de mentira, verlo fallar — `fixtures/claude-falso.mjs` (emite stream-json con `session_id`) + `estudio.test.mjs`: `argsEstudio` trae `-p`, `--output-format stream-json`, herramientas solo lectura y `--disallowedTools Edit Write NotebookEdit`, `--resume` si hay sesión; `servidor.test.mjs`: streaming, plan fuera del proyecto → 400, sin Origin → 403, guardar añade a la guía
-- [ ] Lanzar Claude en solo lectura — nuevo `estudio.mjs`: `argsEstudio({ plan, pregunta, sesionId })` con `--allowedTools "Read Grep Glob Bash(git log:*) Bash(git show:*) Bash(git diff:*)"`, `--append-system-prompt` de tutor («no propongas mejoras; explica, lista lo técnico, qué se le pide a Claude y muéstralo en el código»), `cwd` = repo; binario de `TABLERO_CLAUDE_BIN`
-- [ ] Ruta de estudio en streaming — `generar.mjs`: `POST /api/estudio { proyecto, plan, pregunta, sesionId? }`; el plan debe estar en `planes`/`backlogs` del proyecto; un proceso por plan con tiempo máximo
-- [ ] Acciones rápidas — `estudio.mjs`: «Extrae lo técnico», «¿Qué le pide a Claude cada paso?», «Explícame la sesión X», «Muéstrame cómo quedó» (git log/diff de la rama o commits del Resultado)
-- [ ] Guía de estudio — `POST /api/estudio/guardar` añade la respuesta a `datos/estudio/<proyecto>/<plan>.md`; README; `node --test 2>&1 | tail -40` en verde
+- [x] [test] Estudio con un Claude de mentira, verlo fallar (fallaron 11: los 7 de `estudio.test.mjs` y 4 de `servidor.test.mjs`) — `fixtures/claude-falso.mjs` (emite stream-json con `session_id`) + `estudio.test.mjs`: `argsEstudio` trae `-p`, `--output-format stream-json`, herramientas solo lectura y `--disallowedTools Edit Write NotebookEdit`, `--resume` si hay sesión; `servidor.test.mjs`: streaming, plan fuera del proyecto → 400, sin Origin → 403, guardar añade a la guía
+- [x] Lanzar Claude en solo lectura — nuevo `estudio.mjs`: `argsEstudio({ plan, pregunta, sesionId })` con `--allowedTools "Read Grep Glob Bash(git log:*) Bash(git show:*) Bash(git diff:*)"`, `--append-system-prompt` de tutor («no propongas mejoras; explica, lista lo técnico, qué se le pide a Claude y muéstralo en el código»), `cwd` = repo; binario de `TABLERO_CLAUDE_BIN`
+- [x] Ruta de estudio en streaming — `generar.mjs`: `POST /api/estudio { proyecto, plan, pregunta, sesionId? }`; el plan debe estar en `planes`/`backlogs` del proyecto; un proceso por plan con tiempo máximo
+- [x] Acciones rápidas — `estudio.mjs`: «Extrae lo técnico», «¿Qué le pide a Claude cada paso?», «Explícame la sesión X», «Muéstrame cómo quedó» (git log/diff de la rama o commits del Resultado)
+- [x] Guía de estudio — `POST /api/estudio/guardar` añade la respuesta a `datos/estudio/<proyecto>/<plan>.md`; README; `node --test 2>&1 | tail -40` en verde
+- [x] [fix] Sin hooks del usuario en el tutor (añadido en S55) — `argsEstudio` añade `--settings '{"disableAllHooks":true}'` y `--strict-mcp-config`: con el `claude` real, el SessionEnd del usuario corría en cada respuesta
+- [x] [feat] Leer la guía guardada (añadido en S55) — `GET /api/estudio/guia?proyecto&plan` → `{ ok, ruta, contenido|null }`, para que S56 no toque el servidor
+Resultado: cumplido. `estudio.mjs` (`argsEstudio`, `promptEstudio` por stdin porque `--allowedTools` es variádico, `ACCIONES` tecnico/pedidos/sesion/quedo, `preguntaDe`, `eventoDe`, `lanzarEstudio`, `rutaGuia`, `anadirAGuia`); rutas `POST /api/estudio` (ndjson, 409 si ya corre ese plan, 10 min máx., corta el proceso si se cierra la vista), `POST /api/estudio/guardar`, `GET /api/estudio/guia`. Probado una vez con el `claude` real (haiku): lee el plan, responde y se niega a escribir. Suite 349 pasan, 2 omitidos.
 Prompt:
 ```text
 Modelo: Opus. Sesión S55 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S55 BACKLOG.md`). Rama `estudio-plan` (créala desde `kanban-sesiones` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
@@ -185,10 +221,15 @@ Después: **S56**
 
 ### S56 — Estudio: vista · **Sonnet** · rama `estudio-plan` · ~55k
 Se espera: Desde Planes, un backlog o el detalle de una tarjeta, el botón «Estudiar» abre un chat con acciones rápidas, muestra la respuesta mientras llega y deja guardarla y releerla en «Guía».
-- [ ] [test] Render del chat y de la guía, verlo fallar — `servidor.test.mjs`: botón «Estudiar» en Planes/backlog/detalle de kanban, acciones rápidas, «Guardar en la guía», pestaña «Guía»
-- [ ] Panel de chat — `plantilla.html`: lectura del streaming de `/api/estudio`, markdown con el render existente, conserva `sesionId` para seguir la conversación
-- [ ] Guía guardada — `plantilla.html`: «Guardar en la guía» y vista «Guía» del `.md`
+- [x] [test] Render del chat y de la guía, verlo fallar (fallaron 2 de 2) — `servidor.test.mjs`: botón «Estudiar» en Planes/backlog/detalle de kanban, acciones rápidas, «Guardar en la guía», pestaña «Guía»
+- [x] Panel de chat — `plantilla.html`: lectura del streaming de `/api/estudio`, markdown con el render existente, conserva `sesionId` para seguir la conversación
+- [x] Guía guardada — `plantilla.html`: «Guardar en la guía» y vista «Guía» del `.md`
 - [ ] Probarlo en el navegador con el plan de H7 — «Extrae lo técnico» sobre el plan de H7 del IEP; `node --test 2>&1 | tail -40` en verde
+- [x] [fix] Que las sesiones del tutor no cuenten como trabajo (añadido en S55) — `generar.mjs`: las transcripciones cuyo primer mensaje empieza por «Plan a estudiar:» (`promptEstudio`) se excluyen de `sesionesActivas`, `ultimaSesionClaude` y el kanban; test en `generar.test.mjs` con un `.jsonl` de estudio que no aparece
+- [x] [doc] Contrato del servidor ya listo (añadido en S55) — usar `POST /api/estudio` (ndjson: sesion/texto/herramienta/fin/error), `POST /api/estudio/guardar` y `GET /api/estudio/guia`; etiquetas de los botones = `ACCIONES[*].etiqueta` de `estudio.mjs` (inyectarlas en los datos o copiarlas); «Explícame la sesión X» manda `accion:'sesion', sesion:'S3b'`; «Muéstrame cómo quedó» manda `rama` si la tarjeta la tiene
+- [ ] [prueba] Prueba manual en navegador pendiente (añadido en S56) — abrir `node generar.mjs --abrir`, Estudiar → «Extrae lo técnico» en el plan de H7 del IEP (necesita navegador y gasta tokens de Claude); la sesión de Sonnet no pudo manejar el navegador
+Resultado: Botón «Estudiar» en Planes, backlog y panel del kanban (con sesión y rama); panel lateral con chat en streaming (ndjson), acciones rápidas, pregunta libre, «Guardar en la guía» y pestaña «Guía»; las sesiones del tutor («Plan a estudiar:») ya no cuentan en sesiones activas, kanban ni última sesión. Suite: 352 pasan, 0 fallan, 2 omitidos. Falta la prueba manual en navegador.
+
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S56 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S56 BACKLOG.md`). Rama `estudio-plan`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
@@ -201,37 +242,85 @@ Decisiones con Eduardo: «esperando aprobación» sale de un **hook de eventos**
 
 ### S57 — Oficina: datos y hook · **Opus** · rama `oficina-agentes` (tablero y `metodologia-claude-code`) · ~75k
 Se espera: `GET /api/oficina` dice por agente y subagente qué hace ahora (leyendo, escribiendo, ejecutando, buscando, esperando, pensando, quieto) a partir del hook y de las transcripciones, sin guardar prompts ni contenido.
-- [ ] [test] Estado de la oficina y privacidad del hook, verlo fallar — `fixtures/eventos/` + `oficina.test.mjs`: `estadoOficina` con principal + subagente, Read → leyendo, Edit → escribiendo, Notification de permiso → esperando, SubagentStop → sale; el hook no escribe prompts ni contenido (recorre los campos de cada línea)
-- [ ] Prueba rápida de los avisos reales — registrar un payload real de PreToolUse, Notification y SubagentStop (Claude Code 2.1.286) y anotar aquí los campos (`agent_id`/`agent_type`, `notification_type`)
-- [ ] Hook de eventos — nuevo `hooks/eventos_agentes.mjs`: añade `{ t, sid, agente, tipo, evento, herramienta, archivo(basename), cwd }` a `~/.claude/tablero/eventos.jsonl`, rotado a 2000 líneas
-- [ ] Estado por agente — nuevo `oficina.mjs` (puro) `estadoOficina(eventos, colasJsonl, ahora)`; respaldo con colas `.jsonl` y subagentes reusando la caché de `sesionesActivas`; `GET /api/oficina` en `generar.mjs` (fuera de la huella)
-- [ ] Instalar el hook — `metodologia-claude-code/settings.base.json` + `instalar.sh`, y en el catálogo de `metodologia.mjs`; confirmar con Eduardo antes de tocar su `~/.claude/settings.json`; `node --test 2>&1 | tail -40` y `scripts/probar.sh` en verde
+- [x] [test] Estado de la oficina y privacidad del hook, verlo fallar — `fixtures/eventos/` + `oficina.test.mjs`: `estadoOficina` con principal + subagente, Read → leyendo, Edit → escribiendo, Notification de permiso → esperando, SubagentStop → sale; el hook no escribe prompts ni contenido (recorre los campos de cada línea)
+- [x] Prueba rápida de los avisos reales — registrar un payload real de PreToolUse, Notification y SubagentStop (Claude Code 2.1.286) y anotar aquí los campos (`agent_id`/`agent_type`, `notification_type`)
+  - Registrado con `claude -p` (Haiku): todos traen `session_id, transcript_path, cwd, prompt_id, permission_mode, hook_event_name`; los de un subagente añaden `agent_id` (p. ej. `a4b0888815eeff8c9`) y `agent_type` (`buscador`); `SubagentStart` = `agent_id, agent_type`; `SubagentStop` añade `agent_transcript_path, last_assistant_message, stop_hook_active, background_tasks`; `Stop` trae `last_assistant_message` y `UserPromptSubmit` trae `prompt` (el hook no los guarda). `Notification` no salta en `-p` (no hay diálogo de permiso): `notification_type` (`permission_prompt`/`idle_prompt`) queda **sin verificar → S57b**.
+- [x] Hook de eventos — nuevo `hooks/eventos_agentes.mjs`: añade `{ t, sid, agente, tipo, evento, herramienta, archivo(basename), cwd }` a `~/.claude/tablero/eventos.jsonl`, rotado a 2000 líneas
+- [x] Estado por agente — nuevo `oficina.mjs` (puro) `estadoOficina(eventos, colasJsonl, ahora)`; respaldo con colas `.jsonl` y subagentes reusando la caché de `sesionesActivas`; `GET /api/oficina` en `generar.mjs` (fuera de la huella)
+- [-] Instalar el hook → S57b (lo del repo hecho: `settings.base.json`, `instalar.sh`, `desinstalar.sh`, catálogo; falta confirmar con Eduardo y correr el instalador) — `metodologia-claude-code/settings.base.json` + `instalar.sh`, y en el catálogo de `metodologia.mjs`; confirmar con Eduardo antes de tocar su `~/.claude/settings.json`; `node --test 2>&1 | tail -40` y `scripts/probar.sh` en verde
 Prompt:
 ```text
 Modelo: Opus. Sesión S57 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S57 BACKLOG.md`). Rama `oficina-agentes` en el tablero y en metodologia-claude-code (créala desde `estudio-plan` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 Después: **S58**
 
+Resultado: `GET /api/oficina` ya dice, por agente y subagente, qué hace (desde el hook y, sin hook, desde las transcripciones), con proyecto y sin prompts ni contenido; probado con fixtures y en la suite. Falta instalar el hook en tu Claude Code real y ver el aviso de permiso de verdad.
+
+### S57b — Oficina: instalar el hook y probar el permiso · **Sonnet** · rama `oficina-agentes` (tablero y `metodologia-claude-code`) · ~30k
+Se espera: El hook de eventos queda instalado en el Claude Code de Eduardo y, en una sesión real, `curl localhost:<puerto>/api/oficina` muestra al agente leyendo, a un `buscador` entrando y saliendo, y «esperando» al pedir permiso.
+- [x] [verificación] Confirmar con Eduardo y correr el instalador — `cd ~/Desktop/Desarrollo/metodologia-claude-code && ./instalar.sh --dry-run` (enseñar el diff de settings.json: 10 eventos nuevos con `eventos_agentes.mjs`), y solo con su sí `./instalar.sh`; comprobar `~/.claude/hooks/eventos_agentes.mjs` enlazado → hecho: 10 eventos, respaldo 20261005-083814, ya registra eventos reales
+- [-] [verificación] Aviso de permiso real — en una sesión interactiva pedir un Bash que pida permiso y mirar `~/.claude/oficina/eventos.jsonl`: anotar si llega `Notification:permission_prompt`, `PermissionRequest` o ambos, y si traen `agent_id` cuando es un subagente; ajustar `aplicar()` en `oficina.mjs` (y su test) si difiere → ~21 ms por llamada; 359 pasan, 0 fallan → S57c
+- [x] [verificación] Medir el coste del hook — que no se note en cada herramienta (node ~40 ms); `node --test 2>&1 | tail -5` en verde → ~21 ms por llamada; 359 pasan, 0 fallan
+Prompt:
+```text
+Modelo: Sonnet. Sesión S57b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S57b BACKLOG.md`). Rama `oficina-agentes` en el tablero y en metodologia-claude-code. Pide confirmación antes de tocar ~/.claude/settings.json. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Resultado: Hook instalado en ~/.claude/settings.json (10 eventos, respaldo 20261005-083814) y ya registra eventos reales en ~/.claude/oficina/eventos.jsonl; cuesta ~21 ms por llamada; suite 359 verde. Falta probar el aviso de permiso real (→ S57c).
+
+### S57c — Oficina: aviso de permiso real · **Sonnet** · rama `oficina-agentes` · ~15k
+Se espera: Sabemos qué evento llega al pedir un permiso y `/api/oficina` muestra «esperando» en ese caso.
+- [x] [verificación] Aviso de permiso real — en una sesión interactiva (no `-p`) pedir un Bash que pida permiso y leer `tail ~/.claude/oficina/eventos.jsonl`: anotar si llega `Notification:permission_prompt`, `PermissionRequest` o ambos y si un subagente trae `agent_id`; ajustar `aplicar()` en `oficina.mjs` y su test si difiere → medido el 2026-10-05: llegan `PermissionRequest` (con `agente`/`tipo` del subagente si lo pide él) y después `Notification:permission_prompt` siempre como `principal` y sin herramienta; `aplicar()` ya no marca al principal con el Notification (test: fixture s10)
+Prompt:
+```text
+Modelo: Sonnet. Sesión S57c de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S57c BACKLOG.md`). Rama `oficina-agentes`. Interactiva, no -p. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Resultado: Medido en una sesión interactiva: al pedir permiso llega `PermissionRequest` (con el id y tipo del subagente si lo pide él) y luego `Notification:permission_prompt`, siempre como principal. La oficina marca «esperando» solo con `PermissionRequest`; así un subagente que espera ya no hace esperar al principal.
+Después: **S58**
+
 ### S58 — Oficina: escena animada · **Sonnet** · rama `oficina-agentes` · ~70k
 Se espera: En «Metodología», el conmutador «Flujo | Oficina» muestra una escena donde cada agente es un personaje que camina al estante al leer, teclea al escribir, usa la consola con Bash y muestra un globo al esperar aprobación; los subagentes entran y salen por la puerta.
-- [ ] [test] Render de la escena, verlo fallar — `servidor.test.mjs`: un personaje por agente del fixture con su clase de acción (`leyendo`, `escribiendo`, `esperando`…), globo en esperando, lista en ≤700px, iconos fijos con `prefers-reduced-motion`
-- [ ] Escena pixel-art — `plantilla.html`: SVG/CSS sin recursos externos (estante, escritorio con computador, terminal, puerta), personaje con etiqueta de tipo y proyecto, animaciones CSS
-- [ ] Sondeo en vivo — `plantilla.html`: `GET /api/oficina` cada 1,5 s solo con la pestaña visible
-- [ ] Mirarla en el navegador con una sesión real — que lee, edita, lanza un `buscador` y pide permiso; `node --test 2>&1 | tail -40` en verde
+- [x] [test] Render de la escena, verlo fallar — `servidor.test.mjs`: un personaje por agente del fixture con su clase de acción (`leyendo`, `escribiendo`, `esperando`…), globo en esperando, lista en ≤700px, iconos fijos con `prefers-reduced-motion` → fallaba 1 de 1 (el test agrupa todas las comprobaciones); ahora pasa
+- [x] Escena pixel-art — `plantilla.html`: SVG/CSS sin recursos externos (estante, escritorio con computador, terminal, puerta), personaje con etiqueta de tipo y proyecto, animaciones CSS → `htmlOficina` + CSS `.oficina`; entra por la puerta con `entrar`; la salida no se anima (el personaje simplemente desaparece)
+- [x] Sondeo en vivo — `plantilla.html`: `GET /api/oficina` cada 1,5 s solo con la pestaña visible → `sondearOficina`; parcha el DOM sin repintar si no cambian los agentes (así caminan con `transition`)
+- [-] [verificación] Mirarla en el navegador con una sesión real → S58b
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S58 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S58 BACKLOG.md`). Rama `oficina-agentes`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
+Resultado: La escena existe (conmutador Flujo | Oficina, personajes por agente, globo al esperar, lista en móvil, iconos fijos sin movimiento) y la suite pasa; falta verla con una sesión real (S58b).
+Después: **S58b**, luego **S59**
+
+### S58b — Oficina: verla con una sesión real · **Sonnet** · rama `oficina-agentes` · ~20k
+Se espera: En Metodología › Oficina se ve a un agente leyendo en el estante, escribiendo en el escritorio, un `buscador` entrando por la puerta y el globo al pedir permiso; lo que se vea mal queda corregido.
+- [x] [verificación] Mirarla en el navegador con una sesión real — `node generar.mjs --servir` en el worktree, abrir Metodología › Oficina, y en otra sesión leer, editar, lanzar un `buscador` y pedir un permiso; ajustar posiciones/tamaños en `plantilla.html` (sección «Oficina») si algo se solapa
+- [x] [test] Si se corrige algo, ajustar el test «oficina (S58)» — `servidor.test.mjs`; `node --test 2>&1 | tail -40` en verde → no hizo falta tocarlo; suite 360 pasan, 2 omitidos
+Prompt:
+```text
+Modelo: Sonnet. Sesión S58b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S58b BACKLOG.md`). Rama `oficina-agentes` (worktree `../.wt-oficina`; copia `proyectos.json` del tablero si falta). Interactiva, no -p. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Resultado: Vista con eventos simulados (Chrome headless, 1280 y 390 px). Corregido: personajes y etiquetas se apilaban con 11–13 agentes → etiqueta solo con icono (nombre en `title` y en la lista móvil), zonas propias para esperando/pensando/quieto. Móvil: lista correcta. Añadido: `/api/metodologia` tarda ~18 s (la vista queda en «Leyendo…»), pendiente para S59. No se vio con otra sesión en vivo ni la entrada por la puerta.
 Después: **S59**
 
 ### S59 — Cierre de H18–H20 · **Sonnet**, con Eduardo · ~40k
 Se espera: Todo en verde, revisado a ojo en el navegador con datos reales y con PRs abiertos hacia `develop`; la nota del chat de estudio queda cerrada.
-- [ ] [test] Suite completa y formato — `node --test 2>&1 | tail -40`, `scripts/probar.sh`, `verificar_backlog.mjs --formato`
-- [ ] Revisar a ojo las tres vistas con datos reales — Tablero, Estudio y Oficina a 1200 y 390 px; anotar lo que falle como sesión nueva
-- [ ] PRs y nota — `kanban-sesiones`, `estudio-plan`, `oficina-agentes` → `develop`; marcar la nota en `../notas/NOTAS_TABLERO.md`
+- [x] [rendimiento] Que Metodología cargue rápido (hoy ~18 s en «Leyendo…») — `/api/metodologia` en `generar.mjs` ~1680 / `metodologia.mjs`: medir qué lee (transcripciones) y cachear o acotar (añadido en S58b)
+- [x] [test] Suite completa y formato — `node --test 2>&1 | tail -40`, `scripts/probar.sh`, `verificar_backlog.mjs --formato`
+- [-] Revisar a ojo las tres vistas con datos reales — Tablero, Estudio y Oficina a 1200 y 390 px; anotar lo que falle como sesión nueva (solo Oficina vista a 1200 y 390 px, bien; faltan Tablero y Estudio) → S59b
+- [-] PRs y nota — `kanban-sesiones`, `estudio-plan`, `oficina-agentes` → `develop`; marcar la nota en `../notas/NOTAS_TABLERO.md` → S59b
+Resultado (parcial): `/api/metodologia` ya no reconstruye todo el tablero (la lentitud era `construir` pidiendo PRs a `gh`, ~15 s; ahora 14 ms). Suite 361 pasan, 2 omitidos; `probar.sh` 20/20; formato OK. Pendiente: ojo a Tablero y Estudio, y los PR (no se abrieron: `gh` con límite de tasa agotado y es acción externa que confirma Eduardo).
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S59 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léelos de un tirón con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S59 BACKLOG.md`). Trabaja con Eduardo. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+### S59b — Continuación del cierre de H18–H20 · **Sonnet**, con Eduardo · ~30k
+Se espera: Tablero y Estudio revisados a ojo a 1200 y 390 px y los tres PR abiertos hacia `develop`; la nota del chat de estudio queda marcada.
+- [x] [test] Ojo al Tablero y a Estudio con datos reales — Chrome headless a 1200 y 390 px (ver `shot.mjs` de la sesión anterior: CDP, `TABLERO_PUERTO=47399 node generar.mjs --servir`); anotar fallos como sesión nueva
+- [x] [doc] PRs y nota — `kanban-sesiones`, `estudio-plan`, `oficina-agentes` → `develop` (confirmar con Eduardo; `gh` tenía el límite de tasa agotado: `gh api rate_limit`); marcar la nota en `../notas/NOTAS_TABLERO.md`
+Resultado: Tablero y Estudio se ven bien a 1200 y 390 px, sin desbordes. PR #14, #15 y #16 abiertos hacia `develop` (por REST). La nota del chat de estudio ya estaba marcada. No probado: chat «Estudiar» con Claude real y Oficina con sesión en vivo.
+Prompt:
+```text
+Modelo: Sonnet. Sesión S59b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs arranque S59b BACKLOG.md`) y trabaja solo esa sesión, en la rama `oficina-agentes` (worktree `../.wt-oficina`; copia `proyectos.json` del tablero si falta). Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 
 Cómo ejecutarlo: S53 → S54; S55 → S56 (el botón en el detalle del kanban solo si S54 ya está); S57 → S58; al final S59. `/clear` entre sesiones.

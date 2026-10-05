@@ -23,6 +23,7 @@ const INFO = {
   statusline: ['sesion', 'Línea de estado de la terminal con contexto y costo.'],
   'hook:vigilar_contexto.sh': ['sesion', 'Avisa a 110k de contexto y pide relevo a 130k.'],
   'hook:acotar_lectura.mjs': ['sesion', 'Recorta lecturas y salidas largas para no llenar el contexto.'],
+  'hook:eventos_agentes.mjs': ['sesion', 'Anota qué hace cada agente y subagente (sin prompts ni contenido) para la oficina.'],
   'hook:resumen_semanal.sh': ['sesion', 'Genera el resumen semanal al abrir sesión (una vez por semana).'],
   'hook:generar.mjs --hook-inicio': ['sesion', 'Al abrir sesión, cuenta en qué va el proyecto y las notas abiertas.'],
   'mod:token-weather': ['sesion', 'Mod: clima de tokens de la sesión.'],

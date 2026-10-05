@@ -118,6 +118,35 @@ details summary { cursor: pointer; }
 .vacio { color: var(--suave); padding: 20px; text-align: center; }
 .hash { font-size: .85em; }
 
+/* ---------- Oficina (S58): escena de agentes, CSS puro sin recursos externos ---------- */
+.meta-vistas { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.oficina-escena { position: relative; height: 230px; max-width: 880px; overflow: hidden; border: 1px solid var(--borde); border-radius: var(--radio); background: linear-gradient(var(--panel) 0 72%, color-mix(in srgb, var(--borde) 70%, var(--panel)) 72%); }
+.oficina .estante { position: absolute; left: 2%; top: 14px; width: 22%; height: 96px; border: 3px solid var(--borde); background: repeating-linear-gradient(90deg, #c0504d 0 6px, #4f81bd 6px 11px, #9bbb59 11px 18px, #f79646 18px 22px), var(--panel); background-size: 100% 30%; background-repeat: repeat-x; background-position: 0 4px, 0 0; }
+.oficina .escritorio { position: absolute; left: 40%; top: 118px; width: 22%; height: 10px; background: #8b5a2b; box-shadow: 0 10px 0 -3px #6b4423; }
+.oficina .escritorio::before { content: ''; position: absolute; left: 30%; bottom: 10px; width: 36%; height: 26px; border: 3px solid var(--texto, #333); background: #8fd3ff; }
+.oficina .terminal { position: absolute; left: 68%; top: 56px; width: 16%; height: 62px; border: 3px solid var(--texto, #333); background: #101418; color: #5eea8a; font: 11px/1.2 var(--mono); padding: 4px 6px; }
+.oficina .terminal::after { content: '$ _'; animation: parpadeo 1s steps(2) infinite; }
+.oficina .puerta { position: absolute; right: 1.5%; top: 40px; width: 7%; height: 100px; border: 3px solid #6b4423; background: #a9743a; }
+.oficina .puerta::after { content: ''; position: absolute; right: 5px; top: 48px; width: 5px; height: 5px; border-radius: 50%; background: #f1c40f; }
+.personaje { position: absolute; width: 34px; height: 54px; font: 10px var(--mono); text-align: center; transition: left 1.2s linear, bottom 1.2s linear; }
+.personaje.entra { animation: entrar 1.4s ease-out; }
+.personaje .cuerpo { width: 16px; height: 16px; margin: 0 auto; background: var(--acento); box-shadow: 0 -11px 0 -2px #f5cba7, -5px 4px 0 -3px var(--acento), 5px 4px 0 -3px var(--acento); }
+.personaje .pies { display: block; width: 14px; height: 10px; margin: 0 auto; background: linear-gradient(90deg, #333 0 5px, transparent 5px 9px, #333 9px); animation: paso .5s steps(2) infinite; }
+.personaje.escribiendo .pies, .personaje.ejecutando .pies, .personaje.quieto .pies, .personaje.esperando .pies { animation: none; }
+.personaje.escribiendo .cuerpo { animation: teclea .25s steps(2) infinite; }
+.personaje.leyendo .cuerpo, .personaje.buscando .cuerpo, .personaje.pensando .cuerpo { animation: rebote 1s ease-in-out infinite; }
+.personaje .etq { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); white-space: nowrap; background: var(--panel); border: 1px solid var(--borde); border-radius: 3px; padding: 0 3px; color: var(--texto, inherit); }
+.personaje .globo { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); background: #fff8c5; color: #333; border: 2px solid #333; border-radius: 8px; padding: 0 5px; animation: rebote 1s ease-in-out infinite; }
+.oficina-lista { display: none; list-style: none; padding: 0; margin: 8px 0 0; }
+.oficina-vacia { color: var(--suave); }
+@keyframes parpadeo { 50% { opacity: 0; } }
+@keyframes paso { 50% { transform: scaleX(.6); } }
+@keyframes teclea { 50% { transform: translateY(2px); } }
+@keyframes rebote { 50% { transform: translateY(-3px); } }
+@keyframes entrar { from { left: 92%; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .oficina *, .oficina *::after { animation: none !important; transition: none !important; } }
+@media (max-width: 700px) { .oficina-escena { display: none; } .oficina-lista { display: block; } .oficina-lista li { margin-bottom: 6px; } }
+
 /* ---------- Barra de archivos + conmutador ---------- */
 .archivos { display: flex; gap: 0; overflow-x: auto; border-bottom: 1px solid var(--borde); margin-bottom: 12px; }
 .archivos button { flex: none; background: none; border: 0; border-bottom: 2px solid transparent; padding: 7px 12px; cursor: pointer; color: var(--suave); white-space: nowrap; font-size: .85em; }
@@ -439,6 +468,20 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
 .k-tarjeta.guardando { opacity: .55; }
 .k-pie { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-top: 4px; font-size: .85em; }
 .k-pie select { font: inherit; max-width: 100%; }
+.k-tarjeta.sesion { display: block; cursor: pointer; }
+.k-tarjeta.sesion .k-etq { white-space: nowrap; }
+.k-tarjeta.sesion.abierta { outline: 2px solid var(--acento); }
+.ci-punto { display: inline-block; width: .7em; height: .7em; border-radius: 50%; background: var(--suave); }
+.ci-ok { background: var(--verde, #2a9d4a); } .ci-mal { background: var(--rojo, #d1342f); } .ci-espera { background: var(--ambar, #d9a21b); }
+.k-vacio { padding: 12px; border: 1px dashed var(--borde); color: var(--suave); margin: 8px 0; }
+.k-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100%); overflow: auto; padding: 12px 14px; background: var(--panel); border-left: 1px solid var(--borde); box-shadow: -4px 0 16px rgba(0,0,0,.18); z-index: 20; }
+.est-yo { background: var(--panel2, rgba(127,127,127,.15)); padding: 6px 10px; border-radius: 6px; margin: 8px 0 4px; }
+.est-msgs { max-height: 50vh; overflow: auto; } .est-acciones { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.est-pestanas { display: flex; gap: 6px; margin-bottom: 8px; } .est-pestanas [aria-current=true] { font-weight: bold; text-decoration: underline; }
+#estudio textarea { width: 100%; box-sizing: border-box; }
+.k-panel-cab { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.k-panel .tareas { list-style: none; padding: 0; } .k-commits { padding-left: 1.1em; }
+.boton.chico { font-size: .8em; padding: 0 6px; }
 .k-etq { padding: 0 5px; border: 1px solid var(--borde); font: .8em/1.5 var(--mono); color: var(--suave); }
 /* Metodología viva (S51) */
 .meta-flujo { width: 100%; max-width: 880px; height: auto; display: block; }
@@ -453,6 +496,7 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
 .meta-detalle { margin-top: 8px; } .aviso-meta { color: var(--aviso); }
 @media (max-width: 700px) { .meta-flujo { display: none; } .meta-lista { display: block; } .meta-lista li { margin-bottom: 6px; } .meta-lista button, .meta-pieza { min-height: 44px; } }
 @media (max-width: 700px) {
+  .k-panel { width: 100%; border-left: 0; }
   .k-cols { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; padding-bottom: 6px; }
   .k-col { flex: 0 0 86%; scroll-snap-align: start; }
   .k-tarjeta:not(.abierta) .k-texto { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
@@ -481,6 +525,7 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
     <nav id="pestanas" aria-label="Secciones"></nav>
     <div id="panel-crear" aria-live="polite"></div>
     <main id="contenido"></main>
+    <div id="estudio"></div>
   </div>
   <footer id="barra-estado" aria-label="Barra de estado"></footer>
 </div>
@@ -724,6 +769,8 @@ function estadoResumido(txt) {
   const prim = resto.split('\n').find((l) => l.trim()) || '';
   return `<div class="estado-res">${md(prim)}${resto.trim() !== prim.trim() ? `<details><summary class="suave">Estado completo</summary>${md(txt)}</details>` : ''}</div>`;
 }
+const sesionDe = (archivo, id) => (P.kanban || []).find((x) => x.archivo === archivo && x.seccion === id);
+const sesionDeHito = (clave) => { const xs = (P.kanban || []).filter((x) => x.hito === clave && x.prompt); return xs.find((x) => x.estado === 'en-curso') || xs.find((x) => x.estado === 'por-hacer'); };
 // «❯ estás aquí: H4 — … → S3 — …» (si la sección tiene mini backlog, se encadena su «aquí»).
 // fuera = el botón navega al mapa en vez de saltar dentro de la página (Resumen).
 function lineaAqui(doc, clave, fuera) {
@@ -732,7 +779,7 @@ function lineaAqui(doc, clave, fuera) {
   const hijo = aqui.vinculo && P.backlogs.find((b) => b.archivo === aqui.vinculo);
   const sub = hijo && aplanar(hijo.estructura).find((s) => s.id === hijo.aqui);
   const destino = fuera ? `data-ir="backlogs" data-sel="${esc(clave)}" data-sec="${aqui.id}"` : `data-saltar="${idPaso(clave, aqui.id)}"`;
-  return `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> <button class="enlace" ${destino}>${esc(plano(aqui.titulo))}</button>${chips(aqui.meta)}${sub ? ` <span class="suave">→</span> <button class="enlace" data-ir="backlogs" data-sel="${esc(hijo.archivo)}" data-sec="${sub.id}">${esc(plano(sub.titulo))}</button>${chips(sub.meta)}` : ''}</p>`;
+  return `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> <button class="enlace" ${destino}>${esc(plano(aqui.titulo))}</button>${chips(aqui.meta)}${sub ? ` <span class="suave">→</span> <button class="enlace" data-ir="backlogs" data-sel="${esc(hijo.archivo)}" data-sec="${sub.id}">${esc(plano(sub.titulo))}</button>${chips(sub.meta)}` : ''} ${botonPrompt(sub ? sesionDe(hijo.archivo, sub.id) : sesionDe(doc.archivo, aqui.id))}</p>`;
 }
 function vistaMapa(doc) {
   if (doc.esPlan && doc.pareja) return mapaPlan(doc);
@@ -796,7 +843,7 @@ function mapaPlan(doc) {
   });
   return `<div class="mapa-cab"><div class="rotulo">Progreso</div>
       <div class="global">${barra(h, t, 24)}<span><strong>${h}/${t}</strong> tareas · ${pct(h, t)} %</span></div>
-      ${hitoAqui ? `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> <button class="enlace" data-saltar="${idPaso(doc.archivo, hitoAqui.clave)}">${esc(hitoAqui.clave)} — ${esc(hitoAqui.nombre || plano(aquiPar.titulo))}</button></p>` : ''}
+      ${hitoAqui ? `<p class="aqui"><span class="rotulo-aqui">❯ estás aquí</span> <button class="enlace" data-saltar="${idPaso(doc.archivo, hitoAqui.clave)}">${esc(hitoAqui.clave)} — ${esc(hitoAqui.nombre || plano(aquiPar.titulo))}</button> ${botonPrompt(sesionDeHito(hitoAqui.clave))}</p>` : ''}
       <p class="suave">Hitos de la tabla «Secuencia de hitos»; el avance sale de <button class="enlace" data-ir="backlogs" data-sel="${esc(par.archivo)}">${esc(par.archivo)}</button>.</p></div>
     <div class="mapa-rejilla"><div class="mapa-interior"><div class="mapa-linea">
       <ol class="linea">${pasos.join('')}</ol>${documentacion(doc.estructura)}</div>${panelFalta(par, true)}</div></div>`;
@@ -1659,7 +1706,8 @@ const KCOLS = [['por-hacer', 'Por hacer'], ['en-curso', 'En curso'], ['en-prueba
 const KMARCA = { 'por-hacer': ' ', 'en-curso': '~', hecho: 'x' };
 const kf = { hito: '', backlog: '', movidas: false };
 const kLocal = new Map(); // «archivo:linea» → estado puesto por el usuario mientras se guarda
-let kSesiones = null, kColumnas = null, kArrastre = null;
+let kSesiones = null, kColumnas = null, kArrastre = null, kAbierta = null;
+const kDetalle = new Map(); // «archivo:linea» → { principal, commits } de /api/sesion-detalle
 const kClave = (c) => `${c.archivo}:${c.linea}`;
 const haceSeg = (iso) => { const s = Math.max(1, Math.round((Date.now() - new Date(iso)) / 1000)); return s < 60 ? `hace ${s} s` : hace(iso); };
 const kSesionesP = () => (kSesiones || DATOS.sesiones || {})[P.id] || [];
@@ -1685,6 +1733,27 @@ function tarjetasKanban() {
   });
   return [...locales, ...ext];
 }
+function gastoSesion(c) {
+  const filas = c.rama ? (P.bitacora?.registro || []).filter((f) => f.rama === c.rama) : [];
+  return filas.length ? agregarBit(filas, 'rama').grupos[0] || null : null;
+}
+async function abrirSesion(clave) {
+  kAbierta = clave; pintar();
+  const c = tarjetasKanban().find((x) => !x.externa && kClave(x) === clave);
+  if (!c?.rama || kDetalle.has(clave) || !editable()) return;
+  try { kDetalle.set(clave, await (await fetch(`/api/sesion-detalle?proyecto=${encodeURIComponent(P.id)}&rama=${encodeURIComponent(c.rama)}`, { cache: 'no-store' })).json()); }
+  catch { kDetalle.set(clave, { error: 'No pude leer los commits de la rama.' }); }
+  if (kAbierta === clave) pintar();
+}
+async function marcarCasilla(clave, linea, hecha) {
+  const c = tarjetasKanban().find((x) => !x.externa && kClave(x) === clave);
+  const b = c && P.backlogs.find((x) => x.archivo === c.archivo);
+  const lineas = (b?.contenido ?? '').split('\n');
+  if (!b || !/\[[ xX~-]\]/.test(lineas[linea] ?? '')) { pintar(); return avisar('No encontré esa casilla en el archivo; recarga el tablero.', true); }
+  lineas[linea] = lineas[linea].replace(/\[[ xX~-]\]/, hecha ? '[x]' : '[ ]');
+  try { const r = await api('/api/guardar', { ruta: b.ruta, contenido: lineas.join('\n'), previo: b.contenido }); recargarDatos(r.datos); pintar(); }
+  catch (e) { pintar(); avisar(e.estado === 409 ? `${e.message} Recarga el tablero y vuelve a intentarlo.` : `No se pudo guardar: ${e.message}`, true); }
+}
 function franjaKanban() {
   const ses = kSesionesP(), viva = ses.find((s) => s.activa);
   if (viva) return `<div class="k-franja viva" id="k-franja" role="status"><span class="punto">●</span> Claude está trabajando en “${esc(corto(viva.titulo || 'sin título', 70))}”${viva.rama ? ` · rama ${esc(viva.rama)}` : ''}${viva.archivos?.[0] ? ` · tocando <code>${esc(viva.archivos[0].split('/').pop())}</code>` : ''} · ${haceSeg(viva.ultimo)}</div>`;
@@ -1696,27 +1765,132 @@ function tarjetaKanban(c) {
     const pie = `${c.item.tipo ? `<span class="k-etq">${esc(c.item.tipo)}</span>` : ''}<span class="k-etq">${esc(c.integ.nombre || c.integ.id)}</span>${c.item.asignado ? `<span class="k-etq">${esc(c.item.asignado)}</span>` : ''}`;
     return `<div class="k-tarjeta externa${c.hecha ? ' hecha' : ''}" title="Solo lectura: cambiar el estado desde aquí llega con el modo «participar»"><span class="k-texto">${c.item.url ? `<a href="${esc(c.item.url)}" target="_blank" rel="noopener">${esc(c.texto)} ↗</a>` : esc(c.texto)}</span><div class="k-pie">${pie}</div></div>`;
   }
-  const clave = [c.hito, c.clave].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' › ');
-  const k = esc(kClave(c)), ed = editable() && c.estado !== 'movida';
-  const destinos = ed ? `<select data-mover="${k}" aria-label="Mover a…"><option value="">Mover a…</option>${KCOLS.filter(([e]) => e !== 'en-prueba' && e !== c.estado).map(([e, t]) => `<option value="${e}">${t}</option>`).join('')}</select>` : '';
-  return `<div class="k-tarjeta${c.hecha ? ' hecha' : ''}${kLocal.has(kClave(c)) ? ' guardando' : ''}" data-k-tarjeta="${k}"${ed ? ' draggable="true"' : ''}${c.estado === 'en-prueba' ? ' title="En prueba es derivada: la tarjeta está hecha y su rama tiene un PR abierto o commits sin fusionar"' : ''}>
-    <span class="k-texto"${c.texto.length > 160 ? ` title="${esc(plano(c.texto))}"` : ''}>${inline(corto(c.texto, 160))}${chipsExternos(c.marcas)}</span>
-    <div class="k-pie">${clave ? `<span class="k-etq">${esc(clave)}</span>` : ''}${c.sub ? `<span class="k-etq">${c.sub.hechas}/${c.sub.total}</span>` : ''}${c.sec ? estrella(c.sec) : ''}${destinos}</div></div>`;
+  return tarjetaSesion(c);
 }
+const CI_K = { ok: ['ci-ok', 'CI en verde'], falla: ['ci-mal', 'CI con fallas'], corre: ['ci-espera', 'CI corriendo'] };
+function tarjetaSesion(c) {
+  const ci = c.pr && CI_K[c.pr.ci], total = c.total ? ` · ${c.hechas}/${c.total}` : '';
+  const chip = [c.clave, c.modelo].filter(Boolean).join(' · ') + total;
+  return `<div class="k-tarjeta sesion${c.estado === 'hecho' ? ' hecha' : ''}${kAbierta === kClave(c) ? ' abierta' : ''}" data-k-sesion="${esc(kClave(c))}" tabindex="0" role="button" aria-label="Abrir ${esc(c.clave || 'sesión')}">
+    <span class="k-texto">${esc(corto(c.llano || c.texto, 110))}</span>
+    <div class="k-pie"><span class="k-etq">${esc(chip)}</span>${ci ? `<span class="ci-punto ${ci[0]}" title="${ci[1]}" role="img" aria-label="${ci[1]}"></span>` : ''}${c.pr ? `<span class="k-etq">PR #${c.pr.numero}</span>` : ''}</div></div>`;
+}
+// Botón «⧉ Prompt de SX»: copia el prompt de arranque de la sesión (data-prompt) sin abrir nada.
+function botonPrompt(s) {
+  if (!s || !s.prompt) return '';
+  return `<button class="boton chico" type="button" data-prompt="${esc(s.prompt)}" title="Copiar el prompt de arranque de ${esc(s.clave || 'la sesión')}">⧉ Prompt de ${esc(s.clave || 'la sesión')}</button>`;
+}
+function panelSesion(c, det, gasto) {
+  const prompt = c.prompt ? `<div class="prompt-copiable"><div class="prompt-cab"><span class="rotulo">Prompt de ${esc(c.clave || 'la sesión')}</span><button class="boton" type="button" data-copiar aria-label="Copiar prompt">Copiar</button></div><pre tabindex="0">${esc(c.prompt)}</pre></div>` : '';
+  const espera = c.seEspera || c.resultado ? `<div class="espera-resultado">${c.seEspera ? `<div class="espera"><div class="rotulo">Se espera</div><p>${inline(c.seEspera)}</p></div>` : ''}${c.resultado ? `<div class="resultado"><div class="rotulo">Resultado</div><p>${inline(c.resultado)}</p></div>` : ''}</div>` : '';
+  const casillas = (c.tareas || []).length ? `<div class="rotulo">Casillas ${c.hechas}/${c.total}</div><ul class="tareas">${c.tareas.map((t) => `<li class="tarea${t.hecha ? ' hecha' : ''}"><label><input type="checkbox" data-linea="${t.linea}" data-k-casilla="${esc(kClave(c))}"${t.hecha ? ' checked' : ''}${editable() ? '' : ' disabled'}> <span class="texto">${casillaFormato(t.texto)}</span></label></li>`).join('')}</ul>` : '';
+  const ci = c.pr && CI_K[c.pr.ci];
+  const git = `<div class="k-git">${c.rama ? badgeRama(c.rama) : ''}${c.pr ? ` <a class="etq" href="${esc(c.pr.url)}" target="_blank" rel="noopener">PR #${c.pr.numero} ${esc(String(c.pr.estado || '').toLowerCase())}</a>` : ''}${ci ? ` <span class="ci-punto ${ci[0]}" aria-hidden="true"></span> ${ci[1]}` : ''}</div>`;
+  const commits = !c.rama ? '' : !det ? '<p class="suave">Cargando commits…</p>' : det.error ? `<p class="suave">${esc(det.error)}</p>`
+    : det.commits.length ? `<div class="rotulo">Commits frente a ${esc(det.principal)}</div><ul class="k-commits">${det.commits.map((m) => `<li><code>${esc(m.oid.slice(0, 7))}</code> ${esc(m.titulo)}<div class="suave">${esc((m.archivos || []).join(', '))}</div></li>`).join('')}</ul>` : '<p class="suave">Sin commits propios todavía.</p>';
+  const costo = gasto ? `<p class="suave">Costo ${usd(gasto.costo)} · ${Math.round(gasto.minutos)} min</p>` : '';
+  return `<aside id="k-panel" class="k-panel" role="dialog" aria-label="Detalle de ${esc(c.clave || 'la sesión')}"><div class="k-panel-cab"><strong>${esc(plano(c.titulo || c.llano))}</strong><button class="boton" type="button" data-k-cerrar aria-label="Cerrar detalle">✕</button></div>
+    ${prompt}${espera}${casillas}${git}${commits}${costo}<p>${botonEstudiar(c.archivo, { sesion: c.clave, rama: c.rama })}</p></aside>`;
+}
+// ---- Estudio (S56): chat de solo lectura sobre un plan/backlog (POST /api/estudio, ndjson) ----
+// Etiquetas = ACCIONES[*].etiqueta de estudio.mjs (el servidor es quien arma la pregunta).
+const ACCIONES_ESTUDIO = [['tecnico', 'Extrae lo técnico'], ['pedidos', '¿Qué le pide a Claude cada paso?'], ['sesion', 'Explícame la sesión X'], ['quedo', 'Muéstrame cómo quedó']];
+function botonEstudiar(ruta, o = {}) {
+  return `<button class="boton" type="button" data-estudiar="${esc(ruta)}"${o.sesion ? ` data-estudiar-sesion="${esc(o.sesion)}"` : ''}${o.rama ? ` data-estudiar-rama="${esc(o.rama)}"` : ''} title="Pregúntale a un Claude de solo lectura sobre este plan">Estudiar</button>`;
+}
+function panelEstudio(e) {
+  const ultima = e.mensajes[e.mensajes.length - 1];
+  const puedeGuardar = !e.cargando && ultima && ultima.rol === 'claude' && ultima.fin && ultima.texto;
+  const msgs = e.mensajes.map((m, i) => m.rol === 'yo' ? `<div class="est-yo">${esc(m.texto)}</div>`
+    : `<div class="est-claude">${m.texto ? md(m.texto) : '<span class="suave">Pensando…</span>'}${(m.herramientas || []).length ? `<div class="suave">${m.herramientas.map((h) => esc(h)).join(' · ')}</div>` : ''}${m.error ? `<p class="suave" style="color:var(--aviso)">${esc(m.error)}</p>` : ''}</div>`).join('');
+  const acciones = ACCIONES_ESTUDIO.filter(([k]) => k !== 'sesion' || e.sesion).map(([k, t]) => `<button class="boton" type="button" data-estudio-accion="${k}"${e.cargando ? ' disabled' : ''}>${esc(k === 'sesion' ? t.replace('X', e.sesion) : t)}</button>`).join('');
+  const chat = `<div class="est-msgs" aria-live="polite">${msgs || '<p class="suave">Elige una acción o pregunta lo que quieras: Claude solo lee, no edita nada.</p>'}</div>
+    <div class="est-acciones">${acciones}</div>
+    <textarea rows="2" data-estudio-pregunta placeholder="Pregunta sobre este plan…"${e.cargando ? ' disabled' : ''}></textarea>
+    <p><button class="boton" type="button" data-estudio-enviar${e.cargando ? ' disabled' : ''}>Preguntar</button>${puedeGuardar ? ' <button class="boton" type="button" data-estudio-guardar="1">Guardar en la guía</button>' : ''}</p>`;
+  const guia = e.guia ? md(e.guia) : '<p class="suave">Aún no guardaste nada de este plan en la guía.</p>';
+  return `<aside id="est-panel" class="k-panel" role="dialog" aria-label="Estudiar el plan"><div class="k-panel-cab"><strong>Estudiar · ${esc(String(e.plan).split('/').pop())}</strong><button class="boton" type="button" data-estudio-cerrar aria-label="Cerrar">✕</button></div>
+    <div class="est-pestanas"><button type="button" data-estudio-pestana="chat" aria-current="${e.pestana !== 'guia'}">Chat</button><button type="button" data-estudio-pestana="guia" aria-current="${e.pestana === 'guia'}">Guía</button></div>
+    ${e.pestana === 'guia' ? guia : chat}</aside>`;
+}
+const ESTUDIOS = new Map(); let estudioAbierto = null;
+function pintarEstudio() {
+  const host = $('#estudio'); if (!host) return;
+  const e = estudioAbierto && ESTUDIOS.get(estudioAbierto);
+  const previo = host.querySelector('textarea')?.value || '';
+  host.innerHTML = e ? panelEstudio(e) : '';
+  const t = host.querySelector('textarea'); if (t && previo) t.value = previo;
+  const m = host.querySelector('.est-msgs'); if (m) m.scrollTop = m.scrollHeight;
+}
+async function abrirEstudio(ref, sesion, rama) {
+  const r = [...P.planes, ...P.backlogs].find((x) => x.ruta === ref || x.archivo === ref);
+  if (!r) return;
+  if (!ESTUDIOS.has(r.ruta)) ESTUDIOS.set(r.ruta, { plan: r.ruta, mensajes: [], cargando: false, pestana: 'chat', guia: null, sesionId: null });
+  const e = ESTUDIOS.get(r.ruta); e.sesion = sesion || e.sesion || null; e.rama = rama || e.rama || null;
+  estudioAbierto = r.ruta; pintarEstudio();
+  try { e.guia = (await (await fetch(`/api/estudio/guia?proyecto=${encodeURIComponent(P.id)}&plan=${encodeURIComponent(r.ruta)}`, { cache: 'no-store' })).json()).contenido; pintarEstudio(); } catch {}
+}
+async function preguntarEstudio(cuerpo, etiqueta) {
+  const e = ESTUDIOS.get(estudioAbierto); if (!e || e.cargando) return;
+  const m = { rol: 'claude', texto: '', fin: false, herramientas: [] };
+  e.mensajes.push({ rol: 'yo', texto: etiqueta }, m); e.cargando = true; e.ultimaPregunta = etiqueta; pintarEstudio();
+  try {
+    const r = await fetch('/api/estudio', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ proyecto: P.id, plan: e.plan, sesionId: e.sesionId || undefined, ...cuerpo }) });
+    if (!r.ok) { m.error = (await r.json().catch(() => ({}))).error || `Error ${r.status}`; }
+    else {
+      const lector = r.body.getReader(), dec = new TextDecoder(); let resto = '';
+      const evento = (ev) => {
+        if (ev.tipo === 'sesion' && ev.sesionId) e.sesionId = ev.sesionId;
+        else if (ev.tipo === 'texto') m.texto += ev.texto;
+        else if (ev.tipo === 'herramienta') m.herramientas.push(`${ev.nombre} ${ev.detalle || ''}`.trim());
+        else if (ev.tipo === 'fin') { if (ev.sesionId) e.sesionId = ev.sesionId; if (!m.texto && ev.texto) m.texto = ev.texto; m.fin = !ev.error; if (ev.error) m.error = ev.texto || 'Claude respondió con un error.'; }
+        else if (ev.tipo === 'error') m.error = ev.error;
+      };
+      for (;;) {
+        const { done, value } = await lector.read(); if (done) break;
+        resto += dec.decode(value, { stream: true });
+        const ls = resto.split('\n'); resto = ls.pop();
+        for (const l of ls) { try { evento(JSON.parse(l)); } catch {} }
+        pintarEstudio();
+      }
+    }
+  } catch (x) { m.error = 'No pude hablar con el servidor.'; }
+  e.cargando = false; pintarEstudio();
+}
+async function guardarEstudio() {
+  const e = ESTUDIOS.get(estudioAbierto); const m = e?.mensajes[e.mensajes.length - 1]; if (!e || !m?.fin) return;
+  try {
+    const r = await fetch('/api/estudio/guardar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ proyecto: P.id, plan: e.plan, pregunta: e.ultimaPregunta, respuesta: m.texto }) });
+    const j = await r.json(); if (!r.ok) throw new Error(j.error);
+    e.guia = j.contenido; avisar('Guardado en la guía.'); pintarEstudio();
+  } catch (x) { avisar(x.message || 'No se pudo guardar.', true); }
+}
+document.addEventListener('click', (ev) => {
+  const t = ev.target.closest?.('button'); if (!t) return;
+  const d = t.dataset;
+  if (d.estudiar) abrirEstudio(d.estudiar, d.estudiarSesion, d.estudiarRama);
+  else if (d.estudioCerrar !== undefined) { estudioAbierto = null; pintarEstudio(); }
+  else if (d.estudioPestana) { const e = ESTUDIOS.get(estudioAbierto); if (e) { e.pestana = d.estudioPestana; pintarEstudio(); } }
+  else if (d.estudioAccion) { const e = ESTUDIOS.get(estudioAbierto); const et = ACCIONES_ESTUDIO.find(([k]) => k === d.estudioAccion)[1].replace('X', e.sesion || 'X'); preguntarEstudio({ accion: d.estudioAccion, sesion: e.sesion || undefined, rama: e.rama || undefined }, et); }
+  else if (d.estudioEnviar !== undefined) { const a = $('#estudio textarea'); const q = a?.value.trim(); if (q) { a.value = ''; preguntarEstudio({ pregunta: q }, q); } }
+  else if (d.estudioGuardar) guardarEstudio();
+});
 function vistaKanban() {
   const todas = tarjetasKanban();
   if (!todas.length) return '<div class="vacio">Este proyecto aún no tiene tareas para mostrar como tablero.</div>';
-  const hitos = [...new Set(todas.map((c) => c.hito).filter(Boolean))], backs = [...new Set(todas.map((c) => c.archivo).filter(Boolean))];
+  const hitos = [...new Set(todas.map((c) => c.hito).filter(Boolean))], backs = [...new Set(todas.filter((c) => !kf.hito || c.hito === kf.hito).map((c) => c.archivo).filter(Boolean))];
   const visibles = todas.filter((c) => (!kf.hito || c.hito === kf.hito) && (!kf.backlog || c.archivo === kf.backlog) && (kf.movidas || c.estado !== 'movida'));
   const nMov = todas.filter((c) => c.estado === 'movida').length;
   const col = ([e, t]) => { const xs = visibles.filter((c) => c.estado === e); return `<section class="k-col" data-kanban-col="${e}" aria-label="${t}"><h3><span>${t}</span><span class="suave">${xs.length}</span></h3>${xs.map(tarjetaKanban).join('') || '<div class="suave">—</div>'}</section>`; };
   const movidas = visibles.filter((c) => c.estado === 'movida');
+  const abierta = kAbierta && todas.find((c) => !c.externa && kClave(c) === kAbierta);
   return `${franjaKanban()}<div class="k-filtros">
     ${hitos.length > 1 ? `<label>Hito <select data-k-filtro="hito"><option value="">Todos</option>${hitos.map((h) => `<option${kf.hito === h ? ' selected' : ''}>${esc(h)}</option>`).join('')}</select></label>` : ''}
     ${backs.length > 1 ? `<label>Backlog <select data-k-filtro="backlog"><option value="">Todos</option>${backs.map((h) => `<option${kf.backlog === h ? ' selected' : ''}>${esc(h)}</option>`).join('')}</select></label>` : ''}
     ${nMov ? `<label><input type="checkbox" data-k-filtro="movidas"${kf.movidas ? ' checked' : ''}> ver movidas (${nMov})</label>` : ''}
-    <span class="suave">${editable() ? 'Arrastra una tarjeta o usa «Mover a…».' : 'Abre el tablero con el servidor para mover tarjetas.'}</span></div>
-  <div class="k-cols">${KCOLS.map(col).join('')}</div>
+    <span class="suave">${editable() ? 'Toca una sesión para ver su prompt y sus casillas.' : 'Abre el tablero con el servidor para ver commits y marcar casillas.'}</span></div>
+  ${visibles.length ? '' : `<div class="k-vacio" role="status">Ninguna sesión con ${[kf.hito && `el hito ${esc(kf.hito)}`, kf.backlog && `el backlog ${esc(kf.backlog)}`].filter(Boolean).join(' y ')}. Cambia o quita un filtro.</div>`}
+  <div class="k-cols">${KCOLS.map(col).join('')}</div>${abierta ? panelSesion(abierta, kDetalle.get(kClave(abierta)), gastoSesion(abierta)) : ''}
   ${kf.movidas && movidas.length ? `<h3>Movidas</h3>${movidas.map(tarjetaKanban).join('')}` : ''}`;
 }
 async function moverTarjeta(clave, destino) {
@@ -1745,12 +1919,23 @@ document.addEventListener('drop', (e) => { const c = e.target.closest?.('[data-k
 document.addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset?.mover) { const d = t.value; t.value = ''; if (d) moverTarjeta(t.dataset.mover, d); return; }
+  if (t.dataset?.kCasilla) { marcarCasilla(t.dataset.kCasilla, Number(t.dataset.linea), t.checked); return; }
   const f = t.dataset?.kFiltro;
-  if (f) { kf[f] = f === 'movidas' ? t.checked : t.value; if (f === 'hito') sel.tablero = t.value; pintar(); }
+  if (f) { if (f === 'hito') kf.backlog = ''; kf[f] = f === 'movidas' ? t.checked : t.value; if (f === 'hito') sel.tablero = t.value; pintar(); }
 });
 document.addEventListener('click', (e) => {
-  const t = e.target.closest?.('.k-tarjeta');
+  const p = e.target.closest?.('[data-prompt]');
+  if (p) { copiarTexto(p.dataset.prompt).then((ok) => avisar(ok ? 'Prompt copiado.' : 'No se pudo copiar el prompt.', !ok)); return; }
+  if (e.target.closest?.('[data-k-cerrar]')) { kAbierta = null; pintar(); return; }
+  const s = e.target.closest?.('[data-k-sesion]');
+  if (s && !e.target.closest('a, button, select')) { abrirSesion(s.dataset.kSesion); return; }
+  const t = e.target.closest?.('.k-tarjeta:not(.sesion)');
   if (t && !e.target.closest('a, button, select')) t.classList.toggle('abierta');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && kAbierta) { kAbierta = null; pintar(); return; }
+  const s = (e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-k-sesion]') && e.target;
+  if (s) { e.preventDefault(); abrirSesion(s.dataset.kSesion); }
 });
 // Sondeo propio (5 s, solo en esta pestaña y con la página visible): no entra en la huella de /api/version.
 if (editable()) {
@@ -1772,6 +1957,49 @@ if (editable()) {
   setInterval(sondearSesiones, 5000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sondearSesiones(); });
 }
+
+// ---------- Oficina (S58): escena animada con GET /api/oficina (solo con la pestaña visible) ----------
+const ICONO_OFICINA = { leyendo: '📖', escribiendo: '✍️', ejecutando: '⌨️', buscando: '🔎', esperando: '⏳', pensando: '💭', quieto: '💤' };
+const LUGAR_OFICINA = { leyendo: 6, buscando: 12, escribiendo: 46, ejecutando: 72, esperando: 20, pensando: 56, quieto: 34 };
+function htmlOficina(datos, nuevos) {
+  const agentes = (datos && datos.agentes) || [];
+  const ocupados = {};
+  const llave = (a) => `${a.sid}/${a.agente}`;
+  const nombre = (a) => `${a.tipo || (a.principal ? 'principal' : 'agente')}${a.proyecto ? ' · ' + a.proyecto : ''}`;
+  const personajes = agentes.map((a) => {
+    const n = ocupados[a.accion] = (ocupados[a.accion] || 0) + 1;
+    const x = Math.min((LUGAR_OFICINA[a.accion] ?? 30) + ((n - 1) >> 1) * 9, 84), y = 8 + ((n - 1) % 2) * 14;
+    return `<div class="personaje ${esc(a.accion)}${nuevos && nuevos.has(llave(a)) ? ' entra' : ''}" data-key="${esc(llave(a))}" style="left:${x}%;bottom:${y}px" title="${esc(nombre(a))}">${a.accion === 'esperando' ? '<span class="globo">…</span>' : ''}<span class="cuerpo"></span><span class="pies"></span><span class="etq">${ICONO_OFICINA[a.accion] || ''}</span></div>`;
+  }).join('');
+  const lista = agentes.map((a) => `<li>${ICONO_OFICINA[a.accion] || ''} <b>${esc(nombre(a))}</b> — ${esc(a.accion)}${a.archivo ? ' · ' + esc(a.archivo) : ''}</li>`).join('');
+  return `<section class="tarjeta meta oficina"><h2><span>Oficina</span><small>${agentes.length} agente(s) trabajando</small></h2>
+    ${agentes.length ? '' : '<p class="oficina-vacia">Nadie en la oficina: no hay sesiones de Claude Code activas.</p>'}
+    <div class="oficina-escena" role="img" aria-label="Oficina con ${agentes.length} agente(s)"><div class="estante"></div><div class="escritorio"></div><div class="terminal"></div><div class="puerta"></div>${personajes}</div>
+    <ul class="oficina-lista" aria-label="Agentes">${lista}</ul></section>`;
+}
+let OFICINA = null, metaVista = 'flujo', oficinaOcupada = false;
+const llavesOficina = (d) => ((d && d.agentes) || []).map((a) => `${a.sid}/${a.agente}`);
+async function sondearOficina() {
+  if (document.hidden || pestana !== 'metodologia' || metaVista !== 'oficina' || oficinaOcupada) return;
+  oficinaOcupada = true;
+  try {
+    const nuevo = await (await fetch('/api/oficina', { cache: 'no-store' })).json();
+    const antes = llavesOficina(OFICINA), ahora = llavesOficina(nuevo), previa = OFICINA;
+    OFICINA = nuevo;
+    if (pestana !== 'metodologia' || metaVista !== 'oficina') return;
+    const escena = document.querySelector('.oficina-escena');
+    if (!previa || !escena || antes.join() !== ahora.join()) { oficinaNuevos = new Set(ahora.filter((k) => !antes.includes(k))); pintar(); return; }
+    const t = document.createElement('template'); t.innerHTML = htmlOficina(nuevo);
+    t.content.querySelectorAll('.personaje').forEach((n) => {
+      const el = escena.querySelector(`.personaje[data-key="${CSS.escape(n.dataset.key)}"]`);
+      if (el) { el.className = n.className; el.style.cssText = n.style.cssText; el.innerHTML = n.innerHTML; }
+    });
+    const lista = document.querySelector('.oficina-lista'); if (lista) lista.innerHTML = t.content.querySelector('.oficina-lista').innerHTML;
+  } catch {} finally { oficinaOcupada = false; }
+}
+let oficinaNuevos = null;
+setInterval(sondearOficina, 1500);
+document.addEventListener('visibilitychange', sondearOficina);
 
 // ---------- Metodología viva (S51): flujo con el estado real de cada pieza (GET /api/metodologia) ----------
 let META = null, metaSel = null, metaCargando = false;
@@ -1815,7 +2043,10 @@ function htmlMetodologia(g, sel) {
 }
 function vistaMetodologia() {
   if (!META) { cargarMeta(); return '<p class="suave">Leyendo la metodología instalada…</p>'; }
-  return htmlMetodologia(META, metaSel);
+  const conm = `<div class="meta-vistas"><div class="conmutador" role="group" aria-label="Vista de metodología">
+    <button data-meta-vista="flujo" aria-pressed="${metaVista === 'flujo'}">Flujo</button><button data-meta-vista="oficina" aria-pressed="${metaVista === 'oficina'}">Oficina</button></div></div>`;
+  if (metaVista === 'oficina') { const n = oficinaNuevos; oficinaNuevos = null; if (!OFICINA) sondearOficina(); return conm + htmlOficina(OFICINA || { agentes: [] }, n); }
+  return conm + htmlMetodologia(META, metaSel);
 }
 
 const VISTAS = {
@@ -1863,7 +2094,7 @@ const VISTAS = {
     const actual = P.backlogs.find((b) => b.archivo === sel.backlogs) || P.backlogs[0];
     return `<div class="archivos" aria-label="Archivos">${P.backlogs.map((b) => `<button data-sel="${esc(b.archivo)}" aria-current="${b === actual}">${esc(b.archivo)}${b.total ? `<span class="n">${b.hechas}/${b.total}</span>` : ''}</button>`).join('')}${editable() ? '<button class="boton" type="button" data-crear="backlog" title="Crear un backlog secundario con nombre; el principal no se toca">＋ Otro backlog</button>' : ''}</div>
       ${modo.backlogs !== 'documento' && editando !== actual.ruta ? barraBusqueda('backlogs', true) : ''}
-      ${editando === actual.ruta ? vistaEditor(actual.ruta) : `${barraVista(actual, 'backlogs')}
+      ${editando === actual.ruta ? vistaEditor(actual.ruta) : `${barraVista(actual, 'backlogs')}<p>${botonEstudiar(actual.ruta)}</p>
       ${modo.backlogs === 'documento' ? `<div class="tarjeta">${md(actual.contenido)}</div>` : vistaMapa(actual)}`}`;
   },
   planes() {
@@ -1872,7 +2103,7 @@ const VISTAS = {
     return `${barraBusqueda('planes', false)}<div class="lateral">
       <div class="tarjeta lista">${P.planes.map((p) => `<button data-sel="${esc(p.nombre)}" data-busca="${esc((p.titulo + ' ' + p.nombre + ' ' + p.contenido).toLowerCase())}" aria-current="${p === actual}">
         <strong>${esc(p.titulo)}</strong><br><span class="suave">${fecha(p.modificado)} · ${esc(p.carpetas.join(', '))}</span></button>`).join('')}</div>
-      <div style="min-width:0">${editando === actual.ruta ? vistaEditor(actual.ruta) : `<p class="suave hash" style="margin-top:0;overflow-wrap:anywhere">${esc(actual.ruta)}</p>${barraVista(actual, 'planes')}
+      <div style="min-width:0">${editando === actual.ruta ? vistaEditor(actual.ruta) : `<p class="suave hash" style="margin-top:0;overflow-wrap:anywhere">${esc(actual.ruta)}</p>${barraVista(actual, 'planes')}<p>${botonEstudiar(actual.ruta)}</p>
         ${modo.planes === 'documento' ? `<div class="tarjeta">${md(actual.contenido)}</div>` : vistaMapa(actual)}`}</div></div>`;
   },
   historial() {
@@ -2026,7 +2257,7 @@ function tarjetaEnCurso(p, compacta = false) {
   return `<section class="tarjeta en-curso" aria-label="Plan en curso">
     <h2><span>${c.completo ? `✓ ${esc(titulo)} completo` : `▶ En curso · ${esc(titulo)}`}</span><small>${plan ? hace(plan.modificado) : hace(b.modificado)}</small></h2>
     <div class="chips-proy">${compacta ? `<span class="etq">${esc(p.nombre)}</span>` : ''}${c.rama ? `<span class="etq" title="Rama">⎇ ${esc(c.rama)}</span>` : ''}${plan ? `<span class="etq" title="${esc(plan.nombre)}">Plan${c.planDe ? ` (de ${esc(c.planDe)})` : ''}: ${esc(corto(plan.titulo.replace(/^Plan\s*[:—–-]\s*/i, ''), 60))}</span>` : ''}${chips({ modelo: aqui.meta?.modelo || destacado?.modelo })}</div>
-    ${etiquetasFormato(hito, aqui, tarea)}
+    ${etiquetasFormato(hito, aqui, tarea)}${destacado ? `<p>${botonPrompt({ clave: destacado.clave, prompt: destacado.texto })}</p>` : ''}
     ${queSeBusca(hito, plan, compacta)}
     ${compacta ? '' : bloqueEspera(aqui)}
     ${segmentos(b, sesiones, c.completo || siguiente ? null : aqui.id)}
@@ -2208,6 +2439,8 @@ document.addEventListener('keydown', (e) => {
   if (mt && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); metaSel = mt.dataset.meta; pintar(); }
 });
 document.addEventListener('click', (e) => {
+  const mv = e.target.closest('[data-meta-vista]');
+  if (mv) { metaVista = mv.dataset.metaVista; pintar(); return; }
   const mt = e.target.closest('[data-meta]');
   if (mt) { metaSel = mt.dataset.meta; pintar(); return; }
   const b = e.target.closest('button');
