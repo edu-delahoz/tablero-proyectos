@@ -138,7 +138,8 @@ export function distribuirOficina(agentes = [], previa = null) {
   const k = (x, y) => `${x},${y}`
   // Bloqueadas: los muebles y las sillas (cada silla es solo de su dueño).
   const bloqueada = (sala, x, y, quien) => sala.escritorios.some((e, i) => (e.x === x && e.y === y) || (silla(i).x === x && silla(i).y === y && e.sid !== quien))
-  const libre = (sala, x, y, quien) => x >= 1 && x <= sala.ancho - 2 && y >= 1 && y <= sala.alto - 2 && !bloqueada(sala, x, y, quien) && !ocupadas.get(sala.id).has(k(x, y))
+  // El sprite de pie mide 24 px y la casilla 16: una casilla ocupada tapa también la de arriba y la de abajo.
+  const libre = (sala, x, y, quien) => x >= 1 && x <= sala.ancho - 2 && y >= 1 && y <= sala.alto - 2 && !bloqueada(sala, x, y, quien) && ![-1, 0, 1].some((dy) => ocupadas.get(sala.id).has(k(x, y + dy)))
   const masCercana = (sala, ancla, quien) => {
     let mejor = null
     for (let y = 1; y <= sala.alto - 2; y++) for (let x = 1; x <= sala.ancho - 2; x++) {

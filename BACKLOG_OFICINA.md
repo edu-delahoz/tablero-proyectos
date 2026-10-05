@@ -67,9 +67,9 @@ Después: **S-OF3**
 
 ### S-OF3 — Prueba con sesiones vivas y PR · **Sonnet** · rama `oficina-pixel` · ~40k · plugins: ninguno
 Se espera: Ningún personaje se encima con otro (prueba en `oficina.test.mjs`) y Eduardo ve la Oficina con 2–3 sesiones reales (una lanza un buscador, otra pide permiso) y cada personaje se reconoce por su placa; lo que vea mal queda anotado aquí. Se comprueba con la suite en verde y el PR `oficina-pixel → develop` abierto con su permiso.
-- [ ] [test] (añadido en S-OF2b) Nadie se encima, verlo fallar y anotar cuántos fallan — `oficina.test.mjs`: con 2 agentes en la zona sofá y 2 en terminal, `distribuirOficina` no deja dos casillas en la misma columna y filas contiguas (el sprite de pie mide 24 px, la casilla 16)
-- [ ] [código] (añadido en S-OF2b) Separar casillas — `oficina.mjs` (`distribuirOficina`/casillas de zona): saltar la fila contigua o desplazar de columna; mantener la estabilidad (solo se mueve quien cambia de zona)
-- [ ] [test] Suite completa en verde — `node --test 2>&1 | tail -20` y `node verificar_backlog.mjs "$PWD" --formato` limpio
+- [x] [test] (añadido en S-OF2b) Nadie se encima, verlo fallar (falló 1: sofá, casillas (1,7) y (1,8)) — `oficina.test.mjs`: con 2 agentes en la zona sofá y 2 en terminal, `distribuirOficina` no deja dos casillas en la misma columna y filas contiguas (el sprite de pie mide 24 px, la casilla 16)
+- [x] [código] (añadido en S-OF2b) Separar casillas — `oficina.mjs` (`distribuirOficina`/casillas de zona): saltar la fila contigua o desplazar de columna; mantener la estabilidad (solo se mueve quien cambia de zona)
+- [x] [test] Suite completa en verde — `node --test 2>&1 | tail -20` y `node verificar_backlog.mjs "$PWD" --formato` limpio
 - [ ] [test] Prueba con sesiones vivas — Eduardo abre 2–3 sesiones (una con `buscador`, una pidiendo permiso); comprobar placas, salas, globo «!» y que nadie se encima; anotar aquí lo que falle como casillas «(añadido en S-OF3)»
 - [ ] [doc] PR con permiso de Eduardo — `oficina-pixel → develop` (si GraphQL de `gh` está limitado, REST `gh api repos/…/pulls`); al cerrar, marcar en `BACKLOG.md` la casilla de H23 «Oficina: aspecto gráfico» como hecha con referencia a este backlog
 

@@ -144,6 +144,19 @@ test('distribuirOficina: una sala por proyecto y cada agente en su casilla, sin 
   assert.deepEqual(distribuirOficina(OCHO).agentes.map((a) => a.casilla), r.agentes.map((a) => a.casilla), 'determinista')
 })
 
+test('distribuirOficina: nadie se encima (el sprite mide 24 px y la casilla 16: ni misma columna con filas contiguas)', () => {
+  const mk = (sid, agente, accion) => ({ sid, agente, principal: agente === 'principal', proyecto: 'demo', accion, desde: '2026-10-05T11:00:00Z' })
+  for (const zona of [['quieto', 'esperando'], ['ejecutando', 'ejecutando'], ['leyendo', 'buscando']]) {
+    const ags = [mk('a', 'principal', zona[0]), mk('b', 'principal', zona[1]), mk('c', 'principal', zona[0]), mk('a', 'x1', zona[1]), mk('b', 'x2', zona[0])]
+    const r = distribuirOficina(ags)
+    const cs = r.agentes.map((a) => a.casilla)
+    for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+      const solapa = cs[i].sala === cs[j].sala && cs[i].x === cs[j].x && Math.abs(cs[i].y - cs[j].y) <= 1
+      assert.ok(!solapa, `${zona}: ${JSON.stringify(cs[i])} y ${JSON.stringify(cs[j])} se encimarían`)
+    }
+  }
+})
+
 test('distribuirOficina: si uno cambia de acción los demás no se mueven; quien llega no desplaza a nadie', () => {
   const r1 = distribuirOficina(OCHO)
   const antes = posiciones(r1)
