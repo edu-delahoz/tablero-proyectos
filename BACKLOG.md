@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-04 · rama `eficiencia` · E6 hecha, `scripts/probar.sh` del repo `metodologia-claude-code` en verde (16 pruebas; fallaban 14 al escribirlas), escáner limpio. PR https://github.com/edu-delahoz/metodologia-claude-code/pull/2 (rama `eficiencia` → `develop`, sin mergear). Llevado al repo: CLAUDE.md, skill relevo, `settings.base.json` (hooks verificar_backlog, generar --hook-inicio/--silencioso, acotar_lectura), `claude/hooks/acotar_lectura.mjs`, plugin `panel-tablero` (+ marketplace), README (tablero, S0/Sn/SNb, notas), rutas únicas `~/.claude/{hooks,metodologia,tablero}` (`instalar.sh` enlaza `~/.claude/tablero` a `TABLERO_DIR`, por defecto `../metodologia-claude/tablero`). No se probó `register.test.ts` de los plugins (no hay runner en el repo) ni se reinstaló en el `~/.claude` real. H16 completo.
+- Para retomar (2026-10-04): La metodología ya está en el repo `metodologia-claude-code` con una prueba de instalación y un PR abierto. Falta que Eduardo revise y mergee el PR; no se reinstaló en su `~/.claude` real. Con esto termina el hito de eficiencia.
 - 2026-10-04 · rama `eficiencia` · E5c hecha, tests en verde (212 pasan, 2 omitidos; fallaban 2 al escribirlos). Pestaña Bitácora: tarjeta «Auditoría» (selector de 7 días, composición del gasto, malos hábitos, Opus frente a Sonnet) con `auditoriaPanel`/`auditoriaDe` en `auditoria.mjs`; el panel renombra `tokens`→`volumen` y omite `entrada` por la guarda de «token» en /api/datos. Siguiente: **E6**.
 - Para retomar (2026-10-04): La auditoría del gasto ya se ve dentro de la pestaña Bitácora, con selector de día y la comparación Opus frente a Sonnet. Todo está en verde; falta que Eduardo la mire en el navegador. Lo siguiente es llevar la metodología al repo `metodologia-claude-code`.
 - 2026-10-04 · rama `eficiencia` · E5b ampliada a petición de Eduardo, tests en verde (210 pasan, 2 omitidos; fallaba 1 al escribirlo): en «Costo por feature» cada barra muestra «$ · duración», el desglose por rama y la línea de total suman también el tiempo (minutos de la columna Duración; vacía/«?» cuenta 0). En modo «Rama» las barras solo muestran el costo. `plantilla.html` (`grafBarrasH` acepta `valor` para la etiqueta y ensancha el margen derecho), test en `generar.test.mjs`. Siguiente: **E5c**, luego **E6**.
@@ -159,7 +161,7 @@ Origen (2026-10-04, pedido de Eduardo en E5b): «que la Auditoría (E7) también
 Después: **E6**.
 
 ### E6 — Repo de metodología (Sonnet)
-- [ ] Llevar a `metodologia-claude-code` en orden: CLAUDE.md, relevo, `settings.base.json` (+ hooks nuevos), mod `panel-tablero` y tests, README (tablero, S0/Sn/SNb), rutas únicas. `scripts/escanear.sh` y PR.
+- [x] Llevar a `metodologia-claude-code` en orden: CLAUDE.md, relevo, `settings.base.json` (+ hooks nuevos), mod `panel-tablero` y tests, README (tablero, S0/Sn/SNb), rutas únicas. `scripts/escanear.sh` y PR.
 
 ## H15 — Trello de verdad y vista previa más rápida
 
