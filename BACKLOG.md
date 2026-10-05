@@ -186,12 +186,13 @@ Modelo: Sonnet. Sesión S60 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-
 
 ### S61 — Integrar S60 en la oficina y re-medir la lectura · **Sonnet** · rama `oficina-agentes` (worktree `../.wt-oficina`) · ~30k
 Se espera: La rama de la oficina ya tiene el extractor completo y su backlog incluye H21 y H22, con el «Estado» de las dos líneas sin perder nada. Queda programada la re-medición de «Bash sobre BACKLOG». Se comprueba con `git merge-base --is-ancestor lectura-backlog oficina-agentes`, la suite en verde y `node backlog.mjs arranque S61 BACKLOG.md` funcionando dentro del worktree.
+Resultado (2026-10-05, Sonnet): Cumplido salvo la re-medición (→ S61b). `oficina-agentes` trae el extractor y H21/H22, se fusionó `develop` después (dos conflictos en «Estado», resueltos a mano) y el PR #19 del tablero quedó mergeado; suite 367 pasan, 0 fallan. El hook `acotar_lectura` pasa a bloqueo el 2026-10-12.
 - [x] [test] Antes de tocar nada, el worktree está limpio y S59b cerrada — en `../.wt-oficina`, `git status` sin cambios (la otra ventana dejó un `[x]` en S59b sin commit: si sigue así, parar y preguntar a Eduardo) (worktree limpio en `oficina-agentes`)
 - [x] [código] La oficina trae el extractor y H21/H22 — `git merge lectura-backlog` en `oficina-agentes`; resolver a mano el bloque «## Estado» de `BACKLOG.md` conservando las líneas de S58–S59b y las de S60/investigación; `grep -c arranque backlog.mjs` > 0 (hecho; conflicto solo en «Estado», resuelto conservando ambas líneas)
 - [x] [test] Suite y formato en verde tras el merge — `node --test 2>&1 | tail -20` (copiar `proyectos.json` del checkout principal si falta: trampa de S58), `node verificar_backlog.mjs --formato` (366 pasan, 2 omitidos, 0 fallan; formato OK)
 - [-] [verificación] Re-medir la lectura del backlog — `node generar.mjs --auditoria <2026-10-07 o posterior>`: objetivo «Bash sobre BACKLOG» ≤ 40 llamadas / ≤ 40k; anotar cifras en «Resultado:» (si aún no hay 2 días de uso, dejarla `[-] → S61b` con la fecha) → S61b: aún no hay 2 días de uso (hoy 2026-10-05); correr desde 2026-10-07
 - [x] [docs] Fecha de E2 en el Estado — el hook `acotar_lectura` pasa a bloqueo cuando haya 7 días de `~/.claude/session-metrics/acotar_lectura.jsonl` (ver la casilla abierta de E2): anotar la fecha concreta (el log empezó el 2026-10-05 → bloqueo desde 2026-10-12)
-- [-] [docs] PRs pendientes, solo con permiso de Eduardo — tablero `oficina-agentes → develop` y `metodologia-claude-code` `oficina-agentes → develop` (GraphQL de `gh` puede estar limitado: usar REST `gh api repos/…/pulls`) → tablero hecho (PR #19 mergeado); el de `metodologia-claude-code` pasa a S64
+- [x] [docs] PRs pendientes, solo con permiso de Eduardo — tablero `oficina-agentes → develop` y `metodologia-claude-code` `oficina-agentes → develop` (GraphQL de `gh` puede estar limitado: usar REST `gh api repos/…/pulls`) (hecho: tablero #19 mergeado el 2026-10-05; `metodologia-claude-code` #4 mergeado el 2026-10-05)
 
 Prompt:
 ```text
@@ -201,6 +202,16 @@ Modelo: Sonnet. Sesión S61 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-
 ## H22 — Alerta de prompt equivocado
 Historia: Como Eduardo, quiero que Claude me avise antes de empezar cuando pego en una ventana el prompt de otra sesión, para no perder el hilo ni trabajar dos veces lo mismo.
 Origen: 2026-10-05, en la ventana de `metodologia-claude` se pegó el prompt de S58, que ya estaba hecha y la llevaba otra ventana en `.wt-oficina`. La sesión se fue al backlog del tablero y se perdió el hilo de la optimización. Plan: `~/.claude/plans/pasted-content-id-0d9f-tuve-un-valiant-sedgewick.md`.
+
+### S61b — Re-medir la lectura del backlog · **Sonnet** · rama `develop` (sin código) · ~15k
+Se espera: Hay cifras reales de «Bash sobre BACKLOG» tras usar `arranque` unos días, anotadas frente al objetivo (≤ 40 llamadas / ≤ 40k). Se comprueba con `node generar.mjs --auditoria <fecha>` y el «Resultado:» de esta sección.
+- [ ] [verificación] Re-medir la lectura — desde 2026-10-07: `node generar.mjs --auditoria <fecha>`; anotar llamadas y tokens de «Bash sobre BACKLOG» en «Resultado:» y si se cumple el objetivo
+- [ ] [docs] Si no se cumple, queda una casilla con la causa — abrirla en el backlog indicando qué sesiones siguen leyendo con grep/sed, sin cambiar código
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S61b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S61b BACKLOG.md`). Solo la re-medición, a partir del 2026-10-07. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
 
 ### S62 — Hook que avisa si el prompt parece de otra sesión · **Sonnet** · rama `alerta-prompt` (sale de `oficina-agentes` tras S61) · ~45k
 Se espera: Al pegar un prompt de arranque («Sesión SX de <backlog>…») que no corresponde, Claude recibe un aviso con el motivo y lo primero que hace es preguntar, sin usar herramientas. Un prompt correcto no genera aviso. Se comprueba con `node --test vigilar_prompt.test.mjs` y a mano, pegando el prompt de una sesión ya cerrada.
