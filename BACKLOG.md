@@ -191,7 +191,7 @@ Se espera: La rama de la oficina ya tiene el extractor completo y su backlog inc
 - [x] [test] Suite y formato en verde tras el merge — `node --test 2>&1 | tail -20` (copiar `proyectos.json` del checkout principal si falta: trampa de S58), `node verificar_backlog.mjs --formato` (366 pasan, 2 omitidos, 0 fallan; formato OK)
 - [-] [verificación] Re-medir la lectura del backlog — `node generar.mjs --auditoria <2026-10-07 o posterior>`: objetivo «Bash sobre BACKLOG» ≤ 40 llamadas / ≤ 40k; anotar cifras en «Resultado:» (si aún no hay 2 días de uso, dejarla `[-] → S61b` con la fecha) → S61b: aún no hay 2 días de uso (hoy 2026-10-05); correr desde 2026-10-07
 - [x] [docs] Fecha de E2 en el Estado — el hook `acotar_lectura` pasa a bloqueo cuando haya 7 días de `~/.claude/session-metrics/acotar_lectura.jsonl` (ver la casilla abierta de E2): anotar la fecha concreta (el log empezó el 2026-10-05 → bloqueo desde 2026-10-12)
-- [ ] [docs] PRs pendientes, solo con permiso de Eduardo — tablero `oficina-agentes → develop` y `metodologia-claude-code` `oficina-agentes → develop` (GraphQL de `gh` puede estar limitado: usar REST `gh api repos/…/pulls`)
+- [-] [docs] PRs pendientes, solo con permiso de Eduardo — tablero `oficina-agentes → develop` y `metodologia-claude-code` `oficina-agentes → develop` (GraphQL de `gh` puede estar limitado: usar REST `gh api repos/…/pulls`) → tablero hecho (PR #19 mergeado); el de `metodologia-claude-code` pasa a S64
 
 Prompt:
 ```text
@@ -205,11 +205,13 @@ Origen: 2026-10-05, en la ventana de `metodologia-claude` se pegó el prompt de 
 ### S62 — Hook que avisa si el prompt parece de otra sesión · **Sonnet** · rama `alerta-prompt` (sale de `oficina-agentes` tras S61) · ~45k
 Se espera: Al pegar un prompt de arranque («Sesión SX de <backlog>…») que no corresponde, Claude recibe un aviso con el motivo y lo primero que hace es preguntar, sin usar herramientas. Un prompt correcto no genera aviso. Se comprueba con `node --test vigilar_prompt.test.mjs` y a mano, pegando el prompt de una sesión ya cerrada.
 Resultado parcial (2026-10-05, Sonnet): `vigilar_prompt.mjs` (en `metodologia-claude-code/claude/hooks/`, symlink en `~/.claude/hooks/` y entrada en `UserPromptSubmit` de `settings.json`, timeout 5) avisa por: sesión ya hecha/inexistente, backlog o worktree fuera del `cwd` o inexistente, rama inexistente (salvo «sale de»), otra sesión principal viva (30 min) en ese worktree o rama, y cambio de hilo (la transcripción ya trabajaba otra SY). Tests primero: fallaban 17 de 17; ahora 17 pasan. Límite conocido: los eventos de la oficina no guardan la SX, así que «misma SX» se detecta por worktree/rama de la otra sesión, no por el número; y la rama se lee del `cwd` actual de la otra sesión (un checkout compartido cuenta como la misma rama). Regla añadida a `claude/CLAUDE.md` (el global es symlink). Falta solo la prueba real en ventana nueva (la hace Eduardo).
+Resultado (2026-10-05, S64): hook completo y en verde, más el arreglo del falso aviso tras `/clear` (18 tests). La prueba manual pasa a S65.
 - [x] [test] Matriz del aviso, verla fallar y anotar cuántos fallan — `vigilar_prompt.test.mjs` con backlogs y eventos de fixture: prompt correcto → sin aviso; sesión ya hecha (sin `[ ]` o con `Resultado:`) → aviso; otra sesión viva (eventos de la oficina, vigencia 30 min) con la misma SX, rama o worktree → aviso; backlog o worktree fuera del `cwd`, o rama inexistente → aviso; cambio de hilo (la transcripción ya trabajaba otra SY o plan, sin `/clear`) → aviso; prompt sin patrón de arranque → sin aviso
 - [x] [código] El hook detecta el prompt de arranque y avisa — `metodologia-claude-code/claude/hooks/vigilar_prompt.mjs` (`UserPromptSubmit`): parsear «Sesión SX de <ruta>», «rama `x`», «worktree `y`»; reutilizar `seccion` de `tablero/backlog.mjs` y la lectura de eventos de `eventos_agentes.mjs`/`oficina.mjs`; todo local, < 1 s; salida `additionalContext` «⚠️ Este prompt parece de otra sesión: <motivos>. Antes de tocar nada, pregunta al usuario si es el correcto»; nunca bloquea; registra en `~/.claude/session-metrics/vigilar_prompt.jsonl`
 - [x] [config] Instalar el hook (pide permiso de Eduardo) — copiar a `~/.claude/hooks/vigilar_prompt.mjs` y añadirlo en `~/.claude/settings.json` → `UserPromptSubmit`, junto a `eventos_agentes.mjs` (timeout 5)
 - [x] [docs] Regla de respuesta — `~/.claude/CLAUDE.md` global y su copia en `metodologia-claude-code`: «si llega el aviso de prompt de otra sesión, la primera respuesta es la pregunta, sin herramientas»
-- [ ] [verificación] (pendiente de Eduardo, la prueba la hace él) Prueba real — en una ventana nueva, pegar el prompt de S58 (ya hecha): debe salir el aviso y la pregunta; pegar el de S62: sin aviso. Anotar en «Resultado:»
+- [-] [verificación] (pendiente de Eduardo, la prueba la hace él) Prueba real — en una ventana nueva, pegar el prompt de S58 (ya hecha): debe salir el aviso y la pregunta; pegar el de S62: sin aviso. Anotar en «Resultado:» → S65 (Eduardo la hace después)
+- [x] [código] (añadido en S64) Falso aviso tras `/clear` — al arrancar S64 en la misma ventana, la conversación anterior (`acc14076`, cerrada con `SessionEnd` 40 s antes) contó como «otra sesión viva»; `sesionesVivas` descarta la sesión cuyo último evento principal es `SessionEnd`. Test primero en `vigilar_prompt.test.mjs` (fallaba 1 de 18; ahora 18 pasan; suite 385 pasan / 0 fallan / 2 omitidos)
 
 Prompt:
 ```text
@@ -218,8 +220,8 @@ Modelo: Sonnet. Sesión S62 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-
 
 ### S64 — Explicar E2 y cerrar los PR pendientes · **Sonnet** · rama `alerta-prompt` · ~25k
 Se espera: Eduardo entiende en qué punto está E2 (el hook `acotar_lectura`, cuándo y con qué datos se decide pasarlo a bloqueo) y queda todo limpio: S62 cerrada con su prueba real, los PR de tablero y de `metodologia-claude-code` mergeados en `develop` y las ramas sin trabajo suelto. Se comprueba con `node verificar_backlog.mjs "$PWD"` sin avisos y `git status` limpio en los dos repos.
-- [ ] [explicación] Qué pasa con E2, sin tocar nada — leer `node backlog.mjs seccion E2 BACKLOG.md` y `~/.claude/session-metrics/acotar_lectura.jsonl` (solo conteos: avisos por día, tokens medios, cuántos `habriaBloqueado`); explicarle a Eduardo en llano qué hace el hook, qué lleva registrado y qué falta (el hook sigue en modo aviso; el pase a bloqueo se decide con 7 días de log, desde el 2026-10-11/12). No cambiar `MODO` salvo que Eduardo lo pida
-- [ ] [verificación] Cerrar S62 con la prueba real de Eduardo — preguntarle el resultado (prompt de S58 avisa, el de S62 no); anotarlo en «Resultado:» de S62 y marcar su última casilla; si falló, no abrir PR y arreglar el hook primero
+- [x] [explicación] Qué pasa con E2, sin tocar nada — leer `node backlog.mjs seccion E2 BACKLOG.md` y `~/.claude/session-metrics/acotar_lectura.jsonl` (solo conteos: avisos por día, tokens medios, cuántos `habriaBloqueado`); explicarle a Eduardo en llano qué hace el hook, qué lleva registrado y qué falta (el hook sigue en modo aviso; el pase a bloqueo se decide con 7 días de log, desde el 2026-10-11/12). No cambiar `MODO` salvo que Eduardo lo pida (27 avisos, todos del 2026-10-05 y todos `Read`; 26 son imágenes `.png`/`.jpg`, falsos positivos; 1 real, `h7_invitaciones.test.sql` ~3,7k; mediana 16k; `MODO` sin tocar → arreglo en E2b)
+- [-] [verificación] Cerrar S62 con la prueba real de Eduardo — preguntarle el resultado (prompt de S58 avisa, el de S62 no); anotarlo en «Resultado:» de S62 y marcar su última casilla; si falló, no abrir PR y arreglar el hook primero → S65 (Eduardo la hace después); de paso se arregló el falso aviso tras `/clear` (ver S62)
 - [ ] [docs] PR del tablero con permiso de Eduardo — `alerta-prompt → develop` por REST (`gh api repos/edu-delahoz/tablero-proyectos/pulls`, GraphQL de `gh` puede estar limitado); el hook bloquea el PR si hay casillas abiertas en la rama; mergear cuando Eduardo lo diga
 - [ ] [docs] PR del repo de metodología con permiso de Eduardo — repo `metodologia-claude-code`, `oficina-agentes → develop` (trae el hook `vigilar_prompt.mjs` y la regla de `CLAUDE.md`); mergear cuando Eduardo lo diga y confirmar que los symlinks de `~/.claude/hooks/` siguen resolviendo
 - [ ] [docs] Dejar limpio — borrar las ramas ya mergeadas (local y remota, preguntando antes), `git status` limpio en los dos repos, Estado y «Para retomar» al día; lo que Eduardo decida no hacer se marca `[-]` con motivo (S61b, la re-medición desde el 2026-10-07, sigue abierta aparte)
@@ -227,6 +229,16 @@ Se espera: Eduardo entiende en qué punto está E2 (el hook `acotar_lectura`, cu
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S64 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S64 BACKLOG.md`), en la rama `alerta-prompt`. Primero explícame qué pasa con E2 (solo lectura), luego cerramos S62 con mi prueba y los PR de tablero y de metodologia-claude-code; pregúntame antes de crear o mergear cada PR y antes de borrar ramas. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+### S65 — Prueba manual del aviso de prompt equivocado · **Eduardo** (con Sonnet para anotar) · sin rama (se anota en `develop`) · ~10k
+Se espera: Eduardo comprueba a mano que el aviso sale cuando toca y no cuando no. Se comprueba con el registro `~/.claude/session-metrics/vigilar_prompt.jsonl` (una línea con aviso para S58 y otra sin aviso para la sesión correcta).
+- [ ] [verificación] Prueba real del aviso en ventana nueva — hook `vigilar_prompt`: en una ventana nueva pegar el prompt de S58 (ya hecha): debe salir el aviso y Claude solo pregunta; tras `/clear`, pegar el prompt de una sesión abierta y correcta: sin aviso (ya no cuenta la conversación cerrada con `/clear`). Anotar en «Resultado:» de S62 y aquí
+- [ ] [docs] Cerrar H22 — si las dos pruebas salen bien, «Resultado:» aquí y H22 queda cerrado; si alguna falla, anotar el motivo del aviso (lo trae `vigilar_prompt.jsonl`) y definir el arreglo
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S65 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S65 BACKLOG.md`), en la rama `develop`. Acabo de hacer la prueba manual del aviso de prompt equivocado; te cuento el resultado, revisa las últimas líneas de `~/.claude/session-metrics/vigilar_prompt.jsonl` (solo `tail -5`) y anótalo en S62 y S65. Solo backlog, sin código. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 
 ## H18 — Kanban por sesión y prompt a la vista
@@ -529,7 +541,18 @@ Se espera: Un aviso se dispara al leer archivos grandes de golpe y queda registr
 
 Prompt:
 ```text
-Lee `BACKLOG.md` (Estado + E2) y trabaja solo la casilla abierta de E2 (revisión del log de `acotar_lectura`, desde el 2026-10-11). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+Lee `BACKLOG.md` (Estado + E2) y trabaja solo la casilla abierta de E2 (revisión del log de `acotar_lectura`, desde el 2026-10-11). Antes, E2b debe estar hecha. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+### E2b — `acotar_lectura` no cuenta imágenes ni PDF · **Sonnet** · rama `acotar-imagenes` (sale de `develop` en los dos repos, tras los PR de S64) · ~25k
+Se espera: Leer una captura (`.png`, `.jpg`…) o un PDF ya no da aviso ni entra en el log; los archivos de texto grandes siguen avisando igual. Se comprueba con `node --test acotar_lectura.test.mjs` y viendo que el log solo trae texto desde ese día. Origen: en S64, 26 de los 27 avisos del log eran imágenes (falsos positivos: se miden sus bytes como si fueran texto y no se pueden leer por rangos).
+- [ ] [test] Imágenes y PDF sin aviso, verlo fallar y anotar cuántos — casos nuevos en `tablero/acotar_lectura.test.mjs`: `Read` sin limit de una `.png`/`.jpg`/`.jpeg`/`.gif`/`.webp` grande → sin aviso y sin línea en el log; `Read` de `.pdf` grande → sin aviso ni log; `cat` de imagen por Bash → sin aviso; un `.md`/`.sql` grande sin limit → aviso como siempre
+- [ ] [código] Excluir binarios por extensión — `metodologia-claude-code/claude/hooks/acotar_lectura.mjs` (el de `~/.claude/hooks/` es symlink): lista de extensiones de imagen y PDF en `previo()` antes de medir; sin cambiar `MODO` ni el umbral
+- [ ] [docs] Log limpio para la revisión de E2 — no borrar `acotar_lectura.jsonl`; anotar en E2 la fecha del arreglo y que la revisión del 2026-10-11/12 debe ignorar las filas de imágenes anteriores (`grep -v -E '\\.(png|jpe?g|gif|webp|pdf)"'`); suite completa y `verificar_backlog.mjs --formato` en verde; PR en los dos repos solo con permiso de Eduardo
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión E2b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque E2b BACKLOG.md`), en la rama `acotar-imagenes` que sale de `develop` en `tablero` y en `metodologia-claude-code` (los PR de S64 ya mergeados). Primera casilla: los tests nuevos de `acotar_lectura.test.mjs`, verlos fallar y anotar cuántos. No cambies `MODO` ni el umbral. Pregúntame antes de abrir o mergear PRs. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 
 ### E3 — Reglas y poda (Sonnet)

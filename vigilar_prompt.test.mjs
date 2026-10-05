@@ -113,6 +113,15 @@ test('la otra sesión es antigua (> 30 min) o soy yo: sin aviso', () => {
   sinAviso(correr(arranque('S1', `, trabaja en el worktree \`${wt}\``), { ev: mia }))
 })
 
+test('otra sesión ya cerrada (SessionEnd, p. ej. /clear en la misma ventana): sin aviso', () => {
+  const ev = eventos([
+    { sid: 'otra', cwd: wt, t: hace(2) },
+    { sid: 'otra', cwd: wt, t: hace(1), evento: 'SessionEnd' },
+    { sid: 'otra', agente: 'sub1', cwd: wt, t: hace(1), evento: 'SubagentStop' },
+  ])
+  sinAviso(correr(arranque('S1', `, trabaja en el worktree \`${wt}\``), { ev }))
+})
+
 test('un subagente de otra sesión no cuenta como sesión viva', () => {
   const ev = eventos([{ sid: 'otra', agente: 'sub1', cwd: wt, t: hace(1) }])
   sinAviso(correr(arranque('S1', `, trabaja en el worktree \`${wt}\``), { ev }))
