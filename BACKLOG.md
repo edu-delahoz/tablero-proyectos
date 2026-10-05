@@ -1,6 +1,7 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `recarga-codigo` (sale de `develop`) · Arreglo «el Tablero no abre las tarjetas»: no era la vista, la pestaña de Chrome tenía el código de antes del merge (texto «Arrastra una tarjeta o usa «Mover a…»»); con Cmd+Shift+R abrió. `plantilla.html`: `decidirCodigo` + el sondeo de `/api/version` recarga la pestaña cuando cambia `codigo` (espera si hay edición). Test primero (fallaba 1 de 1); suite 367 pasan, 0 fallan. Pruebas de Eduardo: Estudio bien, Oficina bien por ahora; móvil sin probar (→ H23). S61 sigue abierta: el aviso de «PR #16 mergeado» no la cierra, su merge es dentro de `.wt-oficina`.
 - 2026-10-05 · rama `oficina-agentes` · S59b hecha: Tablero y Estudio revisados a ojo (1200 y 390 px, sin fallos), PR #14 `kanban-sesiones`, #15 `estudio-plan`, #16 `oficina-agentes` abiertos hacia `develop` por API REST (`gh pr create` usa GraphQL y estaba limitado). Sin cambios de código. Falta: probar a mano y mergear en orden.
 - Para retomar (2026-10-05, S59b): las tres vistas nuevas se ven bien a escritorio y móvil y los tres PR están abiertos. Falta que Eduardo pruebe a mano el chat «Estudiar» y la Oficina con una sesión viva (no se pudo ver en la revisión) y luego mergear los PR en orden, uno a uno. Nada roto.
 - 2026-10-05 · rama `oficina-agentes` (sin PR) · S59 hecha en parte, suite en verde (361 pasan, 2 omitidos; `probar.sh` 20/20; formato OK). `/api/metodologia` ya no llama a `fresco()`/`construir` (que pedía PRs a `gh`, ~15 s): `proyectosMetodologia()` lee backlogs/notas/bitácora del disco (`generar.mjs` ~1619) y responde en 14 ms. Test nuevo en `servidor.test.mjs` (en el entorno de test ya pasaba sin el cambio: no hay red). Falta → **S59b**.
@@ -134,6 +135,13 @@
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
 
+## H23 — Pendientes de las pruebas de Eduardo (2026-10-05)
+Historia: Como Eduardo, quiero que lo que noté al probar Tablero, Estudio, Oficina y móvil quede anotado, para atenderlo cuando toque y no ahora.
+Origen: pruebas a mano del 2026-10-05. Sin sesión definida aún: se planifica cuando Eduardo lo pida. Plugins/MCP: ninguno.
+- [ ] [mejora] Estudio: mejoras que Eduardo irá anotando al usarlo (por ahora «está bien») — `plantilla.html` `panelEstudio`
+- [ ] [mejora] Oficina: aspecto gráfico más trabajado (Eduardo la usará unos días y anotará problemas) — `plantilla.html` `htmlOficina`
+- [ ] [prueba] Probar las vistas nuevas en el móvil (pendiente de Eduardo; ver también la nota de experiencia full móvil)
+
 ## H21 — Lectura exacta del backlog
 Historia: Como Eduardo, quiero que las sesiones lean el Estado y su sección del backlog de un tirón y que la auditoría no cuente eso como mal hábito, para gastar menos contexto sin perder calidad.
 Origen: tarjeta «Malos hábitos del día» (2026-10-05: «Bash sobre BACKLOG» 122 llamadas / 120k, frente a 586 / 613k el 04-10). Plan: `~/.claude/plans/quiero-que-me-respondas-vectorized-owl.md`. Plugins/MCP: ninguno.
@@ -257,10 +265,10 @@ Se espera: Desde Planes, un backlog o el detalle de una tarjeta, el botón «Est
 - [x] [test] Render del chat y de la guía, verlo fallar (fallaron 2 de 2) — `servidor.test.mjs`: botón «Estudiar» en Planes/backlog/detalle de kanban, acciones rápidas, «Guardar en la guía», pestaña «Guía»
 - [x] Panel de chat — `plantilla.html`: lectura del streaming de `/api/estudio`, markdown con el render existente, conserva `sesionId` para seguir la conversación
 - [x] Guía guardada — `plantilla.html`: «Guardar en la guía» y vista «Guía» del `.md`
-- [ ] Probarlo en el navegador con el plan de H7 — «Extrae lo técnico» sobre el plan de H7 del IEP; `node --test 2>&1 | tail -40` en verde
+- [x] Probarlo en el navegador con el plan de H7 — «Extrae lo técnico» sobre el plan de H7 del IEP; `node --test 2>&1 | tail -40` en verde (probado por Eduardo el 2026-10-05: «en estudiar está bien»; mejoras → H23)
 - [x] [fix] Que las sesiones del tutor no cuenten como trabajo (añadido en S55) — `generar.mjs`: las transcripciones cuyo primer mensaje empieza por «Plan a estudiar:» (`promptEstudio`) se excluyen de `sesionesActivas`, `ultimaSesionClaude` y el kanban; test en `generar.test.mjs` con un `.jsonl` de estudio que no aparece
 - [x] [doc] Contrato del servidor ya listo (añadido en S55) — usar `POST /api/estudio` (ndjson: sesion/texto/herramienta/fin/error), `POST /api/estudio/guardar` y `GET /api/estudio/guia`; etiquetas de los botones = `ACCIONES[*].etiqueta` de `estudio.mjs` (inyectarlas en los datos o copiarlas); «Explícame la sesión X» manda `accion:'sesion', sesion:'S3b'`; «Muéstrame cómo quedó» manda `rama` si la tarjeta la tiene
-- [ ] [prueba] Prueba manual en navegador pendiente (añadido en S56) — abrir `node generar.mjs --abrir`, Estudiar → «Extrae lo técnico» en el plan de H7 del IEP (necesita navegador y gasta tokens de Claude); la sesión de Sonnet no pudo manejar el navegador
+- [x] [prueba] Prueba manual en navegador pendiente (añadido en S56) — abrir `node generar.mjs --abrir`, Estudiar → «Extrae lo técnico» en el plan de H7 del IEP (necesita navegador y gasta tokens de Claude); la sesión de Sonnet no pudo manejar el navegador (probado por Eduardo el 2026-10-05: «en estudiar está bien»; mejoras → H23)
 Resultado: Botón «Estudiar» en Planes, backlog y panel del kanban (con sesión y rama); panel lateral con chat en streaming (ndjson), acciones rápidas, pregunta libre, «Guardar en la guía» y pestaña «Guía»; las sesiones del tutor («Plan a estudiar:») ya no cuentan en sesiones activas, kanban ni última sesión. Suite: 352 pasan, 0 fallan, 2 omitidos. Falta la prueba manual en navegador.
 
 Prompt:

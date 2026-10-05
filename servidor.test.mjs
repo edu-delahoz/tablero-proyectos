@@ -1147,3 +1147,16 @@ test('metodología (S59): GET /api/metodologia no reconstruye el tablero (sin si
   assert.equal(r.status, 200)
   assert.ok(Date.now() - t0 < 1500, `tardó ${Date.now() - t0} ms`)
 })
+
+test('vista: una pestaña abierta se recarga sola si cambia el código del servidor (no con edición en curso)', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['function decidirCodigo', 'location.reload()']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+  const ctx = {}
+  vm.createContext(ctx)
+  vm.runInContext(funcionDe(html, 'decidirCodigo'), ctx)
+  assert.equal(ctx.decidirCodigo(null, 'a', false), 'igual', 'primera lectura: solo la recuerda')
+  assert.equal(ctx.decidirCodigo('a', 'a', false), 'igual')
+  assert.equal(ctx.decidirCodigo('a', 'b', false), 'recargar', 'código nuevo y sin edición: recarga')
+  assert.equal(ctx.decidirCodigo('a', 'b', true), 'esperar', 'código nuevo con edición en curso: espera')
+  assert.equal(ctx.decidirCodigo('a', undefined, false), 'igual', 'servidor viejo sin «codigo»: nada')
+})
