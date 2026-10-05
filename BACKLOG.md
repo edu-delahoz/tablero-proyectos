@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `kanban-sesiones` (sale de `formato-backlog`, sin PR) · plan de H18–H20 hecho, solo análisis (sin código ni tests). Plan: `~/.claude/plans/quiero-que-planes-estos-luminous-parasol.md`; secciones S53–S59 con casillas abajo. Causa del kanban vacío con «H7 + BACKLOG_H7.md»: `columnasKanban` (`generar.mjs:1349`) toma el hito de la clave del `##`, y en el mini backlog las sesiones son `## S0…S7` → `hito: 'S2c'`. Siguiente: **S53** (Opus).
+- Para retomar (2026-10-05): Se planeó rehacer el tablero tipo kanban para que cada tarjeta sea una sesión con una línea en llano y, al tocarla, su prompt para copiar y todo su detalle; además un chat con Claude para estudiar un plan sin cambiarlo, y una «oficina» animada en Metodología donde cada agente real es un personaje. Nada de código todavía; lo primero es arreglar los datos del kanban, empezando por la prueba del caso que hoy sale vacío.
 - 2026-10-05 · rama `formato-backlog` (sin PR) · S51 hecha, suite en verde (331 pasan, 2 omitidos; el test nuevo fallaba 1 de 1). `plantilla.html`: pestaña «Metodología» (`PESTANAS`, `VISTAS.metodologia`), `cargarMeta()` pide `/api/metodologia`, `htmlMetodologia(g, sel)` pura (SVG en línea con nodos verde/ámbar/rojo `nodo-*`, lista vertical `.meta-lista` en ≤700px, detalle de pieza con descripción, motivo, ruta y proyectos); clic en `[data-meta]` y Enter/Espacio en el SVG. Test en `servidor.test.mjs` extrae la función del HTML y la ejecuta con `vm`. Sin verificar a ojo en navegador. Siguiente: **S52** (Sonnet).
 - Para retomar (2026-10-05): La pestaña «Metodología» ya dibuja el flujo con cada etapa en verde, ámbar o rojo, y al tocar una pieza muestra qué hace y qué proyectos la usan; en móvil sale como lista vertical. Falta mirarla en el navegador con datos reales. Lo siguiente es la sesión de cierre y medición del formato. Nada roto.
 - 2026-10-05 · rama `formato-backlog` (sin PR) · S50 hecha, suite en verde (330 pasan, 2 omitidos; los 9 nuevos fallaban 9 de 9). `metodologia.mjs`: `catalogoDe(instalar.sh, settings.base.json)` (mods de `PLUGINS_REPO`, enlaces `ln -sfn`, hooks por script + primer flag), `grafoMetodologia` (estado por tipo: mod por `CLAUDE_CODE_PLUGIN_DIRS`, hook por comando en `settings.json` + archivo existente, resto por ruta en `~/.claude`; proyectos conectados = con sesiones), `metodologia({home, repo})`. `GET /api/metodologia` en `generar.mjs` (`TABLERO_METODOLOGIA_REPO`, `TABLERO_HOME`). Fixtures en `fixtures/metodologia/{home,repo,docs}` (`repo/instalar.sh` es copia del real: si cambia el instalador, actualizarla). Trampa: el `settings.json` real llama a los hooks por rutas de `~/Desktop/...`, no `~/.claude/...`; por eso el hook se reconoce por nombre de script y se comprueba la ruta que aparece en el comando. `fetch` no deja cambiar `Host`: para probar 403 usar `http.request`. Siguiente: **S51** (Sonnet).
@@ -103,6 +105,109 @@
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H18 — Kanban por sesión y prompt a la vista
+Historia: Como Eduardo, quiero que cada tarjeta del tablero sea una sesión explicada en una línea en llano y que al tocarla vea su prompt y su detalle, para entender qué se hace y encontrar el prompt actual sin buscar.
+Origen: nota de `../notas/NOTAS_TABLERO.md` y capturas del IEP (2026-10-05). Plan: `~/.claude/plans/quiero-que-planes-estos-luminous-parasol.md`. Plugins/MCP: ninguno.
+Decisiones con Eduardo: tarjeta = **sesión** (no casilla); el detalle muestra prompt con copiar, casillas en llano, rama/PR/CI, «Se espera» frente a «Resultado», commits y archivos. Las sesiones no se arrastran (columna derivada); se marcan casillas dentro del detalle.
+
+### S53 — Kanban por sesión: datos · **Opus** · rama `kanban-sesiones` · ~70k
+Se espera: El servidor entrega una tarjeta por sesión con su hito correcto (el mini backlog `BACKLOG_H7.md` sale como H7), su línea en llano, su prompt, su estado y la CI de su PR; las pruebas lo comprueban, incluido el caso que hoy sale vacío.
+- [ ] [test] Toda ruta de la API rechaza visitas ajenas, verlo fallar — `servidor.test.mjs`: recorre las rutas `/api/*` que declara `crearManejador` (regex sobre `generar.mjs`) y exige 403 con Host ajeno y, en POST, sin Origin; cubre sola las rutas nuevas de S53, S55 y S57
+- [ ] [test] Kanban por sesión con mini backlog, verlo fallar — `fixtures/kanban-mini/` (`# Mini backlog H7` + `## S1`/`## S2` con `Se espera:`, `Prompt:`, rama) y `generar.test.mjs`: `kanbanSesiones` da una tarjeta por sesión con `hito: 'H7'`, `llano` (1.ª frase de Se espera ≤ 110, o título), `prompt`, `hechas/total` y los 4 estados; anotar cuántas fallan
+- [ ] Tarjetas por sesión — `generar.mjs`: `kanbanSesiones(b, p, sesionesClaude)` sobre `sesiones(texto)` (`:484`); hito: `## H<n>` del archivo → `H<n>` del título `#` → sección del backlog padre que enlaza el archivo; estado derivado (en-curso con `[~]`, sesión de Claude activa como `enSesion` o «estás aquí»; en-prueba con todo hecho y PR abierto/sin fusionar); `p.kanban` y `/api/sesiones` pasan a usarla
+- [ ] Estado de la CI en los PR — `generar.mjs` `leerGit` (`:878`): añadir `statusCheckRollup` al `gh pr list` existente y resumir en `ci: ok|falla|corre|null`; prueba con PR simulado
+- [ ] Commits y archivos al pedirlos — `generar.mjs`: `GET /api/sesion-detalle?proyecto&rama` → `git log <principal>..<rama> --name-only -n 30` (sin red, fuera de `/api/datos` y de la huella de `/api/version`); prueba en `servidor.test.mjs`
+- [ ] [doc] Explicar el kanban por sesión en el README — `README.md` «Tablero»: tarjeta = sesión, origen de cada columna, `/api/sesion-detalle`; `node --test 2>&1 | tail -40` en verde
+Prompt:
+```text
+Modelo: Opus. Sesión S53 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S53 BACKLOG.md`). Rama `kanban-sesiones`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S54**
+
+### S54 — Kanban por sesión: vista y prompt actual · **Sonnet** · rama `kanban-sesiones` · ~70k
+Se espera: En la pestaña Tablero cada tarjeta es una sesión con una línea en llano; al tocarla se abre un panel con el prompt para copiar arriba y el resto del detalle; en Resumen hay un botón «Prompt de SX» junto a «estás aquí». Se comprueba con las pruebas de render y mirando el IEP (H7 + BACKLOG_H7.md muestra S0–S7).
+- [ ] [test] Render de tarjeta y panel, verlo fallar — `servidor.test.mjs` (extraer funciones con `vm` como en S51): tarjeta con llano y chip clave·modelo·x/y; panel con prompt + «Copiar», Se espera/Resultado, casillas con `casillaFormato`, rama/PR/CI; filtro hito+backlog vacío muestra aviso; botón «Prompt de» en la tarjeta de backlog del Resumen
+- [ ] Tarjeta de sesión en llano — `plantilla.html` `vistaKanban`/`tarjetaKanban` (`:1694`): línea llano, chip, avance, punto de CI; sin arrastre de sesiones
+- [ ] Panel de detalle al tocar la tarjeta — `plantilla.html`: lateral (pantalla completa ≤700px), orden prompt → Se espera/Resultado → casillas marcables (`POST /api/guardar`) → rama/PR/CI → commits y archivos (`/api/sesion-detalle` al abrir) → costo/tiempo (reusar `gasto` de `enCurso`)
+- [ ] Filtros en cascada — `plantilla.html`: elegir hito limita los backlogs; combinación vacía lo dice
+- [ ] Prompt actual a la vista — `plantilla.html`: botón «⧉ Prompt de SX» junto a «❯ estás aquí» (`:727`, `:799`, tarjetas de `:1840`) y arriba en `tarjetaEnCurso` (`:2015`)
+- [ ] Mirarlo en el navegador con datos del IEP — 1200 y 390 px; `node --test 2>&1 | tail -40` en verde
+Prompt:
+```text
+Modelo: Sonnet. Sesión S54 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S54 BACKLOG.md`). Rama `kanban-sesiones`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S55**
+
+## H19 — Estudiar un plan con Claude
+Historia: Como Eduardo, quiero conversar con Claude sobre un plan que él hizo para que me saque lo técnico, me explique qué le pido en cada paso y me muestre cómo quedó el código, sin intentar mejorar el plan, para estudiarlo y entenderlo.
+Decisiones con Eduardo: motor = Claude Code local (`claude -p`, solo lectura, su suscripción); lo útil se guarda como guía `.md` en `datos/estudio/<proyecto>/<plan>.md` (no en `~/.claude/plans`, que el tablero lee como planes). Plugins/MCP: ninguno.
+
+### S55 — Estudio: servidor · **Opus** · rama `estudio-plan` · ~70k
+Se espera: `POST /api/estudio` responde en streaming con un Claude de solo lectura que explica el plan elegido y puede seguir la conversación; las respuestas se guardan en la guía. Se comprueba con un `claude` falso en los tests, sin llamar al real.
+- [ ] [test] Estudio con un Claude de mentira, verlo fallar — `fixtures/claude-falso.mjs` (emite stream-json con `session_id`) + `estudio.test.mjs`: `argsEstudio` trae `-p`, `--output-format stream-json`, herramientas solo lectura y `--disallowedTools Edit Write NotebookEdit`, `--resume` si hay sesión; `servidor.test.mjs`: streaming, plan fuera del proyecto → 400, sin Origin → 403, guardar añade a la guía
+- [ ] Lanzar Claude en solo lectura — nuevo `estudio.mjs`: `argsEstudio({ plan, pregunta, sesionId })` con `--allowedTools "Read Grep Glob Bash(git log:*) Bash(git show:*) Bash(git diff:*)"`, `--append-system-prompt` de tutor («no propongas mejoras; explica, lista lo técnico, qué se le pide a Claude y muéstralo en el código»), `cwd` = repo; binario de `TABLERO_CLAUDE_BIN`
+- [ ] Ruta de estudio en streaming — `generar.mjs`: `POST /api/estudio { proyecto, plan, pregunta, sesionId? }`; el plan debe estar en `planes`/`backlogs` del proyecto; un proceso por plan con tiempo máximo
+- [ ] Acciones rápidas — `estudio.mjs`: «Extrae lo técnico», «¿Qué le pide a Claude cada paso?», «Explícame la sesión X», «Muéstrame cómo quedó» (git log/diff de la rama o commits del Resultado)
+- [ ] Guía de estudio — `POST /api/estudio/guardar` añade la respuesta a `datos/estudio/<proyecto>/<plan>.md`; README; `node --test 2>&1 | tail -40` en verde
+Prompt:
+```text
+Modelo: Opus. Sesión S55 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S55 BACKLOG.md`). Rama `estudio-plan` (créala desde `kanban-sesiones` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S56**
+
+### S56 — Estudio: vista · **Sonnet** · rama `estudio-plan` · ~55k
+Se espera: Desde Planes, un backlog o el detalle de una tarjeta, el botón «Estudiar» abre un chat con acciones rápidas, muestra la respuesta mientras llega y deja guardarla y releerla en «Guía».
+- [ ] [test] Render del chat y de la guía, verlo fallar — `servidor.test.mjs`: botón «Estudiar» en Planes/backlog/detalle de kanban, acciones rápidas, «Guardar en la guía», pestaña «Guía»
+- [ ] Panel de chat — `plantilla.html`: lectura del streaming de `/api/estudio`, markdown con el render existente, conserva `sesionId` para seguir la conversación
+- [ ] Guía guardada — `plantilla.html`: «Guardar en la guía» y vista «Guía» del `.md`
+- [ ] Probarlo en el navegador con el plan de H7 — «Extrae lo técnico» sobre el plan de H7 del IEP; `node --test 2>&1 | tail -40` en verde
+Prompt:
+```text
+Modelo: Sonnet. Sesión S56 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S56 BACKLOG.md`). Rama `estudio-plan`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S57**
+
+## H20 — Oficina de agentes en vivo (Metodología)
+Historia: Como Eduardo, quiero ver en «Metodología» una oficina donde cada agente real (y cada subagente) es un personaje que lee en el estante, teclea al escribir o muestra un globo cuando espera mi aprobación, para entender de un vistazo qué está haciendo Claude.
+Decisiones con Eduardo: «esperando aprobación» sale de un **hook de eventos** (no solo de las transcripciones); respaldo con las colas `.jsonl`, incluidas `<sid>/subagents/agent-*.jsonl`. Plugins/MCP: ninguno.
+
+### S57 — Oficina: datos y hook · **Opus** · rama `oficina-agentes` (tablero y `metodologia-claude-code`) · ~75k
+Se espera: `GET /api/oficina` dice por agente y subagente qué hace ahora (leyendo, escribiendo, ejecutando, buscando, esperando, pensando, quieto) a partir del hook y de las transcripciones, sin guardar prompts ni contenido.
+- [ ] [test] Estado de la oficina y privacidad del hook, verlo fallar — `fixtures/eventos/` + `oficina.test.mjs`: `estadoOficina` con principal + subagente, Read → leyendo, Edit → escribiendo, Notification de permiso → esperando, SubagentStop → sale; el hook no escribe prompts ni contenido (recorre los campos de cada línea)
+- [ ] Prueba rápida de los avisos reales — registrar un payload real de PreToolUse, Notification y SubagentStop (Claude Code 2.1.286) y anotar aquí los campos (`agent_id`/`agent_type`, `notification_type`)
+- [ ] Hook de eventos — nuevo `hooks/eventos_agentes.mjs`: añade `{ t, sid, agente, tipo, evento, herramienta, archivo(basename), cwd }` a `~/.claude/tablero/eventos.jsonl`, rotado a 2000 líneas
+- [ ] Estado por agente — nuevo `oficina.mjs` (puro) `estadoOficina(eventos, colasJsonl, ahora)`; respaldo con colas `.jsonl` y subagentes reusando la caché de `sesionesActivas`; `GET /api/oficina` en `generar.mjs` (fuera de la huella)
+- [ ] Instalar el hook — `metodologia-claude-code/settings.base.json` + `instalar.sh`, y en el catálogo de `metodologia.mjs`; confirmar con Eduardo antes de tocar su `~/.claude/settings.json`; `node --test 2>&1 | tail -40` y `scripts/probar.sh` en verde
+Prompt:
+```text
+Modelo: Opus. Sesión S57 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S57 BACKLOG.md`). Rama `oficina-agentes` en el tablero y en metodologia-claude-code (créala desde `estudio-plan` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S58**
+
+### S58 — Oficina: escena animada · **Sonnet** · rama `oficina-agentes` · ~70k
+Se espera: En «Metodología», el conmutador «Flujo | Oficina» muestra una escena donde cada agente es un personaje que camina al estante al leer, teclea al escribir, usa la consola con Bash y muestra un globo al esperar aprobación; los subagentes entran y salen por la puerta.
+- [ ] [test] Render de la escena, verlo fallar — `servidor.test.mjs`: un personaje por agente del fixture con su clase de acción (`leyendo`, `escribiendo`, `esperando`…), globo en esperando, lista en ≤700px, iconos fijos con `prefers-reduced-motion`
+- [ ] Escena pixel-art — `plantilla.html`: SVG/CSS sin recursos externos (estante, escritorio con computador, terminal, puerta), personaje con etiqueta de tipo y proyecto, animaciones CSS
+- [ ] Sondeo en vivo — `plantilla.html`: `GET /api/oficina` cada 1,5 s solo con la pestaña visible
+- [ ] Mirarla en el navegador con una sesión real — que lee, edita, lanza un `buscador` y pide permiso; `node --test 2>&1 | tail -40` en verde
+Prompt:
+```text
+Modelo: Sonnet. Sesión S58 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S58 BACKLOG.md`). Rama `oficina-agentes`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S59**
+
+### S59 — Cierre de H18–H20 · **Sonnet**, con Eduardo · ~40k
+Se espera: Todo en verde, revisado a ojo en el navegador con datos reales y con PRs abiertos hacia `develop`; la nota del chat de estudio queda cerrada.
+- [ ] [test] Suite completa y formato — `node --test 2>&1 | tail -40`, `scripts/probar.sh`, `verificar_backlog.mjs --formato`
+- [ ] Revisar a ojo las tres vistas con datos reales — Tablero, Estudio y Oficina a 1200 y 390 px; anotar lo que falle como sesión nueva
+- [ ] PRs y nota — `kanban-sesiones`, `estudio-plan`, `oficina-agentes` → `develop`; marcar la nota en `../notas/NOTAS_TABLERO.md`
+Prompt:
+```text
+Modelo: Sonnet. Sesión S59 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S59 BACKLOG.md`). Trabaja con Eduardo. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+Cómo ejecutarlo: S53 → S54; S55 → S56 (el botón en el detalle del kanban solo si S54 ya está); S57 → S58; al final S59. `/clear` entre sesiones.
 
 ## H17 — Formato único de backlog, mods alineados y vista «Metodología»
 Historia: Como Eduardo, quiero que todo plan o backlog siga un mismo formato con una línea en llano por tarea y «lo que se espera» de cada sesión, para que el tablero y el panel de la terminal lo muestren bien sin gastar más ni bajar la calidad.
