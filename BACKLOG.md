@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `formato-backlog` en el tablero y en `metodologia-claude-code` (ambas desde `eficiencia`, sin PR) · S44 hecha: contrato `metodologia/FORMATO_BACKLOG.md`, ejemplos `fixtures/formato/` y pruebas que fallan a propósito: `formato.test.mjs` 103 de 104 (falta `sesiones(texto)` en `generar.mjs`), panel 9 nuevas de 20 (`claude plugin test plugins/panel-tablero`). Resto de la suite en verde (213 pasan, 2 omitidos); `scripts/probar.sh` 16/16. Línea base: media 248 tok por sección abierta (14, todas del tablero). Decisión: el contrato del tablero es una función nueva `sesiones(texto)`; la copia de los ejemplos para el mod es un `.ts` generado (`scripts/fixtures-formato.mjs`) porque el runner de mods solo importa código. Siguiente: **S45** (Opus).
+- Para retomar (2026-10-05): Ya está escrito cómo debe verse un backlog y hay ejemplos de cada estilo viejo con lo que el tablero y el panel deberían sacar de ellos; las pruebas fallan porque aún no existe el lector nuevo. Lo siguiente es escribir ese lector en el tablero hasta que esas pruebas pasen sin romper nada de lo que ya se ve. Nada está roto fuera de esas pruebas esperadas.
 - 2026-10-05 · rama `formato-backlog` (sale de `eficiencia`) · plan de H17 hecho, solo análisis (sin código ni tests). H17 con S44–S52 y sus casillas abajo. Decisiones con Eduardo en la cabecera de H17. Siguiente: **S44** (Opus).
 - Para retomar (2026-10-05): Se planeó cómo unificar el formato de los backlogs para que el tablero y el panel de la terminal los muestren bien, con una línea en llano por tarea y lo que se espera de cada sesión, midiendo que no suba el costo. También se planeó una pestaña que dibuja la metodología completa con su estado real. Nada de código todavía; lo primero es escribir el contrato del formato y las pruebas que hoy fallan.
 - 2026-10-04 · rama `eficiencia` · E6 hecha, `scripts/probar.sh` del repo `metodologia-claude-code` en verde (16 pruebas; fallaban 14 al escribirlas), escáner limpio. PR https://github.com/edu-delahoz/metodologia-claude-code/pull/2 (rama `eficiencia` → `develop`, sin mergear). Llevado al repo: CLAUDE.md, skill relevo, `settings.base.json` (hooks verificar_backlog, generar --hook-inicio/--silencioso, acotar_lectura), `claude/hooks/acotar_lectura.mjs`, plugin `panel-tablero` (+ marketplace), README (tablero, S0/Sn/SNb, notas), rutas únicas `~/.claude/{hooks,metodologia,tablero}` (`instalar.sh` enlaza `~/.claude/tablero` a `TABLERO_DIR`, por defecto `../metodologia-claude/tablero`). No se probó `register.test.ts` de los plugins (no hay runner en el repo) ni se reinstaló en el `~/.claude` real. H16 completo.
@@ -102,11 +104,14 @@ Costo y calidad: el formato no puede subir más de +10 % los tokens de una secci
 
 ### S44 — Contrato y tests transversales · **Opus** · rama `formato-backlog` · ~60k
 Se espera: El formato está escrito y hay pruebas que fallan contra los parsers actuales del tablero y del mod; queda anotada la línea base de costo.
-- [ ] [test] Ejemplos de cada formato que existe hoy — `fixtures/formato/`: `canonico.md`, `legado-tablero.md` (E5b «(Opus; sigue a E5)», S41 «· **Sonnet** ·»), `legado-iep.md` (viñetas `- **S3c — …**`, «Resultado S3c», «Prompt de arranque»), `legado-ci.md` (`S-CI1b (Sonnet, ~10k; …)`)
-- [ ] [test] Prueba que recorre todos los ejemplos — `formato.test.mjs` (glob de `fixtures/formato/`): clave, modelo, rama, Se espera, Resultado, prompt, llano, tipo, sub-sesiones, Después; verla fallar y anotar cuántas
-- [ ] [test] La misma prueba para el panel de la terminal — `metodologia-claude-code/plugins/panel-tablero/hooks/register.test.ts` leyendo `plugins/panel-tablero/fixtures/formato/` (copia); verla fallar
-- [ ] [doc] Escribir el contrato del formato — `metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`
-- [ ] Medir cuánto cuesta hoy — tokens medios por sección abierta (5 proyectos), llamadas/prompt y ctx final (`tablero --auditoria 2026-10-04`, `metricas_jsonl.mjs`); anotar en esta sección
+- [x] [test] Ejemplos de cada formato que existe hoy — `fixtures/formato/`: `canonico.md`, `legado-tablero.md` (E5b «(Opus; sigue a E5)», S41 «· **Sonnet** ·»), `legado-iep.md` (viñetas `- **S3c — …**`, «Resultado S3c», «Prompt de arranque»), `legado-ci.md` (`S-CI1b (Sonnet, ~10k; …)`)
+- [x] [test] Prueba que recorre todos los ejemplos — `formato.test.mjs` (glob de `fixtures/formato/`): clave, modelo, rama, Se espera, Resultado, prompt, llano, tipo, sub-sesiones, Después; verla fallar y anotar cuántas
+- [x] [test] La misma prueba para el panel de la terminal — `metodologia-claude-code/plugins/panel-tablero/hooks/register.test.ts` leyendo `plugins/panel-tablero/fixtures/formato/` (copia); verla fallar
+- [x] [doc] Escribir el contrato del formato — `metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`
+- [x] Medir cuánto cuesta hoy — tokens medios por sección abierta (5 proyectos), llamadas/prompt y ctx final (`tablero --auditoria 2026-10-04`, `metricas_jsonl.mjs`); anotar en esta sección
+Resultado: Contrato en `metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`. Ejemplos en `fixtures/formato/*.md` con su `.esperado.json` (canónico con `####` y `Después`; legado tablero E5b/S41, IEP S3c/S4a en viñetas, CI S-CI1b/S-CI2). `formato.test.mjs` espera una función nueva `sesiones(texto)` exportada por `generar.mjs` (una prueba por ejemplo × sesión × campo): **103 de 104 fallan** (solo pasa la de inventario). Panel: el runner de mods (`claude plugin test plugins/panel-tablero`) no permite `node:fs` ni importar `.md`/`.json`, así que la copia es un módulo generado `plugins/panel-tablero/fixtures/formato.ts` (`node scripts/fixtures-formato.mjs`); `register.test.ts` pide `seccionDe(texto, undefined, '', clave)` con `sesion, titulo, modelo, seEspera, prompt, hechas, total`: **9 nuevas fallan**, las 11 previas pasan. `scripts/probar.sh` 16/16.
+Línea base de costo (2026-10-05, `backlog.mjs seccion`, chars/4): 14 secciones abiertas con clave, todas del tablero (IEP, metodología, EAP10 y Squalo no tienen `###` abiertos con clave), **media 248 tok, mediana 243** (S41 = 530, la mayor). Auditoría 2026-10-04: 191 sesiones, 4403 llamadas (≈ 23 por sesión). Faltan llamadas/prompt y ctx final por sesión → S45.
+
 
 ### S45 — Parser y linter del formato · **Opus** · rama `formato-backlog` · ~75k
 Se espera: `formato.test.mjs` en verde y la suite completa también (lo legado se ve igual); `verificar_backlog.mjs --formato` lista lo que falta.
@@ -114,6 +119,8 @@ Se espera: `formato.test.mjs` en verde y la suite completa también (lo legado s
 - [ ] Leer secciones con claves raras — `backlog.mjs` `ubicar`: `seccion E5b`, `seccion S-CI1b`; prueba en `backlog.test.mjs`
 - [ ] Avisar lo que no cumple el formato — nuevo `formato.mjs` (puro) + `verificar_backlog.mjs --formato [carpeta]`: sesión abierta sin «Se espera», casilla sin « — », sin prompt
 - [ ] No abrir PR sin «Se espera» — `coherencia.mjs` `bloqueosDeRama`; prueba en `coherencia.test.mjs`
+- [ ] Exportar `sesiones(texto)` según la tabla «Lo que devuelven los parsers» de `FORMATO_BACKLOG.md` — `generar.mjs` (vista sobre `estructura()`, incluye viñetas `- **S3c — …**` y `####`); `node --test formato.test.mjs` 104/104 (añadido en S44)
+- [ ] Completar la línea base de S44: llamadas por prompt y ctx final por sesión — `metricas_jsonl.mjs` sobre la bitácora del 2026-10-04; anotar en S44 (añadido en S44)
 Después: **S46**
 
 ### S46 — Vista del formato · **Sonnet** · rama `formato-backlog` · ~60k
@@ -125,6 +132,7 @@ Se espera: En Resumen y En curso se lee la línea en llano de cada tarea, «Se e
 Se espera: El panel de la terminal muestra la sesión con cualquier clave, su «Se espera» y el prompt siguiente; las pruebas del mod de S44 en verde.
 - [ ] Panel con el formato nuevo — `plugins/panel-tablero/hooks/register.tsx`: `RE_SUB`/`RE_PEDIDA` con clave general y `####`; mostrar «Se espera»; avisar si falta
 - [ ] Revisar `estado-trabajo` — si lee backlog, mismo cambio y su prueba
+- [ ] Pruebas del panel con el runner real — `claude plugin test plugins/panel-tablero` (no `node --test`); si cambian los ejemplos del tablero, regenerar con `node scripts/fixtures-formato.mjs`; las 9 de formato en verde (añadido en S44)
 - [ ] Instalar — copiar a `~/.claude/mods/` sin pisar las rutas reales de `plugin.json`; `scripts/probar.sh` en verde
 
 ### S48 — Reglas y skills · **Sonnet** · rama `formato-backlog` (repo `metodologia-claude-code`) · ~40k

@@ -1,0 +1,22 @@
+{
+  "sesiones": [
+    {
+      "clave": "S-CI1b", "titulo": "verificación post-merge", "modelo": "Sonnet", "rama": null,
+      "seEspera": null, "resultado": null, "prompt": null,
+      "hechas": 2, "total": 2, "subsesiones": [], "despues": null,
+      "tareas": [
+        { "hecha": true, "tipo": null, "llano": null, "tecnico": null },
+        { "hecha": true, "tipo": null, "llano": null, "tecnico": null }
+      ]
+    },
+    {
+      "clave": "S-CI2", "titulo": "higiene de ci.yml tras la revisión de la IA de GitHub", "modelo": "Sonnet", "rama": null,
+      "seEspera": null, "resultado": null,
+      "prompt": "Lee `BACKLOG_MVP.md` (sección S-CI2). Aplica la casilla y anota el run. Al terminar, ejecuta /relevo.",
+      "hechas": 0, "total": 1, "subsesiones": [], "despues": null,
+      "tareas": [
+        { "hecha": false, "tipo": null, "llano": null, "tecnico": null }
+      ]
+    }
+  ]
+}
