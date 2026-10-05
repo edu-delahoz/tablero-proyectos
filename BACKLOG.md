@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `formato-backlog` (tablero y `metodologia-claude-code`, sin PR) · S48 hecha: reglas y skills con el formato; `probar.sh` 20/20 (fallaban 4 de 4 al escribirlas). Siguiente: **S49** (Sonnet).
+- Para retomar (2026-10-05): Las reglas globales y las skills de planear y relevo ya exigen el formato nuevo (con «Se espera» y prompt de la siguiente). Falta migrar las secciones abiertas de los proyectos; la instalación real de `~/.claude` aún no tiene la carpeta `metodologia/` enlazada.
 - 2026-10-05 · rama `formato-backlog` en el tablero y en `metodologia-claude-code` (sin PR) · S47 hecha, en verde: panel-tablero 20/20 (antes fallaban 9 de 20), `scripts/probar.sh` 16/16. `seccionDe` en `register.tsx` lee clave general (`S-CI1b`, `E5b`), `####`, modelo, «Se espera» y prompt (bloque, cita o «…»), y el panel muestra «Se espera» o avisa si falta; `estado-trabajo` no necesitó cambio; copiado a `~/.claude/mods/panel-tablero`. Siguiente: **S48** (Sonnet).
 - Para retomar (2026-10-05): El panel de la terminal ya entiende el formato nuevo y los estilos viejos: muestra qué se espera de la sesión y avisa si falta. Está instalado y en verde. Lo siguiente es escribir las reglas y skills para que toda sesión nueva use este formato.
 - 2026-10-05 · rama `formato-backlog` (sin PR) · S46 hecha, tests en verde (321 pasan, 2 omitidos; los 2 nuevos de `servidor.test.mjs` fallaban 2 de 2). `plantilla.html`: `partesFormato`/`casillaFormato` (llano visible, técnico plegable, tipo como etiqueta; sin « — » se ve como antes), `bloqueEspera` («Se espera»/«Resultado»), `etiquetasFormato` (Épica/Historia/Sesión/Tarea) y `.prompt-siguiente` fijo con copiar en «En curso»; `tarea()` usa `casillaFormato`. Siguiente: **S47** (repo `metodologia-claude-code`).
@@ -148,9 +150,15 @@ Se espera: Toda sesión que planee o haga relevo escribe en el formato y deja el
 - [x] [doc] Regla corta en CLAUDE.md — `~/.claude/CLAUDE.md` y `claude/CLAUDE.md`: «formato en FORMATO_BACKLOG.md; Se espera obligatorio; casilla = llano — técnico»
 - [x] [doc] Skills — `plugins/metodologia/skills/planear/SKILL.md`, `claude/skills/relevo/SKILL.md` (y `~/.claude/skills/relevo`): Se espera de la siguiente, `Prompt:`, correr `verificar_backlog.mjs --formato`
 - [x] [doc] Plantilla única de prompt — `metodologia/PROMPTS.md`
+Resultado: Reglas y skills ya piden el formato nuevo: CLAUDE.md (repo y `~/.claude`), skills relevo (repo y real) y planear, y plantilla única en `PROMPTS.md`. `scripts/probar.sh` 20/20 (4 nuevas fallaban 4 de 4). `~/.claude/metodologia/` aún no existe en la instalación real: reinstalar con `instalar.sh` para que el enlace a FORMATO_BACKLOG.md funcione.
+Después: **S49**
 
 ### S49 — Migrar secciones abiertas · **Sonnet** · rama `formato-backlog` · ~50k
 Se espera: `verificar_backlog.mjs --formato` sale limpio en las secciones abiertas de los 5 proyectos y lo cerrado no se tocó.
+Prompt:
+```text
+Sesión S49 de BACKLOG.md. Lee /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (sección Estado con `grep -n`, y S49 con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S49 BACKLOG.md`) y trabaja solo esa sesión, en la rama `formato-backlog`. Contrato: `~/Desktop/Desarrollo/metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
 - [ ] Pasar al formato solo lo abierto — tablero, IEP (`BACKLOG_MVP.md` H4–H7), EAP10, Squalo; anotar tokens antes/después
 
 ### S50 — Metodología viva: datos · **Opus** · rama `formato-backlog` · ~70k
