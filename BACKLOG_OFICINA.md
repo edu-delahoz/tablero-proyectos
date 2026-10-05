@@ -2,6 +2,8 @@
 
 ## Estado
 - 2026-10-05 · rama `oficina-pixel` (sale de `develop`, sin PR) · S-OF1 hecha: datos de la oficina (placa, apariencia, salas y casillas sin solapes) con pruebas; suite 371 pasan / 0 fallan / 2 omitidos. Backlog propio a petición de Eduardo: no va en `BACKLOG.md` (solo S-OF3 marcará allí la casilla de H23). Trampa: el hito debe llamarse `H<número>` (`H1`), con `H-OF1` el validador lo toma por sesión. Siguiente: **S-OF2**. Plan: `~/.claude/plans/quiero-que-planes-una-snazzy-salamander.md`.
+- 2026-10-05 · rama `oficina-pixel` (sin PR) · S-OF2 hecha en código: escena en canvas (salas, muebles, sprites recoloreados, caminar en «L» desde la puerta, globos «!»/«…», placas y tarjeta en HTML, lista móvil con mini-avatar); suite 373 pasan / 0 fallan / 2 omitidos. Falta verla en el navegador → **S-OF2b**. Decisiones: el servidor no manda `rama` por agente, la tarjeta la muestra solo si llega; placas debajo de los pies (si chocan, encima del globo) evitando cabezas; escala ×3 solo si no obliga a más filas que ×2. Trampa: la prueba de S58 en `servidor.test.mjs` evaluaba la escena vieja y hubo que adaptarla.
+- Para retomar (2026-10-05): La oficina ya se dibuja en pixel dentro de la pestaña Oficina: salas por proyecto con muebles, personajes que caminan a su sitio, placas con la sesión y, en móvil, una lista con mini-avatares. Todas las pruebas pasan, pero nadie la ha mirado aún en un navegador; lo siguiente es sacar capturas con agentes simulados y pulir lo que se vea mal, y después probarla con sesiones reales.
 - Para retomar (2026-10-05): El servidor ya entrega, para cada agente, su placa (la sesión SX), su personaje y una casilla propia dentro de la sala de su proyecto. Falta dibujarlo en pixel (S-OF2) y probarlo con sesiones vivas (S-OF3).
 
 ## H1 — Oficina estilo Pixel Agents
@@ -28,18 +30,34 @@ Después: **S-OF2**
 
 ### S-OF2 — Oficina pixel: escena en canvas · **Opus** · rama `oficina-pixel` · ~75k · plugins: ninguno
 Se espera: La pestaña Oficina muestra salas pixel por proyecto con muebles y personajes distintos, cada uno con su placa «proyecto · SX», que caminan a su sitio sin taparse y sin emojis; en móvil, una lista con mini-avatar. Se comprueba con el test de `plantilla.html` en verde y capturas de Chrome headless a 1280 y 390 px.
-- [ ] [test] Prueba de la escena nueva, verla fallar — `generar.test.mjs` (patrón de `:827`, lee `plantilla.html`): hay `<canvas` en `htmlOficina`, no queda ninguno de `💤 💭 📖 ✍️ ⌨️ 🔎 ⏳` ni `ICONO_OFICINA`, la placa usa `etiqueta`, la lista móvil pinta avatar; anotar cuántas fallaban
-- [ ] Salas y muebles en pixel — `plantilla.html`: `<canvas>` con `image-rendering: pixelated`, tiles de 16 px escalados ×2/×3 según ancho; suelo distinto por sala (madera, baldosa, moqueta), paredes, escritorio con monitor, estante con libros, terminal, sofá, planta, puerta por sala
-- [ ] Personajes distintos con sus poses — sprites como matrices + paleta (16×24: de pie, caminando 2 cuadros, sentado tecleando, leyendo), recoloreados con `apariencia`; pantalla apagada si está quieto
-- [ ] Caminan a su sitio sin taparse — bucle `requestAnimationFrame` solo con la pestaña visible; interpolar casilla anterior → nueva; entrada por la puerta de su sala; `sondearOficina` (~1982) solo actualiza el estado que lee el bucle; `prefers-reduced-motion` salta a la casilla
-- [ ] Placa con la sesión y detalle al tocar — capa HTML encima del canvas: placa «tablero · S65» (subagente: su tipo, con el color de su sesión); al pasar el ratón o tocar, tarjeta con proyecto, sesión, rama, acción y archivo
-- [ ] Globos pixel en lugar de emojis — dibujar en canvas «!» parpadeando (esperando) y «…» (pensando); borrar `ICONO_OFICINA`, `LUGAR_OFICINA` y el CSS `.personaje/.etq/.globo` (~131–139)
-- [ ] En móvil, lista con mini-avatar — `<700px`: cada fila con canvas 16×24 del personaje, placa y acción en texto
-- [ ] [test] Revisión a ojo — Chrome headless con eventos simulados (como S58b) a 1280 y 390 px, con 8 agentes en 2 proyectos: sin solapes y placas legibles; suite `node --test 2>&1 | tail -20` en verde
+- [x] [test] Prueba de la escena nueva, verla fallar — `generar.test.mjs` (patrón de `:827`, lee `plantilla.html`): hay `<canvas` en `htmlOficina`, no queda ninguno de `💤 💭 📖 ✍️ ⌨️ 🔎 ⏳` ni `ICONO_OFICINA`, la placa usa `etiqueta`, la lista móvil pinta avatar; anotar cuántas fallaban · **fallaban 2 de 2** (sin `<canvas`, sin `placaOficina`)
+- [x] Salas y muebles en pixel — `plantilla.html`: `<canvas>` con `image-rendering: pixelated`, tiles de 16 px escalados ×2/×3 según ancho; suelo distinto por sala (madera, baldosa, moqueta), paredes, escritorio con monitor, estante con libros, terminal, sofá, planta, puerta por sala
+- [x] Personajes distintos con sus poses — sprites como matrices + paleta (16×24: de pie, caminando 2 cuadros, sentado tecleando, leyendo), recoloreados con `apariencia`; pantalla apagada si está quieto
+- [x] Caminan a su sitio sin taparse — bucle `requestAnimationFrame` solo con la pestaña visible; interpolar casilla anterior → nueva; entrada por la puerta de su sala; `sondearOficina` (~1982) solo actualiza el estado que lee el bucle; `prefers-reduced-motion` salta a la casilla
+- [x] Placa con la sesión y detalle al tocar — capa HTML encima del canvas: placa «tablero · S65» (subagente: su tipo, con el color de su sesión); al pasar el ratón o tocar, tarjeta con proyecto, sesión, rama, acción y archivo
+- [x] Globos pixel en lugar de emojis — dibujar en canvas «!» parpadeando (esperando) y «…» (pensando); borrar `ICONO_OFICINA`, `LUGAR_OFICINA` y el CSS `.personaje/.etq/.globo` (~131–139)
+- [x] En móvil, lista con mini-avatar — `<700px`: cada fila con canvas 16×24 del personaje, placa y acción en texto
+- [-] [test] Revisión a ojo — Chrome headless con eventos simulados (como S58b) a 1280 y 390 px, con 8 agentes en 2 proyectos: sin solapes y placas legibles; suite `node --test 2>&1 | tail -20` en verde → S-OF2b
+- [x] [test] Adaptar la prueba vieja de S58 a la escena nueva — `servidor.test.mjs` «oficina (S58, S-OF2)»: lienzo, una placa y un mini-avatar por agente, nombre de sala, `matchMedia` de reducir movimiento (añadido en S-OF2)
+
+Resultado: Escena hecha en código y con pruebas en verde (suite 373 pasan / 0 fallan / 2 omitidos; sintaxis del script comprobada con `node --check`), pero aún **sin verla en el navegador**: la revisión a ojo pasa a S-OF2b por el aviso de contexto.
 
 Prompt:
 ```text
 Modelo: Opus. Sesión S-OF2 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG_OFICINA.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S-OF2 BACKLOG_OFICINA.md`), rama `oficina-pixel`. Primera casilla: el test de `plantilla.html` (canvas, sin emojis, placa «proyecto · SX»), verlo fallar. Solo se tocan `plantilla.html` y su test. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S-OF2b**
+
+### S-OF2b — continuación: revisión a ojo de la oficina pixel · **Opus** · rama `oficina-pixel` · ~40k · plugins: ninguno
+Se espera: La oficina pixel se ve bien de verdad: en Chrome headless a 1280 px salen las salas con muebles y 8 personajes distintos con su placa legible y sin solapes, y a 390 px la lista con mini-avatares; lo que se vea mal queda arreglado en `plantilla.html` con la suite en verde.
+- [ ] [test] Capturas con datos simulados — servir el tablero con 8 agentes en 2 proyectos (como S58b: eventos simulados para `/api/oficina`) y sacar capturas Chrome headless a 1280 y 390 px; esperado: suelos distintos, escritorio con monitor, estante, terminal, sofá, planta y puerta por sala; placas sin taparse
+- [ ] [código] Corregir lo que se vea mal — `plantilla.html` (`dibujarSalaOf`, `colocarCapaOf`, sprites `PIE_OF`/`SENTADO_OF`): solo ajustes visuales, sin tocar `oficina.mjs`
+- [ ] [test] Movimiento y detalle — cambiar la acción de un agente en los eventos simulados y comprobar (dos capturas seguidas) que camina a su nueva casilla y que el «!» aparece al esperar; pasar el ratón por un personaje muestra la tarjeta
+- [ ] [test] Suite en verde — `node --test 2>&1 | tail -20`
+
+Prompt:
+```text
+Modelo: Opus. Sesión S-OF2b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG_OFICINA.md (léela de un tirón con `node ~/.claude/tablero/backlog.mjs arranque S-OF2b BACKLOG_OFICINA.md`), rama `oficina-pixel`. Primera casilla: capturas Chrome headless a 1280 y 390 px con 8 agentes simulados en 2 proyectos. Solo se toca `plantilla.html` (y su test si hace falta). Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 ```
 Después: **S-OF3**
 

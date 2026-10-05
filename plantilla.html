@@ -118,34 +118,23 @@ details summary { cursor: pointer; }
 .vacio { color: var(--suave); padding: 20px; text-align: center; }
 .hash { font-size: .85em; }
 
-/* ---------- Oficina (S58): escena de agentes, CSS puro sin recursos externos ---------- */
+/* ---------- Oficina (S-OF2): salas pixel en <canvas>; placas, nombres y tarjeta en HTML encima ---------- */
 .meta-vistas { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.oficina-escena { position: relative; height: 230px; max-width: 880px; overflow: hidden; border: 1px solid var(--borde); border-radius: var(--radio); background: linear-gradient(var(--panel) 0 72%, color-mix(in srgb, var(--borde) 70%, var(--panel)) 72%); }
-.oficina .estante { position: absolute; left: 2%; top: 14px; width: 22%; height: 96px; border: 3px solid var(--borde); background: repeating-linear-gradient(90deg, #c0504d 0 6px, #4f81bd 6px 11px, #9bbb59 11px 18px, #f79646 18px 22px), var(--panel); background-size: 100% 30%; background-repeat: repeat-x; background-position: 0 4px, 0 0; }
-.oficina .escritorio { position: absolute; left: 40%; top: 118px; width: 22%; height: 10px; background: #8b5a2b; box-shadow: 0 10px 0 -3px #6b4423; }
-.oficina .escritorio::before { content: ''; position: absolute; left: 30%; bottom: 10px; width: 36%; height: 26px; border: 3px solid var(--texto, #333); background: #8fd3ff; }
-.oficina .terminal { position: absolute; left: 68%; top: 56px; width: 16%; height: 62px; border: 3px solid var(--texto, #333); background: #101418; color: #5eea8a; font: 11px/1.2 var(--mono); padding: 4px 6px; }
-.oficina .terminal::after { content: '$ _'; animation: parpadeo 1s steps(2) infinite; }
-.oficina .puerta { position: absolute; right: 1.5%; top: 40px; width: 7%; height: 100px; border: 3px solid #6b4423; background: #a9743a; }
-.oficina .puerta::after { content: ''; position: absolute; right: 5px; top: 48px; width: 5px; height: 5px; border-radius: 50%; background: #f1c40f; }
-.personaje { position: absolute; width: 34px; height: 54px; font: 10px var(--mono); text-align: center; transition: left 1.2s linear, bottom 1.2s linear; }
-.personaje.entra { animation: entrar 1.4s ease-out; }
-.personaje .cuerpo { width: 16px; height: 16px; margin: 0 auto; background: var(--acento); box-shadow: 0 -11px 0 -2px #f5cba7, -5px 4px 0 -3px var(--acento), 5px 4px 0 -3px var(--acento); }
-.personaje .pies { display: block; width: 14px; height: 10px; margin: 0 auto; background: linear-gradient(90deg, #333 0 5px, transparent 5px 9px, #333 9px); animation: paso .5s steps(2) infinite; }
-.personaje.escribiendo .pies, .personaje.ejecutando .pies, .personaje.quieto .pies, .personaje.esperando .pies { animation: none; }
-.personaje.escribiendo .cuerpo { animation: teclea .25s steps(2) infinite; }
-.personaje.leyendo .cuerpo, .personaje.buscando .cuerpo, .personaje.pensando .cuerpo { animation: rebote 1s ease-in-out infinite; }
-.personaje .etq { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); white-space: nowrap; background: var(--panel); border: 1px solid var(--borde); border-radius: 3px; padding: 0 3px; color: var(--texto, inherit); }
-.personaje .globo { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); background: #fff8c5; color: #333; border: 2px solid #333; border-radius: 8px; padding: 0 5px; animation: rebote 1s ease-in-out infinite; }
+.oficina-escena { position: relative; overflow-x: auto; overflow-y: hidden; border: 1px solid var(--borde); border-radius: var(--radio); background: color-mix(in srgb, var(--borde) 35%, var(--panel)); }
+.oficina-lienzo { display: block; image-rendering: crisp-edges; image-rendering: pixelated; }
+.oficina-sala-nombre { position: absolute; font: 700 12px/1 var(--mono); color: var(--suave); white-space: nowrap; pointer-events: none; }
+.placa-oficina { position: absolute; left: 0; top: 0; padding: 0 5px; border: 1px solid var(--borde); border-left: 4px solid var(--c, var(--acento)); border-radius: 3px; background: var(--panel); color: inherit; font: 600 10px/1.5 var(--mono); white-space: nowrap; cursor: pointer; }
+.placa-oficina.sub { font-weight: 400; }
+.tarjeta-oficina { position: absolute; z-index: 2; min-width: 170px; padding: 6px 9px; border: 1px solid var(--borde); border-left: 4px solid var(--c, var(--acento)); border-radius: var(--radio); background: var(--panel); font: 12px/1.5 var(--mono); box-shadow: 0 4px 14px rgb(0 0 0 / .18); pointer-events: none; }
+.tarjeta-oficina dl { margin: 4px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 0 10px; }
+.tarjeta-oficina dt { color: var(--suave); }
+.tarjeta-oficina dd { margin: 0; }
 .oficina-lista { display: none; list-style: none; padding: 0; margin: 8px 0 0; }
+.oficina-lista li { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.oficina-lista b { border-left: 4px solid var(--c, var(--acento)); padding-left: 5px; }
+.mini-avatar { flex: none; width: 32px; height: 48px; image-rendering: crisp-edges; image-rendering: pixelated; }
 .oficina-vacia { color: var(--suave); }
-@keyframes parpadeo { 50% { opacity: 0; } }
-@keyframes paso { 50% { transform: scaleX(.6); } }
-@keyframes teclea { 50% { transform: translateY(2px); } }
-@keyframes rebote { 50% { transform: translateY(-3px); } }
-@keyframes entrar { from { left: 92%; opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .oficina *, .oficina *::after { animation: none !important; transition: none !important; } }
-@media (max-width: 700px) { .oficina-escena { display: none; } .oficina-lista { display: block; } .oficina-lista li { margin-bottom: 6px; } }
+@media (max-width: 700px) { .oficina-escena { display: none; } .oficina-lista { display: block; } }
 
 /* ---------- Barra de archivos + conmutador ---------- */
 .archivos { display: flex; gap: 0; overflow-x: auto; border-bottom: 1px solid var(--borde); margin-bottom: 12px; }
@@ -1958,48 +1947,307 @@ if (editable()) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sondearSesiones(); });
 }
 
-// ---------- Oficina (S58): escena animada con GET /api/oficina (solo con la pestaña visible) ----------
-const ICONO_OFICINA = { leyendo: '📖', escribiendo: '✍️', ejecutando: '⌨️', buscando: '🔎', esperando: '⏳', pensando: '💭', quieto: '💤' };
-const LUGAR_OFICINA = { leyendo: 6, buscando: 12, escribiendo: 46, ejecutando: 72, esperando: 20, pensando: 56, quieto: 34 };
-function htmlOficina(datos, nuevos) {
-  const agentes = (datos && datos.agentes) || [];
-  const ocupados = {};
-  const llave = (a) => `${a.sid}/${a.agente}`;
-  const nombre = (a) => `${a.tipo || (a.principal ? 'principal' : 'agente')}${a.proyecto ? ' · ' + a.proyecto : ''}`;
-  const personajes = agentes.map((a) => {
-    const n = ocupados[a.accion] = (ocupados[a.accion] || 0) + 1;
-    const x = Math.min((LUGAR_OFICINA[a.accion] ?? 30) + ((n - 1) >> 1) * 9, 84), y = 8 + ((n - 1) % 2) * 14;
-    return `<div class="personaje ${esc(a.accion)}${nuevos && nuevos.has(llave(a)) ? ' entra' : ''}" data-key="${esc(llave(a))}" style="left:${x}%;bottom:${y}px" title="${esc(nombre(a))}">${a.accion === 'esperando' ? '<span class="globo">…</span>' : ''}<span class="cuerpo"></span><span class="pies"></span><span class="etq">${ICONO_OFICINA[a.accion] || ''}</span></div>`;
-  }).join('');
-  const lista = agentes.map((a) => `<li>${ICONO_OFICINA[a.accion] || ''} <b>${esc(nombre(a))}</b> — ${esc(a.accion)}${a.archivo ? ' · ' + esc(a.archivo) : ''}</li>`).join('');
-  return `<section class="tarjeta meta oficina"><h2><span>Oficina</span><small>${agentes.length} agente(s) trabajando</small></h2>
-    ${agentes.length ? '' : '<p class="oficina-vacia">Nadie en la oficina: no hay sesiones de Claude Code activas.</p>'}
-    <div class="oficina-escena" role="img" aria-label="Oficina con ${agentes.length} agente(s)"><div class="estante"></div><div class="escritorio"></div><div class="terminal"></div><div class="puerta"></div>${personajes}</div>
-    <ul class="oficina-lista" aria-label="Agentes">${lista}</ul></section>`;
+// ---------- Oficina (S-OF2): salas pixel en <canvas> con GET /api/oficina (solo con la pestaña visible) ----------
+// El servidor reparte salas y casillas (oficina.mjs); aquí solo se dibuja. Un bucle requestAnimationFrame lee OFICINA y lleva
+// a cada personaje de su casilla anterior a la nueva (quien llega entra por la puerta). Placas, nombres y tarjeta: HTML encima.
+const T_OF = 16; // lado de una casilla, en px del lienzo (luego ×2 o ×3)
+const ANIM_OF = new Map(); // llave → { sala, x, y, ruta: [{ x, y }], destino } en casillas (con decimales mientras camina)
+let POS_OF = [], focoOf = null, fijoOf = null, oficinaAnimada = false, cuadroOfPedido = false, ultimoCuadroOf = 0;
+const llaveOficina = (a) => `${a.sid}/${a.agente}`;
+// Placa: «proyecto · SX» del principal; el subagente lleva su tipo (y el color de su sesión).
+function placaOficina(a) {
+  if (!a.principal) return a.tipo || 'agente';
+  return [a.proyecto, a.etiqueta].filter(Boolean).join(' · ') || 'sesión';
 }
+function htmlOficina(datos) {
+  const agentes = (datos && datos.agentes) || [], salas = (datos && datos.salas) || [];
+  const color = (a) => (a.apariencia && a.apariencia.camiseta ? ` style="--c:${esc(a.apariencia.camiseta)}"` : '');
+  pedirCuadro();
+  return `<section class="tarjeta meta oficina"><h2><span>Oficina</span><small>${agentes.length} agente(s) trabajando</small></h2>
+    ${agentes.length ? `<div class="oficina-escena"><canvas class="oficina-lienzo" width="0" height="0" role="img" aria-label="Oficina con ${agentes.length} agente(s) en ${salas.length} sala(s)"></canvas>${salas.map((s) => `<span class="oficina-sala-nombre" data-sala="${esc(s.id)}">${esc(s.proyecto || 'otros')}</span>`).join('')}${agentes.map((a) => `<button type="button" class="placa-oficina${a.principal ? '' : ' sub'}" data-key="${esc(llaveOficina(a))}"${color(a)}>${esc(placaOficina(a))}</button>`).join('')}<div class="tarjeta-oficina" hidden></div></div>` : '<p class="oficina-vacia">Nadie en la oficina: no hay sesiones de Claude Code activas.</p>'}
+    <ul class="oficina-lista" aria-label="Agentes">${agentes.map((a) => `<li><canvas class="mini-avatar" width="16" height="24" data-key="${esc(llaveOficina(a))}" aria-hidden="true"></canvas><span><b${color(a)}>${esc(placaOficina(a))}</b> — ${esc(a.accion)}${a.archivo ? ' · ' + esc(a.archivo) : ''}</span></li>`).join('')}</ul></section>`;
+}
+
+// Sprites 16×24, de frente salvo «sentado» (de espaldas, ante su monitor). Letras: h pelo, s piel, e ojos, c camiseta, d su sombra,
+// p pantalón, z zapatos, b/B libro. Se recolorean con la `apariencia` que da el servidor.
+const PIE_OF = [
+  '................', '.....hhhhhh.....', '....hhhhhhhh....', '....hssssssh....', '....ssessess....', '....ssssssss....',
+  '....ssssssss....', '.....ssssss.....', '......ssss......', '.....cccccc.....', '....cccccccc....', '...cccccccccc...',
+  '...ccdccccdcc...', '...ccdccccdcc...', '...ccdccccdcc...', '...s.cccccc.s...', '....pppppppp....', '....pppppppp....',
+  '....ppp..ppp....', '....ppp..ppp....', '....ppp..ppp....', '....ppp..ppp....', '....zzz..zzz....', '................',
+];
+const SENTADO_OF = [
+  '................', '.....hhhhhh.....', '....hhhhhhhh....', '....hhhhhhhh....', '...shhhhhhhhs...', '....hhhhhhhh....',
+  '....hhhhhhhh....', '.....hhhhhh.....', '......ssss......', '.....cccccc.....', '....cccccccc....', '...cccccccccc...',
+  '...cccccccccc...', '...cccccccccc...', '...cccccccccc...', '....cccccccc....', '...pppppppppp...', '...pppppppppp...',
+  ...Array(6).fill('................'),
+];
+const conFilasOf = (base, cambios) => base.map((f, i) => cambios[i] ?? f);
+const SPRITES_OF = {
+  pie: PIE_OF,
+  paso1: conFilasOf(PIE_OF, { 21: '....zzz..ppp....', 22: '.........zzz....' }),
+  paso2: conFilasOf(PIE_OF, { 21: '....ppp..zzz....', 22: '....zzz.........' }),
+  leyendo: conFilasOf(PIE_OF, { 4: '....ssssssss....', 5: '....ssessess....', 13: '...csBBbbBBsc...', 14: '...ccBBbbBBcc...', 15: '....cccccccc....' }),
+  sentado: SENTADO_OF,
+  tecleo1: conFilasOf(SENTADO_OF, { 11: '..scccccccccc...' }),
+  tecleo2: conFilasOf(SENTADO_OF, { 11: '...ccccccccccs..' }),
+};
+const deEspaldasOf = (pose) => pose === 'sentado' || pose.startsWith('tecleo');
+function peinarOf(filas, peinado, espalda) {
+  const f = filas.map((r) => [...r]);
+  if (peinado === 'largo') for (let y = 3; y <= 9; y++) { f[y][3] = 'h'; f[y][12] = 'h'; }
+  if (peinado === 'rapado') { f[1] = [...'................']; if (!espalda) f[3] = [...'....ssssssss....']; }
+  if (peinado === 'mono') { f[0][7] = 'h'; f[0][8] = 'h'; }
+  return f;
+}
+const oscurecerOf = (hex, k = 0.72) => {
+  const n = parseInt(String(hex).slice(1), 16);
+  return Number.isNaN(n) ? '#555' : `rgb(${((n >> 16) & 255) * k | 0},${((n >> 8) & 255) * k | 0},${(n & 255) * k | 0})`;
+};
+const SPRITE_CACHE_OF = new Map();
+function spriteOf(ap, pose) {
+  ap = ap || {};
+  const llave = `${pose}|${ap.camiseta}|${ap.pelo}|${ap.piel}|${ap.peinado}`;
+  let c = SPRITE_CACHE_OF.get(llave);
+  if (c) return c;
+  const camiseta = ap.camiseta || '#7c8a99';
+  const pal = { h: ap.pelo || '#2b1d14', s: ap.piel || '#f6d3b3', e: '#222', c: camiseta, d: oscurecerOf(camiseta), p: '#3b4a6b', z: '#2a2a2a', b: '#c0504d', B: '#f4efe2' };
+  c = document.createElement('canvas'); c.width = 16; c.height = 24;
+  const g = c.getContext('2d');
+  peinarOf(SPRITES_OF[pose], ap.peinado, deEspaldasOf(pose)).forEach((fila, y) => fila.forEach((ch, x) => { if (pal[ch]) { g.fillStyle = pal[ch]; g.fillRect(x, y, 1, 1); } }));
+  SPRITE_CACHE_OF.set(llave, c);
+  return c;
+}
+
+// Suelo distinto por sala (madera, baldosa, moqueta), en el orden de las salas.
+const SUELOS_OF = [
+  (r, x, y, tx) => { r(x, y, 16, 16, '#b98552'); for (let j = 0; j < 4; j++) { r(x, y + j * 4 + 3, 16, 1, '#9c6c3f'); r(x + (tx * 7 + j * 5) % 16, y + j * 4, 1, 3, '#9c6c3f'); } },
+  (r, x, y, tx, ty) => { r(x, y, 16, 16, (tx + ty) % 2 ? '#dfe3e8' : '#ccd3db'); r(x + 15, y, 1, 16, '#b9c0c9'); r(x, y + 15, 16, 1, '#b9c0c9'); },
+  (r, x, y, tx, ty) => { r(x, y, 16, 16, '#5f7fae'); for (const [a, b] of [[3, 5], [11, 2], [7, 12], [14, 9], [1, 14]]) r(x + (a + tx) % 16, y + (b + ty * 3) % 16, 1, 1, (a + ty) % 2 ? '#56739e' : '#6a8bb9'); },
+];
+const LIBROS_OF = ['#c0504d', '#4f81bd', '#9bbb59', '#f79646', '#8064a2', '#4bacc6'];
+// Rejilla de oficina.mjs: paredes en el borde, estante arriba a la izquierda, ventana, planta, terminal en la pared derecha,
+// sofá abajo a la izquierda, puerta en el centro de la pared de abajo y escritorios (fila 3) con su silla (fila 4).
+function dibujarSalaOf(ctx, sala, p, i, encendido, t) {
+  const T = T_OF, X = p.ox * T, Y = p.oy * T, W = sala.ancho * T, H = sala.alto * T;
+  const r = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(X + x, Y + y, w, h); };
+  const suelo = SUELOS_OF[i % SUELOS_OF.length];
+  for (let ty = 1; ty < sala.alto - 1; ty++) for (let tx = 1; tx < sala.ancho - 1; tx++) suelo(r, tx * T, ty * T, tx, ty);
+  r(0, 0, W, T, '#e9dfc9'); r(0, 0, W, 2, '#cbbd9f'); r(0, T - 3, W, 3, '#8b6b4a');
+  r(0, 0, T, H, '#7d6a58'); r(W - T, 0, T, H, '#7d6a58'); r(0, H - T, W, T, '#7d6a58');
+  r(T - 2, T, 2, H - 2 * T, '#5b4a3c'); r(W - T, T, 2, H - 2 * T, '#5b4a3c'); r(T, H - T, W - 2 * T, 2, '#5b4a3c');
+  const vx = (Math.floor(sala.ancho / 2) - 1) * T;
+  r(vx + 2, 2, 28, 11, '#6b5a4a'); r(vx + 3, 3, 26, 9, '#a9dcf5'); r(vx + 15, 3, 2, 9, '#6b5a4a'); r(vx + 3, 7, 26, 1, '#6b5a4a');
+  r(T, 0, 3 * T, T + 4, '#7a4f2a');
+  for (const fy of [2, 9]) {
+    r(T + 2, fy, 3 * T - 4, 6, '#4a2f18');
+    for (let b = 0; b < 20; b++) { const alto = 3 + ((b * 7 + fy) % 3); r(T + 3 + b * 2 + (b > 9 ? 2 : 0), fy + 6 - alto, 2, alto, LIBROS_OF[(b + fy) % LIBROS_OF.length]); }
+  }
+  const px = (sala.ancho - 2) * T;
+  r(px + 7, 1, 2, 8, '#3e8e41'); r(px + 3, 3, 4, 3, '#4fb052'); r(px + 9, 2, 4, 3, '#4fb052'); r(px + 5, 6, 6, 2, '#3e8e41'); r(px + 4, 9, 8, 2, '#c96a3f'); r(px + 5, 11, 6, 5, '#b5562f');
+  const tx = W - T, ty = 4 * T;
+  r(tx + 1, ty + 1, 14, 2 * T - 2, '#2b2f36'); r(tx + 2, ty + 3, 12, 14, '#101418');
+  for (let l = 0; l < 3; l++) r(tx + 3, ty + 5 + l * 3, 4 + ((l * 5 + 3) % 6), 1, '#5eea8a');
+  if (Math.floor(t / 500) % 2 === 0) r(tx + 3, ty + 14, 3, 2, '#5eea8a');
+  r(tx + 3, ty + 20, 10, 2, '#4a4f58'); r(tx + 3, ty + 24, 10, 2, '#4a4f58'); r(tx + 11, ty + 28, 2, 1, '#e3a33b');
+  const sy = (sala.alto - 2) * T;
+  r(T, sy + 2, 3 * T, 7, '#8a3a32'); r(T + 1, sy + 3, 3 * T - 2, 5, '#a0473d'); r(T, sy + 9, 3 * T, 6, '#c45a4d');
+  r(T, sy + 4, 3, 11, '#8a3a32'); r(4 * T - 3, sy + 4, 3, 11, '#8a3a32'); r(2 * T, sy + 9, 1, 6, '#a0473d'); r(3 * T, sy + 9, 1, 6, '#a0473d');
+  const dx = Math.floor(sala.ancho / 2) * T, dy = H - T;
+  r(dx, dy, T, T, '#5b4a3c'); r(dx + 2, dy + 1, 12, T - 1, '#a9743a'); r(dx + 3, dy + 3, 10, 4, '#b98552'); r(dx + 11, dy + 9, 2, 2, '#f1c40f');
+  for (const e of sala.escritorios || []) {
+    const x = e.x * T, y = e.y * T, on = e.sid && encendido.has(e.sid);
+    r(x + 3, y + T + 6, 10, 6, '#3d3f45'); r(x + 7, y + T + 12, 2, 3, '#2b2d31');
+    r(x - 4, y + 6, T + 8, 6, '#8b5a2b'); r(x - 4, y + 12, T + 8, 3, '#6b4423'); r(x - 3, y + 15, 2, 1, '#4a2f18'); r(x + T + 1, y + 15, 2, 1, '#4a2f18');
+    r(x + 2, y - 5, 12, 10, '#2b2f36'); r(x + 3, y - 4, 10, 7, on ? '#8fd3ff' : '#1b2230'); r(x + 7, y + 5, 2, 1, '#2b2f36');
+    if (on) r(x + 4, y - 3 + (Math.floor(t / 300) % 3) * 2, 6, 1, '#2b6ea8');
+  }
+}
+// Globo pixel sobre la cabeza: «!» parpadeando si espera permiso, «…» si piensa.
+function globoOf(ctx, f, t) {
+  const acc = f.a.accion;
+  if ((acc !== 'esperando' && acc !== 'pensando') || (acc === 'esperando' && Math.floor(t / 400) % 2)) return;
+  const x = f.x + 9, y = f.y - 20, r = (a, b, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x + a, y + b, w, h); };
+  r(0, 0, 11, 9, '#333'); r(1, 1, 9, 7, '#fff'); r(2, 9, 2, 1, '#333'); r(1, 10, 1, 1, '#333');
+  if (acc === 'esperando') { r(5, 2, 1, 3, '#d33'); r(5, 6, 1, 1, '#d33'); }
+  else for (let i = 0; i <= Math.floor(t / 350) % 3; i++) r(2 + i * 3, 5, 1, 1, '#333');
+}
+function poseOf(a, s, sala, t) {
+  if (s.ruta.length) return Math.floor(t / 160) % 2 ? 'paso1' : 'paso2';
+  const c = a.casilla;
+  if (c.zona === 'escritorio' && (sala.escritorios || []).some((e) => e.sid === a.sid && e.x === c.x && e.y + 1 === c.y)) return a.accion === 'escribiendo' ? (Math.floor(t / 180) % 2 ? 'tecleo1' : 'tecleo2') : 'sentado';
+  return a.accion === 'leyendo' || a.accion === 'buscando' ? 'leyendo' : 'pie';
+}
+
+// Salas en filas según el ancho (con una franja arriba para su nombre); ×3 si no obliga a partir más filas que ×2.
+function disposicionOf(salas, ancho) {
+  const prueba = (escala) => {
+    const max = Math.max(1, Math.floor(ancho / (T_OF * escala)));
+    const pos = new Map();
+    let x = 0, y = 0, alto = 0, cols = 0;
+    for (const s of salas) {
+      if (x > 0 && x + s.ancho > max) { x = 0; y += alto; alto = 0; }
+      pos.set(s.id, { ox: x, oy: y + 1 });
+      x += s.ancho + 1; alto = Math.max(alto, s.alto + 1); cols = Math.max(cols, x - 1);
+    }
+    return { escala, pos, cols, filas: y + alto, cabe: cols <= max };
+  };
+  const a3 = prueba(3), a2 = prueba(2);
+  return a3.cabe && a3.filas <= a2.filas ? a3 : a2;
+}
+const puertaOf = (sala) => ({ x: Math.floor(sala.ancho / 2), y: sala.alto - 1 });
+// Avanza a cada uno hacia su casilla en «L» (desde la puerta, primero en vertical). `saltar`: sin animación, cada uno a su sitio.
+function moverOf(agentes, salas, dt, saltar) {
+  const vivos = new Set();
+  for (const a of agentes) {
+    const c = a.casilla, sala = salas.get(c.sala), k = llaveOficina(a);
+    vivos.add(k);
+    let s = ANIM_OF.get(k);
+    if (!s || s.sala !== c.sala) { const ini = saltar ? c : puertaOf(sala); s = { sala: c.sala, x: ini.x, y: ini.y, ruta: [], destino: null }; ANIM_OF.set(k, s); }
+    const destino = `${c.x},${c.y}`;
+    if (saltar) { Object.assign(s, { x: c.x, y: c.y, ruta: [], destino }); continue; }
+    if (s.destino !== destino) {
+      s.destino = destino;
+      s.ruta = [s.y >= sala.alto - 1 ? { x: s.x, y: c.y } : { x: c.x, y: s.y }, { x: c.x, y: c.y }];
+    }
+    let paso = dt * 0.004; // 4 casillas por segundo
+    while (paso > 0 && s.ruta.length) {
+      const o = s.ruta[0], dx = o.x - s.x, dy = o.y - s.y, dist = Math.abs(dx) + Math.abs(dy);
+      if (dist <= paso) { s.x = o.x; s.y = o.y; s.ruta.shift(); paso -= dist; }
+      else { s.x += Math.sign(dx) * paso; s.y += Math.sign(dy) * paso; paso = 0; }
+    }
+  }
+  for (const k of ANIM_OF.keys()) if (!vivos.has(k)) ANIM_OF.delete(k);
+}
+// Capa HTML: nombres de sala y placas sin taparse entre sí ni tapar cabezas (debajo de los pies; si no cabe, encima del globo).
+function colocarCapaOf(escena, disp, figuras) {
+  const e = disp.escala, T = T_OF, W = disp.cols * T * e, H = disp.filas * T * e;
+  escena.querySelectorAll('.oficina-sala-nombre').forEach((n) => {
+    const p = disp.pos.get(n.dataset.sala);
+    n.hidden = !p;
+    if (p) { n.style.left = `${p.ox * T * e + 2}px`; n.style.top = `${(p.oy - 1) * T * e + (T * e - 12) / 2}px`; }
+  });
+  const porK = new Map(figuras.map((f) => [llaveOficina(f.a), f]));
+  const medidas = [...escena.querySelectorAll('.placa-oficina')].map((p) => ({ p, f: porK.get(p.dataset.key), w: p.offsetWidth, h: p.offsetHeight }));
+  const puestas = figuras.map((f) => ({ x: (f.x + 4) * e, y: (f.y - 7) * e, w: 8 * e, h: 8 * e }));
+  const choca = (r) => puestas.some((q) => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h);
+  medidas.sort((u, v) => (u.f ? u.f.y : 0) - (v.f ? v.f.y : 0));
+  for (const { p, f, w, h } of medidas) {
+    p.hidden = !f;
+    if (!f) continue;
+    const x = Math.max(0, Math.min(W - w, (f.x + 8) * e - w / 2)), abajo = (f.y + T) * e + 1, arriba = (f.y - 21) * e - h - 1;
+    let r = null;
+    for (let i = 0; i < 6 && !r; i++) for (const y of [abajo + i * (h + 1), arriba - i * (h + 1)]) {
+      const c = { x, y, w, h };
+      if (y >= 0 && y + h <= H && !choca(c)) { r = c; break; }
+    }
+    r = r || { x, y: Math.min(abajo, H - h), w, h };
+    puestas.push(r);
+    p.style.left = `${r.x}px`; p.style.top = `${r.y}px`;
+  }
+  const tj = escena.querySelector('.tarjeta-oficina'), f = porK.get(fijoOf || focoOf);
+  if (!tj) return;
+  tj.hidden = !f;
+  if (!f) return;
+  const a = f.a;
+  const filas = [['proyecto', a.proyecto], ['sesión', a.etiqueta], ['rama', a.rama], ['tipo', a.principal ? null : a.tipo], ['acción', a.accion], ['archivo', a.archivo]].filter(([, v]) => v);
+  const html = `<b>${esc(placaOficina(a))}</b><dl>${filas.map(([n, v]) => `<dt>${n}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+  if (tj._html !== html) { tj.innerHTML = html; tj._html = html; }
+  tj.style.setProperty('--c', (a.apariencia && a.apariencia.camiseta) || '');
+  const w = tj.offsetWidth, x = (f.x + 18) * e;
+  tj.style.left = `${x + w > W ? Math.max(0, (f.x - 2) * e - w) : x}px`;
+  tj.style.top = `${Math.max(0, Math.min(H - tj.offsetHeight, (f.y - 8) * e))}px`;
+}
+function pintarMiniAvatares() {
+  const porK = new Map(((OFICINA && OFICINA.agentes) || []).map((a) => [llaveOficina(a), a]));
+  document.querySelectorAll('.mini-avatar:not([data-ok])').forEach((c) => {
+    const a = porK.get(c.dataset.key);
+    if (!a) return;
+    const g = c.getContext('2d'); g.clearRect(0, 0, 16, 24); g.drawImage(spriteOf(a.apariencia, 'pie'), 0, 0); c.dataset.ok = '1';
+  });
+}
+function pedirCuadro() { if (!cuadroOfPedido) { cuadroOfPedido = true; requestAnimationFrame(cuadroOficina); } }
+// Un cuadro: solo con la escena en pantalla y la pestaña visible. Con «reducir movimiento» no hay bucle: cada sondeo pinta uno.
+function cuadroOficina(t) {
+  cuadroOfPedido = false;
+  const escena = document.querySelector('.oficina-escena'), lienzo = escena && escena.querySelector('.oficina-lienzo');
+  if (!lienzo || document.hidden || !OFICINA) { oficinaAnimada = false; ultimoCuadroOf = 0; return; }
+  pintarMiniAvatares();
+  if (!escena.offsetParent) { oficinaAnimada = false; ultimoCuadroOf = 0; return; } // móvil: solo la lista
+  const calma = matchMedia('(prefers-reduced-motion: reduce)').matches, tv = calma ? 0 : t;
+  const dt = ultimoCuadroOf ? Math.min(t - ultimoCuadroOf, 100) : 0;
+  ultimoCuadroOf = t;
+  const salas = OFICINA.salas || [], agentes = (OFICINA.agentes || []).filter((a) => a.casilla);
+  const porSala = new Map(salas.map((s) => [s.id, s]));
+  const disp = disposicionOf(salas, escena.clientWidth);
+  moverOf(agentes.filter((a) => porSala.has(a.casilla.sala)), porSala, dt, calma || !oficinaAnimada);
+  oficinaAnimada = true;
+  const W = disp.cols * T_OF, H = disp.filas * T_OF;
+  if (lienzo.width !== W || lienzo.height !== H) { lienzo.width = W; lienzo.height = H; }
+  lienzo.style.width = `${W * disp.escala}px`; lienzo.style.height = `${H * disp.escala}px`;
+  const ctx = lienzo.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, W, H);
+  // Pantalla encendida mientras su dueño trabaja; apagada si está quieto o se fue.
+  const encendido = new Set(agentes.filter((a) => a.principal && a.accion !== 'quieto').map((a) => a.sid));
+  salas.forEach((s, i) => dibujarSalaOf(ctx, s, disp.pos.get(s.id), i, encendido, tv));
+  POS_OF = agentes.map((a) => {
+    const s = ANIM_OF.get(llaveOficina(a)), p = disp.pos.get(a.casilla.sala);
+    return s && p && { a, s, sala: porSala.get(a.casilla.sala), x: Math.round((p.ox + s.x) * T_OF), y: Math.round((p.oy + s.y) * T_OF) };
+  }).filter(Boolean).sort((u, v) => u.y - v.y || u.x - v.x);
+  for (const f of POS_OF) {
+    const pose = poseOf(f.a, f.s, f.sala, tv);
+    ctx.drawImage(spriteOf(f.a.apariencia, pose), f.x, f.y - 8 + (deEspaldasOf(pose) ? 3 : 0));
+  }
+  for (const f of POS_OF) if (!f.s.ruta.length) globoOf(ctx, f, tv);
+  colocarCapaOf(escena, disp, POS_OF);
+  if (!calma) pedirCuadro();
+}
+// Ratón encima o toque: tarjeta con el detalle del personaje (o de su placa). Tocar otra vez la cierra.
+function llaveEnOf(ev) {
+  const placa = ev.target.closest('.placa-oficina');
+  if (placa) return placa.dataset.key;
+  const lienzo = ev.target.closest('.oficina-lienzo');
+  if (!lienzo || !lienzo.width) return null;
+  const b = lienzo.getBoundingClientRect(), e = b.width / lienzo.width, x = (ev.clientX - b.left) / e, y = (ev.clientY - b.top) / e;
+  for (let i = POS_OF.length - 1; i >= 0; i--) { const f = POS_OF[i]; if (x >= f.x + 2 && x < f.x + 14 && y >= f.y - 8 && y < f.y + 16) return llaveOficina(f.a); }
+  return null;
+}
+document.addEventListener('pointermove', (ev) => {
+  const k = ev.target.closest && ev.target.closest('.oficina-escena') ? llaveEnOf(ev) : null;
+  if (k !== focoOf) { focoOf = k; pedirCuadro(); }
+});
+document.addEventListener('click', (ev) => {
+  if (!(ev.target.closest && ev.target.closest('.oficina-escena'))) { if (fijoOf) { fijoOf = null; pedirCuadro(); } return; }
+  const k = llaveEnOf(ev);
+  fijoOf = k && k !== fijoOf ? k : null;
+  pedirCuadro();
+});
+window.addEventListener('resize', pedirCuadro);
+
 let OFICINA = null, metaVista = 'flujo', oficinaOcupada = false;
-const llavesOficina = (d) => ((d && d.agentes) || []).map((a) => `${a.sid}/${a.agente}`);
+const llavesOficina = (d) => ((d && d.agentes) || []).map(llaveOficina);
+const salasDeOficina = (d) => ((d && d.salas) || []).map((s) => s.id).join();
 async function sondearOficina() {
   if (document.hidden || pestana !== 'metodologia' || metaVista !== 'oficina' || oficinaOcupada) return;
   oficinaOcupada = true;
   try {
     const nuevo = await (await fetch('/api/oficina', { cache: 'no-store' })).json();
-    const antes = llavesOficina(OFICINA), ahora = llavesOficina(nuevo), previa = OFICINA;
+    const previa = OFICINA;
     OFICINA = nuevo;
     if (pestana !== 'metodologia' || metaVista !== 'oficina') return;
-    const escena = document.querySelector('.oficina-escena');
-    if (!previa || !escena || antes.join() !== ahora.join()) { oficinaNuevos = new Set(ahora.filter((k) => !antes.includes(k))); pintar(); return; }
+    // Llega o se va alguien (o una sala): se repinta; el bucle recuerda dónde estaba cada uno y lo hace caminar.
+    if (!previa || llavesOficina(previa).join() !== llavesOficina(nuevo).join() || salasDeOficina(previa) !== salasDeOficina(nuevo)) { pintar(); return; }
+    // Mismos agentes: el bucle ya lee OFICINA; solo se rehacen el texto de las placas y la lista.
+    const porK = new Map(nuevo.agentes.map((a) => [llaveOficina(a), a]));
+    document.querySelectorAll('.placa-oficina').forEach((p) => { const a = porK.get(p.dataset.key); if (a) p.textContent = placaOficina(a); });
     const t = document.createElement('template'); t.innerHTML = htmlOficina(nuevo);
-    t.content.querySelectorAll('.personaje').forEach((n) => {
-      const el = escena.querySelector(`.personaje[data-key="${CSS.escape(n.dataset.key)}"]`);
-      if (el) { el.className = n.className; el.style.cssText = n.style.cssText; el.innerHTML = n.innerHTML; }
-    });
     const lista = document.querySelector('.oficina-lista'); if (lista) lista.innerHTML = t.content.querySelector('.oficina-lista').innerHTML;
+    pedirCuadro();
   } catch {} finally { oficinaOcupada = false; }
 }
-let oficinaNuevos = null;
 setInterval(sondearOficina, 1500);
-document.addEventListener('visibilitychange', sondearOficina);
+document.addEventListener('visibilitychange', () => { sondearOficina(); pedirCuadro(); });
 
 // ---------- Metodología viva (S51): flujo con el estado real de cada pieza (GET /api/metodologia) ----------
 let META = null, metaSel = null, metaCargando = false;
@@ -2045,7 +2293,7 @@ function vistaMetodologia() {
   if (!META) { cargarMeta(); return '<p class="suave">Leyendo la metodología instalada…</p>'; }
   const conm = `<div class="meta-vistas"><div class="conmutador" role="group" aria-label="Vista de metodología">
     <button data-meta-vista="flujo" aria-pressed="${metaVista === 'flujo'}">Flujo</button><button data-meta-vista="oficina" aria-pressed="${metaVista === 'oficina'}">Oficina</button></div></div>`;
-  if (metaVista === 'oficina') { const n = oficinaNuevos; oficinaNuevos = null; if (!OFICINA) sondearOficina(); return conm + htmlOficina(OFICINA || { agentes: [] }, n); }
+  if (metaVista === 'oficina') { if (!OFICINA) sondearOficina(); return conm + htmlOficina(OFICINA || { agentes: [] }); }
   return conm + htmlMetodologia(META, metaSel);
 }
 
