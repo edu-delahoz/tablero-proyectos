@@ -1,6 +1,52 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-05 · rama `formato-backlog` (sin PR) · S51 hecha, suite en verde (331 pasan, 2 omitidos; el test nuevo fallaba 1 de 1). `plantilla.html`: pestaña «Metodología» (`PESTANAS`, `VISTAS.metodologia`), `cargarMeta()` pide `/api/metodologia`, `htmlMetodologia(g, sel)` pura (SVG en línea con nodos verde/ámbar/rojo `nodo-*`, lista vertical `.meta-lista` en ≤700px, detalle de pieza con descripción, motivo, ruta y proyectos); clic en `[data-meta]` y Enter/Espacio en el SVG. Test en `servidor.test.mjs` extrae la función del HTML y la ejecuta con `vm`. Sin verificar a ojo en navegador. Siguiente: **S52** (Sonnet).
+- Para retomar (2026-10-05): La pestaña «Metodología» ya dibuja el flujo con cada etapa en verde, ámbar o rojo, y al tocar una pieza muestra qué hace y qué proyectos la usan; en móvil sale como lista vertical. Falta mirarla en el navegador con datos reales. Lo siguiente es la sesión de cierre y medición del formato. Nada roto.
+- 2026-10-05 · rama `formato-backlog` (sin PR) · S50 hecha, suite en verde (330 pasan, 2 omitidos; los 9 nuevos fallaban 9 de 9). `metodologia.mjs`: `catalogoDe(instalar.sh, settings.base.json)` (mods de `PLUGINS_REPO`, enlaces `ln -sfn`, hooks por script + primer flag), `grafoMetodologia` (estado por tipo: mod por `CLAUDE_CODE_PLUGIN_DIRS`, hook por comando en `settings.json` + archivo existente, resto por ruta en `~/.claude`; proyectos conectados = con sesiones), `metodologia({home, repo})`. `GET /api/metodologia` en `generar.mjs` (`TABLERO_METODOLOGIA_REPO`, `TABLERO_HOME`). Fixtures en `fixtures/metodologia/{home,repo,docs}` (`repo/instalar.sh` es copia del real: si cambia el instalador, actualizarla). Trampa: el `settings.json` real llama a los hooks por rutas de `~/Desktop/...`, no `~/.claude/...`; por eso el hook se reconoce por nombre de script y se comprueba la ruta que aparece en el comando. `fetch` no deja cambiar `Host`: para probar 403 usar `http.request`. Siguiente: **S51** (Sonnet).
+- Para retomar (2026-10-05): El tablero ya sabe qué piezas de la metodología están instaladas, activas o faltan en tu máquina y qué proyectos las usan, y lo entrega por la API sin mostrar secretos. En tu instalación real faltan los enlaces de la carpeta de metodología y del tablero dentro de `~/.claude`. Lo siguiente es dibujar la pestaña «Metodología» con esos datos. Nada roto.
+- 2026-10-05 · rama `formato-backlog` (sin PR) · S49 hecha, suite en verde (321 pasan, 2 omitidos): `verificar_backlog.mjs --formato` pasó de 81 avisos a 0 en tablero, IEP (`BACKLOG_H7.md` S2b–S7), EAP10 y Squalo; solo se migró lo abierto. Costo: S41 +1 %, S42 +8 %, S50/IEP S3 +60 % por traer `Prompt:` nuevo (juzgar en S52). Respaldo del IEP en `~/.claude/jobs/d8faa79c/tmp/BACKLOG_H7.antes.md` (no es repo git). Siguiente: **S50** (Opus).
+- Para retomar (2026-10-05): los backlogs abiertos de los proyectos ya están en el formato nuevo y el linter sale limpio. Falta la parte de «metodología viva»: primero los datos del grafo de piezas y luego su pestaña en el tablero. Nada roto.
+- 2026-10-05 · rama `formato-backlog` (tablero y `metodologia-claude-code`, sin PR) · S48 hecha: reglas y skills con el formato; `probar.sh` 20/20 (fallaban 4 de 4 al escribirlas). Siguiente: **S49** (Sonnet).
+- Para retomar (2026-10-05): Las reglas globales y las skills de planear y relevo ya exigen el formato nuevo (con «Se espera» y prompt de la siguiente). Falta migrar las secciones abiertas de los proyectos; la instalación real de `~/.claude` aún no tiene la carpeta `metodologia/` enlazada.
+- 2026-10-05 · rama `formato-backlog` en el tablero y en `metodologia-claude-code` (sin PR) · S47 hecha, en verde: panel-tablero 20/20 (antes fallaban 9 de 20), `scripts/probar.sh` 16/16. `seccionDe` en `register.tsx` lee clave general (`S-CI1b`, `E5b`), `####`, modelo, «Se espera» y prompt (bloque, cita o «…»), y el panel muestra «Se espera» o avisa si falta; `estado-trabajo` no necesitó cambio; copiado a `~/.claude/mods/panel-tablero`. Siguiente: **S48** (Sonnet).
+- Para retomar (2026-10-05): El panel de la terminal ya entiende el formato nuevo y los estilos viejos: muestra qué se espera de la sesión y avisa si falta. Está instalado y en verde. Lo siguiente es escribir las reglas y skills para que toda sesión nueva use este formato.
+- 2026-10-05 · rama `formato-backlog` (sin PR) · S46 hecha, tests en verde (321 pasan, 2 omitidos; los 2 nuevos de `servidor.test.mjs` fallaban 2 de 2). `plantilla.html`: `partesFormato`/`casillaFormato` (llano visible, técnico plegable, tipo como etiqueta; sin « — » se ve como antes), `bloqueEspera` («Se espera»/«Resultado»), `etiquetasFormato` (Épica/Historia/Sesión/Tarea) y `.prompt-siguiente` fijo con copiar en «En curso»; `tarea()` usa `casillaFormato`. Siguiente: **S47** (repo `metodologia-claude-code`).
+- Para retomar (2026-10-05): El tablero ya muestra cada tarea con su línea en llano y el detalle técnico plegado, junto a «Se espera» y «Resultado», y el prompt de la siguiente sesión en un sitio fijo con botón de copiar. Todo en verde; falta mirarlo en el navegador. Lo siguiente es alinear el panel de la terminal con el mismo formato.
+- 2026-10-05 · rama `formato-backlog` (sin PR) · S45 hecha, tests en verde (319 pasan, 2 omitidos; `formato.test.mjs` 105/105). `generar.mjs`: `sesiones(texto)` exportada (vista sobre `estructura()` + viñetas legadas IEP), `partesCasilla` (tipo/llano/tecnico), títulos `####` como hijas de la `###`, clave general `[A-Z][A-Z0-9-]*\d+[a-z]?`, modelo entre paréntesis → `meta.modelo` (el paréntesis pasa a `meta.nota`), `seEspera`/`resultado`/`despues` por sección, prompts en una línea «Prompt …: «…»»; `RE_SUB` con clave general y `####`; `plantillaBacklog` en formato nuevo (H1 con Historia, `### S1` con «Se espera»; tests de plantilla en `generar.test.mjs`/`servidor.test.mjs` actualizados). Nuevo `formato.mjs` (`avisosFormato`, puro) y `verificar_backlog.mjs --formato [carpeta]` (hoy: 32 avisos en este backlog, legítimos). `coherencia.mjs`: `####`, clave general y bloqueo «Se espera» sin escribir al crear PR **solo si el backlog ya tiene alguna línea `Se espera:`** (los legados no se bloquean; decisión de S45). Comparé árbol viejo/nuevo en todos los backlogs reales: solo cambian claves reconocidas (E5b, S-CI2) y modelo extraído; conteos y estados iguales. Línea base de S44 completada. Trampa: los prompts de H17 viven en una plantilla común bajo «Cómo ejecutarlo», por eso el linter dice «sin prompt» en S45–S51. Siguiente: **S46** (Sonnet).
+- Para retomar (2026-10-05): El tablero ya entiende el formato nuevo de backlog y los estilos viejos, y hay un revisor que dice qué sesiones abiertas no lo cumplen. Todo en verde. Lo siguiente es que la vista del tablero muestre esos campos nuevos (texto en llano, «Se espera», el prompt con botón copiar).
+- 2026-10-05 · rama `formato-backlog` en el tablero y en `metodologia-claude-code` (ambas desde `eficiencia`, sin PR) · S44 hecha: contrato `metodologia/FORMATO_BACKLOG.md`, ejemplos `fixtures/formato/` y pruebas que fallan a propósito: `formato.test.mjs` 103 de 104 (falta `sesiones(texto)` en `generar.mjs`), panel 9 nuevas de 20 (`claude plugin test plugins/panel-tablero`). Resto de la suite en verde (213 pasan, 2 omitidos); `scripts/probar.sh` 16/16. Línea base: media 248 tok por sección abierta (14, todas del tablero). Decisión: el contrato del tablero es una función nueva `sesiones(texto)`; la copia de los ejemplos para el mod es un `.ts` generado (`scripts/fixtures-formato.mjs`) porque el runner de mods solo importa código. Siguiente: **S45** (Opus).
+- Para retomar (2026-10-05): Ya está escrito cómo debe verse un backlog y hay ejemplos de cada estilo viejo con lo que el tablero y el panel deberían sacar de ellos; las pruebas fallan porque aún no existe el lector nuevo. Lo siguiente es escribir ese lector en el tablero hasta que esas pruebas pasen sin romper nada de lo que ya se ve. Nada está roto fuera de esas pruebas esperadas.
+- 2026-10-05 · rama `formato-backlog` (sale de `eficiencia`) · plan de H17 hecho, solo análisis (sin código ni tests). H17 con S44–S52 y sus casillas abajo. Decisiones con Eduardo en la cabecera de H17. Siguiente: **S44** (Opus).
+- Para retomar (2026-10-05): Se planeó cómo unificar el formato de los backlogs para que el tablero y el panel de la terminal los muestren bien, con una línea en llano por tarea y lo que se espera de cada sesión, midiendo que no suba el costo. También se planeó una pestaña que dibuja la metodología completa con su estado real. Nada de código todavía; lo primero es escribir el contrato del formato y las pruebas que hoy fallan.
+- 2026-10-04 · rama `eficiencia` · E6 hecha, `scripts/probar.sh` del repo `metodologia-claude-code` en verde (16 pruebas; fallaban 14 al escribirlas), escáner limpio. PR https://github.com/edu-delahoz/metodologia-claude-code/pull/2 (rama `eficiencia` → `develop`, sin mergear). Llevado al repo: CLAUDE.md, skill relevo, `settings.base.json` (hooks verificar_backlog, generar --hook-inicio/--silencioso, acotar_lectura), `claude/hooks/acotar_lectura.mjs`, plugin `panel-tablero` (+ marketplace), README (tablero, S0/Sn/SNb, notas), rutas únicas `~/.claude/{hooks,metodologia,tablero}` (`instalar.sh` enlaza `~/.claude/tablero` a `TABLERO_DIR`, por defecto `../metodologia-claude/tablero`). No se probó `register.test.ts` de los plugins (no hay runner en el repo) ni se reinstaló en el `~/.claude` real. H16 completo.
+- Para retomar (2026-10-04): La metodología ya está en el repo `metodologia-claude-code` con una prueba de instalación y un PR abierto. Falta que Eduardo revise y mergee el PR; no se reinstaló en su `~/.claude` real. Con esto termina el hito de eficiencia.
+- 2026-10-04 · rama `eficiencia` · E5c hecha, tests en verde (212 pasan, 2 omitidos; fallaban 2 al escribirlos). Pestaña Bitácora: tarjeta «Auditoría» (selector de 7 días, composición del gasto, malos hábitos, Opus frente a Sonnet) con `auditoriaPanel`/`auditoriaDe` en `auditoria.mjs`; el panel renombra `tokens`→`volumen` y omite `entrada` por la guarda de «token» en /api/datos. Siguiente: **E6**.
+- Para retomar (2026-10-04): La auditoría del gasto ya se ve dentro de la pestaña Bitácora, con selector de día y la comparación Opus frente a Sonnet. Todo está en verde; falta que Eduardo la mire en el navegador. Lo siguiente es llevar la metodología al repo `metodologia-claude-code`.
+- 2026-10-04 · rama `eficiencia` · E5b ampliada a petición de Eduardo, tests en verde (210 pasan, 2 omitidos; fallaba 1 al escribirlo): en «Costo por feature» cada barra muestra «$ · duración», el desglose por rama y la línea de total suman también el tiempo (minutos de la columna Duración; vacía/«?» cuenta 0). En modo «Rama» las barras solo muestran el costo. `plantilla.html` (`grafBarrasH` acepta `valor` para la etiqueta y ensancha el margen derecho), test en `generar.test.mjs`. Siguiente: **E5c**, luego **E6**.
+- Para retomar (2026-10-04): El gráfico de costo por feature ahora también dice cuánto tiempo de trabajo llevó cada feature y cada una de sus ramas. Todo está en verde. Lo siguiente sigue siendo llevar la auditoría de gasto a la pestaña Bitácora.
+- 2026-10-04 · rama `eficiencia` · E5b hecha, tests en verde (209 pasan, 2 omitidos; fallaban 5 al escribirlos). `bitacora.mjs`: `ramaDeTranscripcion` = rama más usada del .jsonl entero (tronco `develop/main/master/HEAD` solo si no hay otra; empate → la primera), `TRONCO`, `featureDe`, `conFeatures`, `SIN_RAMA`, `agregar(..., {por:'feature'})` con `ramas` (desglose); por rama/feature ya no se excluye nada. `generar.mjs` aplica `conFeatures(bit.registro, proyectos)`. `plantilla.html`: «Costo por feature/rama» con interruptor, todas las barras (scroll), desglose por rama y filas de «sin rama». README. Decisiones con Eduardo en E5b. Pendiente: que Eduardo lo mire en el navegador y, si quiere, añada `features` al proyecto tablero. Pidió además la auditoría en el tablero → **E5c** (Sonnet). Siguiente: **E5c**, luego **E6**.
+- Para retomar (2026-10-04): El gráfico de costo ya no pierde sesiones: cada sesión cuenta en la rama donde más trabajó, las ramas de un mismo hito se suman en una feature y lo que no tiene rama se ve aparte con su costo. Falta mirarlo con calma en el tablero. Lo siguiente es llevar la auditoría de gasto, que hoy solo es un comando, a la pestaña Bitácora.
+- 2026-10-04 · rama `eficiencia` · relevo tras E5: Eduardo pide **E5b** (Opus): que «Costo por feature (rama)» no pierda sesiones y sume ramas hermanas en una feature; además quiere que esa sesión le explique en llano todo lo hecho en E4–E7. Sin código nuevo desde el commit de E5; tests en verde (205). Siguiente: **E5b**, luego **E6**.
+- Para retomar (2026-10-04): Eduardo probó el tablero y vio que el gráfico de costo por rama deja sesiones en «otras» y no junta ramas que son la misma feature. La próxima sesión, con Opus, primero le explica cómo funciona todo lo de eficiencia y luego arregla ese gráfico. Lo del repo de metodología (E6) queda después.
+- 2026-10-04 · rama `eficiencia` · E5 hecha, tests en verde (205 pasan, 2 omitidos; los 5 de E5 en `generar.test.mjs` fallaban 5 de 5, módulo ausente). `eficiencia.mjs` (puro): `semaforoLlamadas`/`semaforoCtx`, `calibrar` ($ por 1 % por ventana `resets_at`, vigente = la más reciente), `quedan`, `costoPorTipo`, `eficienciaDe`. `generar.mjs`: `leerMetricasSesion` (lee `~/.claude/session-metrics/*.metricas.json`), filas con `llamadasPorPrompt`/`ctxFinalK`/semáforos y `bitacora.eficiencia`. `plantilla.html`: columnas «Llam./prompt» y «Ctx final», panel «Límites restantes» con las advertencias, calibración y fecha de la última ventana, tabla «Costo por tipo de tarea». Sin verificar a ojo en navegador; solo 2 `.metricas.json` existen aún, así que casi no hay datos reales. Siguiente: **E6** (Sonnet).
+- Para retomar (2026-10-04): El tablero ya muestra en Bitácora el panel de límites con calibración, las columnas de llamadas y contexto con semáforo y la tabla de costo por tipo. Falta solo mirarlo en el navegador cuando haya más sesiones con métricas, y llevar todo al repo de metodología (E6).
+- 2026-10-04 · rama `eficiencia` · E7 hecha, tests en verde (200 pasan, 2 omitidos; `auditoria.test.mjs` fallaban 5 de 5). `auditoria.mjs` (puro): `auditarSesion`/`auditar` (gasto ponderado 1/2/0,1/5 por llamada única, tool results >5k, Bash sobre BACKLOG, `cat` completos, Read sin límite), `porModelo` (Sn con effort medio; Opus/Sonnet 5.x sin etiqueta cuentan como medio), `leerTranscripciones`; `generar.mjs --auditoria <fecha> [--utc] [--modelos] [--bitacora <ruta>]`; `metricas_jsonl.mjs` exporta `tokens`; README y `PLAN_EFICIENCIA.md` § 10c Resultados (Opus 13 Sn, 46 % con Snb, $1,75; Sonnet 21, 10 %, $0,66; con sesgo de selección). Trampa: el día se corta en hora local por defecto; `--utc` reproduce las cifras del plan (472 · 513k exacto). Siguiente: **E5** (Sonnet).
+- Para retomar (2026-10-04): Ya puedes auditar el gasto de cualquier día con `tablero --auditoria <fecha>` y comparar Opus con Sonnet con `--modelos`. En los datos de hoy Sonnet sale más barato y rehace menos, pero Opus recibió las tareas difíciles, así que solo se concluye que las mecánicas ya van bien en Sonnet. Sigue pintar esas métricas en el tablero (E5); nada está roto.
+- 2026-10-04 · rama `eficiencia` · E4 hecha, tests en verde (195 pasan, 2 omitidos; `metricas_jsonl.test.mjs` fallaban 8 de 8 y luego 1 y 3 al ampliar regex y badge). `metricas_jsonl.mjs` (puro + CLI): `metricasJsonl` → `{llamadas, prompts, ctxFinal, ctxMax, resultadosGrandes, primerPrompt, modelos}`, `RE_TAREA`/`tareaDePrompt`/`tareaDeSesion`, `tipoDeTarea` (plan, Sn, Snb, migración, catálogo, cierre, otro), `modeloDistinto`, `modeloPlanDe`. La regex acepta `S` y `E` y las variantes viejas «Sesión H3 personas S1b de…» y «Sesión S2c (H3 personas) de…». `reetiquetar_bitacora.mjs [--dry-run]` aplicado (conteo en E4). `../registrar_sesion.sh` usa la CLI para la tarea y escribe `~/.claude/session-metrics/<sid>.metricas.json` (métricas + `limites.inicio/fin` de `rate_limits`); `~/.claude/statusline.sh` guarda ahora `rate_limits` en `<sid>.inicio.json` (fuera del repo). Probado de punta a punta con un HOME temporal. Badge «≠ plan» en la fila de la bitácora (`generar.mjs` en `recolectar`, `plantilla.html`, `.chip.ch-aviso`): 110 filas con modelo del plan, ninguna distinta hoy. Trampas: la CLI de un `.mjs` comparaba `argv[1]` sin `realpath` y no imprimía nada vía symlink (corregido con el idiom de `backlog.mjs`); la clave `BACKLOG/SX` no lleva proyecto (varios repos tienen `BACKLOG.md`): agrupar por `proyecto`+`tarea` en E5/E7. Siguiente: **E7** (Sonnet).
+- Para retomar (2026-10-04): El tablero ya sabe qué tarea hizo cada sesión aunque el nombre se herede al limpiar, y la bitácora histórica quedó re-etiquetada. Cada sesión que cierre guardará además cuánto contexto usó y el porcentaje de los límites al empezar y al terminar. Todo pasa; lo siguiente es la auditoría repetible que reutiliza estas métricas.
+- 2026-10-04 · rama `eficiencia` · E3 hecha (sin tests nuevos: solo reglas y config; no se tocó código del repo). `~/.claude/CLAUDE.md`: salidas largas generalizadas, no releer archivos, Fable solo escalación. `registrar_sesion.sh` (en `metodologia-claude/`) guarda el effort en la columna Modelo, p. ej. `Sonnet 5.5 (medium)` (probado solo con `bash -n`). Plugin session-report apagado en `~/.claude/settings.json` (el usuario, con `!sed`: el clasificador bloquea mis ediciones a settings). `/context` antes: Skills 4.7k (28), total 55.3k, base sin mensajes ≈30.8k. Falta medir «después» en sesión nueva. Siguiente: **E4** (Opus).
+- Para retomar (2026-10-04): Las reglas de ahorro de contexto ya están en tu CLAUDE.md y la bitácora anotará el effort de cada sesión. El plugin de reportes quedó apagado; para ver cuánto se ahorró corre /context en la próxima sesión y anótalo en E3. Lo siguiente es la parte de datos del tablero (E4), que empieza por los tests.
+- 2026-10-04 · rama `eficiencia` · E2 hecha, tests en verde (184 pasan; `acotar_lectura.test.mjs` fallaban 6 de 9 antes). Hook `~/.claude/hooks/acotar_lectura.mjs` (fuera del repo) en modo aviso, dado de alta en `~/.claude/settings.json` el 2026-10-04 (PreToolUse `Bash`+`Read`, PostToolUse `Bash`); log en `~/.claude/session-metrics/acotar_lectura.jsonl`. Trampa: el test vive en el repo pero apunta al hook de `~/.claude/hooks` (sobrescribible con `HOOK_ACOTAR`); un `Read` de `tool-results` usa el mismo umbral de 3000 tokens. La casilla 3 de E2 (pasar a bloqueo) queda abierta hasta 2026-10-11. Siguiente: **E3** (Sonnet).
+- Para retomar (2026-10-04): El aviso de lecturas grandes ya está activo en todas las sesiones nuevas y solo avisa, no bloquea. Déjalo correr una semana y el 11 de octubre revisa el registro para decidir si pasa a bloquear. Mientras tanto sigue la poda de reglas y plugins (E3); no hay nada roto.
+- 2026-10-04 · rama `eficiencia` · E0/E0b hechas (solo texto, sin código ni tests): plan aprobado con 5 ajustes. Decisiones: umbral de Read/`cat` por tokens (~3k, bytes/4) medido sobre la ruta resuelta, nunca por patrón; E2 una semana en modo aviso con log `~/.claude/session-metrics/acotar_lectura.jsonl` y casilla diferida para pasar a bloqueo; experimento effort aplazado (Opus 5.5 y Sonnet 5.5 ya corren en `medium`; en su lugar, análisis por modelo en E7 con tasa Snb y costo mediano por tarea); re-etiquetado de las 156 filas de la bitácora en E4; auditoría repetible separada de E4 como **E7** (no «E4b», la `b` es retrabajo y ensuciaría el experimento); panel de límites con advertencias y calibración visibles. `../PLAN_EFICIENCIA.md` no está bajo git (vive fuera del repo). Orden: E2 → E3 → E4 → E7 → E5 → E6. Siguiente: **E2**.
+- Para retomar (2026-10-04): El plan de eficiencia quedó aprobado con los ajustes del usuario y las casillas de las sesiones siguientes ya los reflejan. Lo próximo es el aviso de lecturas grandes, que la primera semana solo avisa y registra, sin bloquear. Nada roto.
+- 2026-10-04 · rama `eficiencia` (basada en `trello-vista-previa` por ff-only, porque `develop` no tenía H16) · E1 hecha, tests en verde (175 pasan). `backlog.mjs seccion|marcar` con `backlog.test.mjs` (fallaban 5 antes); README y `~/.claude/skills/relevo/SKILL.md` lo usan. No existía plantilla de prompt en `generar.mjs` (solo la coletilla en `plantilla.html`). Siguiente: **E2**.
+- Para retomar (2026-10-04): Ya existe una herramienta para leer solo la sección del backlog que toca y marcar casillas sin cargar el archivo entero, y el cierre de sesión la usa. Todo pasa. Lo que sigue son los avisos que bloquean lecturas demasiado grandes.
+- 2026-10-04 · rama `trello-vista-previa` · plan de eficiencia hecho, solo análisis (sin código): `../PLAN_EFICIENCIA.md` con Partes 1–3 y H16 (E0–E6) abajo. **Pendiente: aprobación del usuario (E0).** Scripts del análisis en `../analisis/` (`analizar.mjs`, `b.mjs`, `c.mjs`, `e.mjs`; `node analizar.mjs AAAA-MM-DD`).
+- Para retomar (2026-10-04): Se midió con los registros de hoy dónde se va la ventana de uso. Lo que más pesa es navegar el backlog con comandos sueltos y leer archivos completos; también se descubrió que la statusline ya recibe el porcentaje usado de las ventanas de 5 horas y semanal. El plan está escrito y falta que lo apruebes o ajustes antes de empezar a implementarlo.
+- 2026-10-04 · rama `trello-vista-previa` (sale de `develop`) · sesión de cierre de pendientes, solo backlog (sin código). PR #10 mergeado por el usuario; abierto PR #11 `develop` → `main`. Cerradas con el usuario: S36 y S38 (probadas a mano en el navegador), S20 (confirmada en S24b), S24b «actualizar PR #9» (superada), S5 (Trello probado con Squalo: lectura, importar y primera sincronía solo trayendo). Queda abierta a propósito la mejora opcional del reinicio (S24b). Fallos de la prueba con Trello → nuevo **H15** (S41 conector, S42 vista, S43 cierre). Ojo: `squalo-app` quedó en `sincronizar` contra el tablero del equipo; desde la segunda sincronía las ~25 casillas propias vendrían marcadas para crearse en Trello (lo cubre S42). Siguiente: **S41** (Sonnet).
+- Para retomar (2026-10-04): Se cerró todo lo pendiente salvo las notas y una mejora opcional del servidor; el bloque grande ya está en `develop` y hay un PR abierto para pasarlo a `main`. Trello funciona con tu tablero de Squalo, pero la prueba dejó tres arreglos y dos mejoras: aceptar la URL completa del tablero, saber qué tarjetas son tuyas, poder seleccionar todo en la vista previa, avisar antes de crear tarjetas en un tablero del equipo y corregir el texto del botón de importar. Por ahí se sigue. Cuidado al sincronizar Squalo: revisa la vista previa antes de aplicar.
 - 2026-10-04 · rama `integraciones-vista` · S40 hecha (cierre H11–H14), PR #10 abierto → `develop`, tests en verde (170 pasan, 2 omitidos). Prueba real en EAP10 (modo `participar`, ítem #12): asignar, quitar y cambiar estado OK; el ítem se devolvió a New y sin asignar. Hallazgo: Azure reasigna al cambiar el estado → `participar()` recalcula `mio` también en `/estado`. `proyectos.json`: `ado` de EAP10 quedó en `participar`. 5 notas respondidas (quedan abiertas: mobile, «vincularlo con todo», chat del plan, optimizar vistas). Sin sesión siguiente definida.
 - Para retomar (2026-10-04): se terminó todo el bloque de retomar en lenguaje natural, tablero kanban, elegir carpeta y participar en Azure, y se probó de verdad con EAP10. Está todo subido en el PR #10 esperando tu revisión y merge a `develop`. Lo que sigue son las notas abiertas: revisión completa para mobile, vincular un proyecto nuevo con todo (sesión, repo, integraciones) y el chat con el plan; nada está roto.
 - 2026-10-04 · rama `integraciones-vista` · S39 hecha, tests en verde (170 pasan, 2 omitidos): `generar.mjs` exporta `participar()` (validación + PATCH + parche de `externo-<p>.json`, compartida por los endpoints y el CLI), `textoTareas`, `lineasIntegraciones`; CLI `--tareas <p> [--sin-asignar|--mias] [--integracion]`, `--asignarme <p> <id> [--quitar]`, `--estado <p> <id> <estado>` (solo `participar`); el hook de inicio añade «N sin asignar, M mías abiertas». Tests nuevos en `tareas.test.mjs` (fetch simulado por `--import`; fallaron 4 antes). README «Pedírselo a Claude». Siguiente: **S40** (cierre, con el usuario; incluye la prueba en navegador pendiente de S38).
@@ -57,6 +103,239 @@
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H17 — Formato único de backlog, mods alineados y vista «Metodología»
+Historia: Como Eduardo, quiero que todo plan o backlog siga un mismo formato con una línea en llano por tarea y «lo que se espera» de cada sesión, para que el tablero y el panel de la terminal lo muestren bien sin gastar más ni bajar la calidad.
+Origen: 3 notas de `../notas/NOTAS_METODOLOGIA.md` (2026-10-05). Plan: `~/.claude/plans/quiero-que-planes-estos-snazzy-raccoon.md`. Rama `formato-backlog` (desde `eficiencia`) en el tablero y en `metodologia-claude-code`. Plugins/MCP: ninguno.
+
+Hallazgos (2026-10-05): `~/.claude/mods/*` y `metodologia-claude-code/plugins/*` están iguales (solo rutas anonimizadas); el problema es que `panel-tablero` tiene parser propio (`hooks/register.tsx:180` `RE_SUB` solo `S\d+`). En el tablero `analizarTitulo` (`generar.mjs:330`) solo saca clave `[HS]\d+` y modelo `**X**` → E5b sale sin clave ni modelo. IEP usa sub-sesiones como viñetas en negrita y `S-CI1b (Sonnet, ~10k; …)`. No existe campo «Se espera» (sí `Historia:` por hito y «Resultado» al cerrar).
+
+Decisiones con Eduardo: mods → alinear `panel-tablero` (y `estado-trabajo` si lee backlog) al formato; jerarquía → mapear sin renombrar (Hito = Épica, `Historia:` = HU, sesión = unidad, casilla = Tarea) + tipo opcional `[fix] [test] [doc] [refactor]`, sin IDs nuevos; vista Metodología → viva, generada de la config real; migración → solo backlogs nuevos y secciones abiertas.
+
+Formato (contrato que S44 escribe en `metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`): título `### <CLAVE> — <título> · **<Modelo>** · rama \`x\` · ~Nk · plugins: …` con clave `[A-Z][A-Z0-9-]*\d+[a-z]?`; sub-sesiones con `####`; `Se espera:` obligatorio (1–2 frases en llano + cómo se comprueba, lo escribe quien define la sesión); casilla `- [ ] [tipo] <llano ≤ 12 palabras> — <técnico: archivo, qué, prueba>`; `Resultado:` al cerrar; `Prompt:` con bloque `text`; `Después: **SX**`.
+
+Costo y calidad: el formato no puede subir más de +10 % los tokens de una sección (`backlog.mjs seccion`). Línea base en S44; medición en S52 tras ≥ 8 sesiones. Si sube > 15 % o la calidad no mejora (casillas reabiertas, «→ SNb», tests rotos al cerrar, Resultado ≠ Se espera) → la línea en llano queda solo a nivel de sesión.
+
+### S44 — Contrato y tests transversales · **Opus** · rama `formato-backlog` · ~60k
+Se espera: El formato está escrito y hay pruebas que fallan contra los parsers actuales del tablero y del mod; queda anotada la línea base de costo.
+- [x] [test] Ejemplos de cada formato que existe hoy — `fixtures/formato/`: `canonico.md`, `legado-tablero.md` (E5b «(Opus; sigue a E5)», S41 «· **Sonnet** ·»), `legado-iep.md` (viñetas `- **S3c — …**`, «Resultado S3c», «Prompt de arranque»), `legado-ci.md` (`S-CI1b (Sonnet, ~10k; …)`)
+- [x] [test] Prueba que recorre todos los ejemplos — `formato.test.mjs` (glob de `fixtures/formato/`): clave, modelo, rama, Se espera, Resultado, prompt, llano, tipo, sub-sesiones, Después; verla fallar y anotar cuántas
+- [x] [test] La misma prueba para el panel de la terminal — `metodologia-claude-code/plugins/panel-tablero/hooks/register.test.ts` leyendo `plugins/panel-tablero/fixtures/formato/` (copia); verla fallar
+- [x] [doc] Escribir el contrato del formato — `metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`
+- [x] Medir cuánto cuesta hoy — tokens medios por sección abierta (5 proyectos), llamadas/prompt y ctx final (`tablero --auditoria 2026-10-04`, `metricas_jsonl.mjs`); anotar en esta sección
+Resultado: Contrato en `metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`. Ejemplos en `fixtures/formato/*.md` con su `.esperado.json` (canónico con `####` y `Después`; legado tablero E5b/S41, IEP S3c/S4a en viñetas, CI S-CI1b/S-CI2). `formato.test.mjs` espera una función nueva `sesiones(texto)` exportada por `generar.mjs` (una prueba por ejemplo × sesión × campo): **103 de 104 fallan** (solo pasa la de inventario). Panel: el runner de mods (`claude plugin test plugins/panel-tablero`) no permite `node:fs` ni importar `.md`/`.json`, así que la copia es un módulo generado `plugins/panel-tablero/fixtures/formato.ts` (`node scripts/fixtures-formato.mjs`); `register.test.ts` pide `seccionDe(texto, undefined, '', clave)` con `sesion, titulo, modelo, seEspera, prompt, hechas, total`: **9 nuevas fallan**, las 11 previas pasan. `scripts/probar.sh` 16/16.
+Línea base de costo (2026-10-05, `backlog.mjs seccion`, chars/4): 14 secciones abiertas con clave, todas del tablero (IEP, metodología, EAP10 y Squalo no tienen `###` abiertos con clave), **media 248 tok, mediana 243** (S41 = 530, la mayor). Auditoría 2026-10-04: 191 sesiones, 4403 llamadas (≈ 23 por sesión). Completado en S45 (`metricas_jsonl.mjs` sobre las 199 transcripciones del 2026-10-04 de `~/.claude/projects`, 188 con prompts): **llamadas/prompt media 16,3, mediana 12,3; ctx final media 93,8k, mediana 90,2k, máx 211k; 18 sesiones pasaron de 130k**.
+
+
+### S45 — Parser y linter del formato · **Opus** · rama `formato-backlog` · ~75k
+Se espera: `formato.test.mjs` en verde y la suite completa también (lo legado se ve igual); `verificar_backlog.mjs --formato` lista lo que falta.
+- [x] Entender cualquier clave y los campos nuevos — `generar.mjs`: `analizarTitulo` (clave general, modelo entre paréntesis), `estructura()` guarda `seEspera`, `resultado`, `llano`/`tecnico`/`tipo` por tarea y el `Prompt:`; `RE_SUB` (`:491`) acepta `####` y clave general; `plantillaBacklog` (`:250`) en formato nuevo
+- [x] Leer secciones con claves raras — `backlog.mjs` `ubicar`: `seccion E5b`, `seccion S-CI1b`; prueba en `backlog.test.mjs`
+- [x] Avisar lo que no cumple el formato — nuevo `formato.mjs` (puro) + `verificar_backlog.mjs --formato [carpeta]`: sesión abierta sin «Se espera», casilla sin « — », sin prompt
+- [x] No abrir PR sin «Se espera» — `coherencia.mjs` `bloqueosDeRama`; prueba en `coherencia.test.mjs`
+- [x] Exportar `sesiones(texto)` según la tabla «Lo que devuelven los parsers» de `FORMATO_BACKLOG.md` — `generar.mjs` (vista sobre `estructura()`, incluye viñetas `- **S3c — …**` y `####`); `node --test formato.test.mjs` 104/104 (añadido en S44)
+- [x] Completar la línea base de S44: llamadas por prompt y ctx final por sesión — `metricas_jsonl.mjs` sobre la bitácora del 2026-10-04; anotar en S44 (añadido en S44)
+Después: **S46**
+
+### S46 — Vista del formato · **Sonnet** · rama `formato-backlog` · ~60k
+Se espera: En Resumen y En curso se lee la línea en llano de cada tarea, «Se espera» frente a «Resultado», las etiquetas Épica/HU/Tarea/tipo y el prompt siguiente en un sitio fijo con botón copiar.
+- [x] [test] Casos de render — `servidor.test.mjs`: llano visible, técnico desplegable, prompt siguiente presente; fallaban 2 de 2 al escribirlos
+- [x] Pintarlo — `plantilla.html`; si una casilla legada no tiene « — », se muestra como hoy
+Resultado: En «En curso» y en las casillas del backlog se lee el llano con el técnico plegado, el tipo como etiqueta, «Se espera» y «Resultado» lado a lado, etiquetas Épica/Historia/Sesión/Tarea y el prompt siguiente en un bloque fijo con copiar. La casilla sin « — » se ve como antes. Suite 321 pasan, 2 omitidos. Límite: el «técnico» dentro de «Falta» queda recortado a 2 líneas por el estilo existente.
+Después: **S47**
+
+### S47 — Mods alineados · **Sonnet** · rama `formato-backlog` (repo `metodologia-claude-code`) · ~50k
+Se espera: El panel de la terminal muestra la sesión con cualquier clave, su «Se espera» y el prompt siguiente; las pruebas del mod de S44 en verde.
+- [x] Panel con el formato nuevo — `plugins/panel-tablero/hooks/register.tsx`: `RE_SUB`/`RE_PEDIDA` con clave general y `####`; mostrar «Se espera»; avisar si falta (las 9 pruebas de formato fallaban 9 de 20; ahora 20/20; `RE_PEDIDA` no cambió: sigue pidiendo `S\d+`)
+- [x] Revisar `estado-trabajo` — solo lee la línea «Sesión actual:» de Estado; sin cambio
+- [x] Pruebas del panel con el runner real — `claude plugin test plugins/panel-tablero` (no `node --test`); si cambian los ejemplos del tablero, regenerar con `node scripts/fixtures-formato.mjs`; las 9 de formato en verde (añadido en S44)
+- [x] Instalar — copiar a `~/.claude/mods/` sin pisar las rutas reales de `plugin.json`; `scripts/probar.sh` en verde
+
+### S48 — Reglas y skills · **Sonnet** · rama `formato-backlog` (repo `metodologia-claude-code`) · ~40k
+Se espera: Toda sesión que planee o haga relevo escribe en el formato y deja el «Se espera» de la siguiente.
+- [x] [doc] Regla corta en CLAUDE.md — `~/.claude/CLAUDE.md` y `claude/CLAUDE.md`: «formato en FORMATO_BACKLOG.md; Se espera obligatorio; casilla = llano — técnico»
+- [x] [doc] Skills — `plugins/metodologia/skills/planear/SKILL.md`, `claude/skills/relevo/SKILL.md` (y `~/.claude/skills/relevo`): Se espera de la siguiente, `Prompt:`, correr `verificar_backlog.mjs --formato`
+- [x] [doc] Plantilla única de prompt — `metodologia/PROMPTS.md`
+Resultado: Reglas y skills ya piden el formato nuevo: CLAUDE.md (repo y `~/.claude`), skills relevo (repo y real) y planear, y plantilla única en `PROMPTS.md`. `scripts/probar.sh` 20/20 (4 nuevas fallaban 4 de 4). `~/.claude/metodologia/` aún no existe en la instalación real: reinstalar con `instalar.sh` para que el enlace a FORMATO_BACKLOG.md funcione.
+Después: **S49**
+
+### S49 — Migrar secciones abiertas · **Sonnet** · rama `formato-backlog` · ~50k
+Se espera: `verificar_backlog.mjs --formato` sale limpio en las secciones abiertas de los 5 proyectos y lo cerrado no se tocó.
+Prompt:
+```text
+Sesión S49 de BACKLOG.md. Lee /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (sección Estado con `grep -n`, y S49 con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S49 BACKLOG.md`) y trabaja solo esa sesión, en la rama `formato-backlog`. Contrato: `~/Desktop/Desarrollo/metodologia-claude-code/metodologia/FORMATO_BACKLOG.md`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+- [x] Pasar al formato solo lo abierto — tablero, IEP (`BACKLOG_MVP.md` H4–H7), EAP10, Squalo; anotar tokens antes/después
+
+Resultado: `verificar_backlog.mjs --formato` pasó de 81 avisos (tablero 24, IEP 54 en `BACKLOG_H7.md`, EAP10 3, Squalo 0) a 0 en los 4 proyectos con backlog (`metodologia-claude-code` no tiene). Solo se tocó lo abierto: tablero S24b, E2, S41–S43, S50, S51 (casillas «llano — técnico», `Se espera`, `Prompt:`); IEP S2b–S7 (llano antepuesto, técnico intacto; `BACKLOG_MVP.md` ya cumplía); EAP10 reescrito desde la plantilla vieja. Costo (chars de `backlog.mjs seccion`, antes→después): S41 2208→2221 (+1 %), S42 1755→1899 (+8 %), S50 721→1174 (+63 %, trae su `Prompt:` que antes no tenía), IEP S3 1575→2548 (+62 %, Se espera + Prompt nuevos): el +10 % se juzga en S52 con secciones que ya tenían prompt. Copia del IEP antes de migrar: `~/.claude/jobs/d8faa79c/tmp/BACKLOG_H7.antes.md` (el IEP no es repo git).
+
+### S50 — Metodología viva: datos · **Opus** · rama `formato-backlog` · ~70k
+Se espera: `/api/metodologia` devuelve el grafo de piezas (hooks, skills, mods, agentes, scripts, notas, bitácora, backlog) con estado instalada/activa/falta y qué proyectos de `proyectos.json` usan cada una.
+- [x] [test] Un hogar de mentira con piezas instaladas y faltantes, verlo fallar — `metodologia.test.mjs` + `fixtures/metodologia/home/`: pieza instalada, pieza que falta, hook en `settings.json`, proyecto conectado y no conectado
+- [x] Armar el grafo de piezas — `metodologia.mjs` (puro; catálogo esperado desde `metodologia-claude-code/instalar.sh`) y endpoint en `generar.mjs` sin exponer secretos
+
+Prompt:
+```text
+Modelo: Opus. Sesión S50 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S50 BACKLOG.md`). Rama `formato-backlog`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Resultado: Cumplido. `GET /api/metodologia` da `{ etapas (6, ok|parcial|falta), aristas, piezas (22: 6 mods, 7 hooks, reglas, statusline, buscador, relevo, carpetas metodologia/tablero, backlog, notas, bitácora), proyectos (conectado = tiene sesiones) }`, cada pieza con `estado` activa|instalada|falta, `motivo`, `descripcion`, `ruta` con `~` y `proyectos`. Tests escritos primero: fallaban 9 de 9 (8 de `metodologia.test.mjs`, 1 de `servidor.test.mjs`); suite 330 pasan, 2 omitidos. Contra el `~/.claude` real: falta `carpeta:metodologia` y `carpeta:tablero` (no enlazadas), `estado-trabajo` y `servidores-locales` instaladas sin activar; sin secretos en la salida.
+
+Después: **S51**
+
+### S51 — Metodología viva: vista · **Sonnet** · rama `formato-backlog` · ~60k
+Se espera: Pestaña «Metodología» con el flujo Planear → Sesión (hooks) → Relevo → Backlog → Tablero/Bitácora, cada nodo en verde/ámbar/rojo y al tocarlo qué hace y qué proyectos lo usan; en móvil, lista vertical.
+- [x] [test] La pestaña pinta los nodos del fixture, verlo fallar — `servidor.test.mjs`
+- [x] Dibujar el flujo con estados — `plantilla.html`, SVG en línea con los colores del tablero
+- [x] [test] Usar los datos que ya hay (añadido en S50) — `servidor.test.mjs` ya apunta `TABLERO_METODOLOGIA_REPO` a `fixtures/metodologia/repo` y deja un `settings.json` en el home temporal; la vista pide `GET /api/metodologia` (no viene en `/api/datos`): estado `activa`=verde, `instalada`=ámbar, `falta`=rojo con `motivo`
+
+Resultado: Pestaña «Metodología» con flujo SVG, estados por color, detalle por pieza y lista vertical en móvil; el test fallaba 1 de 1 y ahora pasa (suite 331 en verde). Falta revisión visual en navegador.
+
+Prompt:
+```text
+Modelo: Sonnet. Sesión S51 de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S51 BACKLOG.md`). Rama `formato-backlog`. Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+### S52 — Cierre y medición · **Sonnet**, con Eduardo (tras ≥ 8 sesiones con el formato) · ~40k
+Se espera: Decisión anotada de mantener o recortar la línea en llano según costo y calidad; PRs abiertos.
+Resultado: Todo en verde (suite 331 pasan, 2 omitidos; `probar.sh` 20/20; `--formato` sin avisos en IEP, tablero, EAP10 y Squalo; metodologia-claude-code no tiene backlog). Costo: las 5 secciones migradas en S49 (S24b, E2, S41–S43) pasaron de 7.591 a 8.693 caracteres, **+14,5 %** (sobre el +10 %, bajo el +15 %); calidad sin casos medibles aún. **Decisión (Eduardo): mantener la línea en llano en casillas**; volver a medir tras ~5 sesiones más. PRs `formato-backlog` → `develop` en ambos repos.
+- [x] Todo en verde — suite completa, `scripts/probar.sh`, `verificar_backlog.mjs --formato` en los 5 proyectos
+- [x] Comparar con la línea base de S44 — regla +10 % / +15 % de arriba; anotar la decisión
+- [x] PRs y notas — `formato-backlog` → `develop` en ambos repos; responder la nota del prompt siguiente en `../notas/NOTAS_TABLERO.md`
+
+Cómo ejecutarlo: S44 → S45 → (S46, S47, S48, S49 en cualquier orden) → S52; S50 → S51 son independientes de S45–S49. `/clear` entre sesiones.
+
+Prompt de arranque (cambiar clave y modelo según la tabla de cada título):
+```text
+Modelo: <Opus|Sonnet>. Sesión <S44> de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion <S44> BACKLOG.md`). Rama `formato-backlog` en el tablero y en metodologia-claude-code (créala desde `eficiencia` si no existe). Primera casilla: el test, verlo fallar y anotar cuántos fallan. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+## H16 — Eficiencia de uso de Claude Code
+Historia: Como usuario con plan Team, quiero gastar menos de las ventanas de 5 h y semanal, para hacer más sesiones con el mismo límite.
+Plan completo y datos: `../PLAN_EFICIENCIA.md`. Rama `eficiencia` desde `develop`. Plugins/MCP: ninguno.
+
+### E0 — Aprobación (usuario, sin modelo)
+- [x] Revisar `PLAN_EFICIENCIA.md`: aprobar/quitar candidatas de la Parte 1 y confirmar orden E1–E6.
+- [x] E0b: aplicar los ajustes 1–5 del usuario al plan y a las casillas de E2–E5; nueva E7 (auditoría repetible) tras E4. (añadido en E0b)
+
+### E1 — Extractor de backlog (Sonnet)
+- [x] Test primero `backlog.test.mjs`: `seccion S4b` devuelve solo esa sección con nº de línea; `marcar S4b 2` cambia `[ ]`→`[x]` solo en esa casilla; sección inexistente → código 1. Verlo fallar y anotar cuántos.
+- [x] `backlog.mjs seccion|marcar` reutilizando el árbol de `generar.mjs` (`estructura`, ~línea 365).
+- [x] Prompt de arranque (plantilla en `generar.mjs`) y `~/.claude/skills/relevo/SKILL.md` usan `backlog.mjs seccion`.
+
+### E2 — Hooks de lectura · **Sonnet**
+Se espera: Un aviso se dispara al leer archivos grandes de golpe y queda registrado en el log; se comprueba con `acotar_lectura.test.mjs` (9 pasan) y, tras 7 días, con el log revisado.
+- [x] Test primero `acotar_lectura.test.mjs` con entradas JSON de hook (umbral ~3k tokens = bytes/4): Read sin limit de archivo >3k tokens → aviso con sugerencia `grep -n '^#'` + línea en el log, sin bloqueo; Read de `tool-results` sin limit → aviso; Read con offset/limit → pasa sin log; `cat <ruta>` por Bash → resuelve la ruta, mide con `wc -lc` y avisa solo si supera el umbral; `cat` de archivo chico, `cat x | grep` o ruta no resoluble → pasa (nunca por patrón de texto solo); con `MODO=bloqueo` el primer caso bloquea. Verlo fallar y anotar cuántos. (fallaban 6 de 9; ahora pasan 9; test en `tablero/acotar_lectura.test.mjs`)
+- [x] `~/.claude/hooks/acotar_lectura.mjs` (PreToolUse Read|Bash), modo **aviso** la primera semana: deja pasar, sugiere rango y registra en `~/.claude/session-metrics/acotar_lectura.jsonl` `{fecha, sid, tool, archivo, lineas, tokens, habriaBloqueado}`; interruptor `MODO=aviso|bloqueo`. Aviso PostToolUse si el resultado de Bash ≥2k tokens. Alta en `~/.claude/settings.json`; anotar aquí la fecha de alta.
+  - Alta en `~/.claude/settings.json` el 2026-10-04 (autorizada por el usuario): PreToolUse `Bash` y `Read`, PostToolUse `Bash`. Modo aviso; revisar el log desde el 2026-10-11.
+- [ ] Pasar el hook a bloqueo si el log lo justifica — `~/.claude/session-metrics/acotar_lectura.jsonl` tras 7 días desde el alta: revisar falsos positivos, distribución de tokens y líneas, ajustar el umbral, `MODO=bloqueo`; cifras en `PLAN_EFICIENCIA.md` (fila 1)
+
+Prompt:
+```text
+Lee `BACKLOG.md` (Estado + E2) y trabaja solo la casilla abierta de E2 (revisión del log de `acotar_lectura`, desde el 2026-10-11). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+
+### E3 — Reglas y poda (Sonnet)
+- [x] `/context` antes: anotar tokens de skills y total inicial. (2026-10-04, Sonnet 5.5, sesión E3 con plugin aún cargado: Skills 4.7k (28 skills; sincronizadas claude.ai ≈1.9k, built-in ≈2.6k, session-report ≈60), prompt 2.6k, tools 21.9k (+24.9k diferidas), memoria 1.4k, agentes 143; total 55.3k de los cuales mensajes 24.5k → base ≈30.8k)
+- [x] `~/.claude/CLAUDE.md`: no releer archivos ya leídos (si cambiaron, solo el rango); «Fable solo escalación»; generalizar la línea de salidas largas.
+- [x] (plugin apagado por el usuario con sed, 2026-10-04; el `/context` de esta sesión aún lo lista porque se carga al inicio; ahorro esperado ≈60 tokens, la diferencia real se mide en la sesión siguiente; skills sincronizadas no apagadas: son de claude.ai, ≈1.9k, decidir en E7) Apagar plugin session-report y las skills sincronizadas que se puedan; `/context` después y anotar diferencia.
+- [x] `registrar_sesion.sh` guarda `effort.level` en la fila.
+- [x] Experimento 10c aplazado (E0b, 2026-10-04): en las fotos de statusline Opus 5.5 y Sonnet 5.5 ya van con effort `medium` y Fable/Opus 4.8 con `high`, así que la prueba «Sonnet + medio» no compararía nada. Se reemplaza por el análisis por modelo de E7; el experimento real se reabre con ≥30 Sn con effort registrado (ver `PLAN_EFICIENCIA.md` § Experimento 10c). (añadido en E0b)
+
+### E4 — Tablero, datos (Opus)
+- [x] Test primero `metricas_jsonl.test.mjs` con fixture: llamadas, prompts, ctxFinal, ctxMax, tool results >5k; regex de tarea sobre prompts de ejemplo (`Sesión S4b de BACKLOG_H3.md` → `BACKLOG_H3/S4b`, sin coincidencia → `session_name`); `reetiquetar_bitacora` en `--dry-run` no escribe y cuenta las que salen de «otro».
+- [x] `metricas_jsonl.mjs`; `registrar_sesion.sh` lo usa y guarda `% 5 h/7 d` (`rate_limits`) al inicio y fin.
+- [x] Tarea desde el primer prompt (`Sesión (S\w+) de (BACKLOG\S*)`), no `session_name` (se hereda tras `/clear`). La regex vive en un solo sitio y la usan `registrar_sesion.sh` y el re-etiquetado.
+- [x] `reetiquetar_bitacora.mjs [--dry-run]`: re-etiqueta las 156 filas históricas de `BITACORA.md` con la misma regex (primer prompt vía `asociar`/`sidsPorProyecto` de `bitacora.mjs`); `--dry-run` muestra antes/después por fila y cuántas salen de «otro». Correrlo en seco, revisar, aplicar y anotar aquí el conteo. E5 (tabla por tipo de tarea) depende de esto.
+- Resultado (2026-10-04): re-etiquetado aplicado a `../BITACORA.md`: 168 filas, 61 re-etiquetadas, 56 salen de «otro», 0 sin transcripción; quedan 90 en «otro» (prompts libres, sin «Sesión SX de BACKLOG…»). Respaldo previo en el tmp del job (no durable). Segunda pasada: 0 cambios.
+- [x] Badge «modelo ≠ plan» comparando `prompts[].modelo` de `estructura` con `model.id` de la foto.
+
+Después: **E7**.
+
+### E7 — Auditoría repetible (Sonnet; sigue a E4)
+- [x] Test primero `auditoria.test.mjs` con fixture JSONL: composición del gasto (pesos entrada 1, escritura de caché 2, lectura 0,1, salida 5), tool results >5k, Bash sobre BACKLOG*, `cat` completos, Read sin límite. Verlo fallar y anotar cuántos. (fallaban 5 de 5: módulo ausente)
+- [x] `tablero/auditoria.mjs` portando `../analisis/analizar.mjs` (+ `b.mjs`, `c.mjs`, `e.mjs`) y reutilizando `metricas_jsonl.mjs`; `node generar.mjs --auditoria <AAAA-MM-DD>` (comando `tablero --auditoria`) imprime esas cinco secciones; README.
+- [x] Correr `--auditoria 2026-10-04` y comprobar que cuadra con las cifras de `PLAN_EFICIENCIA.md` (±2 %); anotar diferencias. Hecho: en UTC cuadra exacto con `e.mjs` (Bash sobre BACKLOG 472 · 513k, `cat` 93 · 182k); en hora local (por defecto, como `analizar.mjs`) salen 526 · 561k porque el día corre ~5 h más tarde; añadí `--utc`. No se pudo cuadrar el «63 >5k» del plan (hoy 59 locales / 54 UTC: el plan lo contó antes de corregir imágenes). (añadido en E7) Segunda corrida sobre un día posterior queda para la verificación global.
+- [x] `--auditoria --modelos` (en el test de arriba: un caso con filas Opus/Sonnet y sus Snb): sobre la bitácora re-etiquetada en E4, Sn de ejecución con Opus 5.5 frente a Sonnet 5.5 (ambos con effort medio), con n, tasa Snb/Sn y costo mediano por tarea. Anotar el resultado en `PLAN_EFICIENCIA.md` § Experimento 10c → Resultados y decir qué tipos de Sn pueden bajar a Sonnet. Hecho: Opus 13 Sn, 46 % con Snb, mediana $1,75 ($2,26 con Snb); Sonnet 21, 10 %, $0,66 ($0,72); sesgo de selección documentado en `PLAN_EFICIENCIA.md`.
+
+Después: **E5**.
+
+### E5 — Tablero, vistas (Sonnet)
+- [x] Test primero en `generar.test.mjs`: umbrales de color (llamadas/prompt <15/15–30/>30; ctx <100k/100–130k/>130k), estimación «quedan ~N sesiones tipo X»; el panel de límites renderiza «El % incluye uso fuera de Claude Code», «$ por 1 % se recalcula en cada ventana», la calibración vigente ($ por 1 %, 5 h y 7 d) y la fecha de la última ventana usada.
+- [x] `plantilla.html`: columnas a/b, panel de límites con calibración por ventana y esas cuatro piezas visibles, tabla costo por tipo de tarea (sobre las tareas re-etiquetadas en E4).
+
+### E5b — Costo por feature: no perder sesiones y sumar ramas hermanas (Opus; sigue a E5)
+Origen (2026-10-04, pedido de Eduardo tras probar E5): «Costo por feature (rama)» (`grafRamas` en `plantilla.html`, `agregar(..., {por:'rama'})` en `bitacora.mjs`) deja sesiones fuera («aparecen y siguen apareciendo sesiones en otras») y no junta ramas que son la misma feature: el flujo mergea a `develop` y se sigue en otra rama (ej. `h5-dashboard-e2e` y `h5-graficas-catalogo`). La rama de cada fila sale de `ramaDeTranscripcion` (primer `gitBranch` del .jsonl): una sesión que cambia de rama, o que arranca en `develop`/`main`, cae mal o se excluye («sin rama»).
+- [x] Entender primero (solo lectura, sin cambiar nada): explicar a Eduardo en lenguaje llano cómo funciona todo lo hecho en E4–E7 (bitácora → `metricas_jsonl` → `.metricas.json` → panel de límites, columnas a/b, costo por tipo, auditoría) y dónde ve cada cosa en el tablero. Responder sus preguntas antes de tocar código.
+- [x] Diagnóstico con datos reales: correr sobre `../BITACORA.md` y listar cuántas filas caen en «otras»/«sin rama», por qué (rama `develop`/`main`, sin gitBranch, cambio de rama dentro de la sesión, sin transcripción) y cuánto $ suman. Anotar la tabla en «Resultado».
+- Resultado (2026-10-04, `../BITACORA.md`, 172 filas, $207,38): casi nada sale del total (solo 2 sin sid, $0,90, y 1 sin costo); el problema es atribución y ocultación. Top 10 + «otras (23)»: 47 sesiones, $53,47 escondidas (todas las `h6-s*`, `h5-graficas-catalogo`, `h5-dashboard-e2e`…). Cambian de rama dentro de la sesión 41 filas, $50,03 (se contaban enteras en la primera; p. ej. «H5 gráficas catálogo» 31 msgs en `h5-graficas-catalogo`, 92 en `h5-consultas-indicadores`, 29 en `ci-optimizar`). Primera rama `HEAD` (tablero antiguo, sin rama): 30, $27,15. Primera rama `develop` (planes/backlogs H5/H6): 8, $9,59.
+- Decisiones (E5b, con Eduardo): rama de la sesión = la de **más mensajes** con `gitBranch` en el .jsonl (no la primera). Feature = prefijo `hN-` de la rama (`iep` + `h5-…` → «H5») **más** un mapa opcional `features` en `proyectos.json` (`{ "rama": "Feature" }`) para ramas sin prefijo; sin regla, la rama es su propia feature. `develop`/`main`/`master`/`HEAD` se atribuyen por la tarea (`BACKLOG_Hn/…` o «hN» en el texto) y, si no, a «sin rama» visible. El gráfico muestra **todas** las barras (sin «otras»), con scroll.
+- [x] **Test primero** (`bitacora.test.mjs` y `generar.test.mjs`, verlos fallar y anotar cuántos): (a) la rama de una fila es la **más usada o la última** de la sesión, no solo la primera; (b) filas en `develop`/`main` se atribuyen por la rama de la tarea (`BACKLOG_Hn/SX` → rama del hito) o quedan en un grupo «sin rama» visible con su costo, nunca desaparecen del total; (c) agrupación de ramas hermanas en una **feature**: prefijo común del hito (`h5-…` → H5) y/o mapeo explícito editable; el costo de la feature = suma de sus ramas; (d) el total del gráfico cuadra con el total de la bitácora (nada excluido en silencio).
+- [x] `bitacora.mjs`: rama por sesión mejorada (ver arriba) y `agregar(..., {por:'feature'})`; decidir con Eduardo el criterio de feature (prefijo `hN-` del nombre de rama vs. mapa en `proyectos.json`) y registrarlo en «Decisiones» de este hito.
+- [x] `plantilla.html`: «Costo por feature» con el total por feature y desglose por rama al expandir, y una fila «sin rama» con su costo y número de sesiones (clic → filas); interruptor rama/feature.
+- [x] Suite verde (salida filtrada), regenerar y revisar a ojo con Eduardo; README si cambia algo visible. (Tests: fallaban 5 —el archivo `bitacora.test.mjs` entero por exports ausentes, 3 nuevos + `agregar` ajustado a «sin rama», y 1 de plantilla—; ahora 209 pasan, 2 omitidos. Revisado en Chromium headless: sin errores, interruptor OK. Falta que Eduardo lo mire.)
+- [x] (añadido en E5b) Tiempo total por feature: en modo «Feature» cada barra muestra «$ · duración», el desglose y la línea de total suman también el tiempo (en «Rama» no, la duración ya está en la tabla). Test en `generar.test.mjs` (fallaba 1); 210 pasan, 2 omitidos; revisado en Chromium headless.
+- Resultado tras el arreglo (2026-10-04, datos reales): 16 features, $209,50, solo 1 fila excluida (costo «?»). `integraciones-vista` $43,09 · `iep · H6` $38,70 (14 ramas) · `iep · H3` $26,01 · «sin rama» $25,18 (27 sesiones, casi todas `HEAD` del tablero antiguo) · `iep · H4` $22,09 · `iep · H5` $13,09 (incluye `develop` de «Backlog de h5»). Trampa: `ramaDeTranscripcion` ahora lee el .jsonl entero (antes 256 KB): cacheado por mtime, la generación no se notó más lenta. Opcional: añadir `"features": { "integraciones-vista": "H11–H14", "plan-en-curso": "H6", "eficiencia": "H16" }` al proyecto tablero en `proyectos.json` (no lo toqué: es config de Eduardo).
+
+Después: **E5c**.
+
+### E5c — Auditoría en el tablero (Sonnet; sigue a E5b)
+Origen (2026-10-04, pedido de Eduardo en E5b): «que la Auditoría (E7) también se pueda ver en el tablero». Hoy solo existe como CLI (`node generar.mjs --auditoria <fecha> [--utc] [--modelos]`, `auditoria.mjs` puro: `auditar`, `porModelo`, `leerTranscripciones`).
+- [x] **Test primero** en `generar.test.mjs` (verlo fallar y anotar cuántos): (a) `recolectar`/datos traen `bitacora.auditoria` con las cinco secciones de `auditar` para los últimos N días (por defecto 7, por día, hora local) y `porModelo` sobre la bitácora, calculado con el fixture JSONL de `auditoria.test.mjs` vía `TABLERO_TRANSCRIPCIONES`; (b) sin transcripciones → `auditoria: null`, la pestaña no se rompe; (c) `plantilla.html` contiene «Auditoría», «Opus frente a Sonnet» y el aviso de sesgo de selección.
+- [x] `generar.mjs`: calcular la auditoría al leer bitácoras (reutilizar `auditar`/`porModelo`, no duplicar lógica; cache por mtime de los .jsonl si la generación se nota lenta: medir antes/después con `time node generar.mjs`).
+- [x] `plantilla.html`, pestaña Bitácora: tarjeta «Auditoría» con selector de día (últimos 7), composición del gasto (barra apilada entrada/escritura caché/lectura/salida), tabla de malos hábitos (tool results >5k, Bash sobre BACKLOG, `cat` completos, Read sin límite: n y tokens) y bloque «Opus frente a Sonnet» (n, tasa Snb/Sn, mediana $) con la nota de sesgo. Mismo estilo que «Gastos» (SVG en línea, tabla «Ver como tabla»).
+- [x] Suite verde (filtrada), regenerar, revisar en el navegador con Eduardo; README (sección auditoría: «también en la pestaña Bitácora»).
+
+- Hecho (2026-10-04): fallaban 2 tests al escribirlos (+1 que cazó la guarda de «token» en /api/datos → el panel renombra `tokens`→`volumen` y omite `entrada`); ahora 212 pasan, 2 omitidos. `auditoriaPanel`/`auditoriaDe` en `auditoria.mjs`, `bit.auditoria` en `generar.mjs`, `bloqueAuditoria` en `plantilla.html`. Generación sin cambio apreciable (~14 s, casi todo red). Falta que Eduardo la mire en el navegador.
+
+Después: **E6**.
+
+### E6 — Repo de metodología (Sonnet)
+- [x] Llevar a `metodologia-claude-code` en orden: CLAUDE.md, relevo, `settings.base.json` (+ hooks nuevos), mod `panel-tablero` y tests, README (tablero, S0/Sn/SNb), rutas únicas. `scripts/escanear.sh` y PR.
+
+## H15 — Trello de verdad y vista previa más rápida
+
+Historia: Como usuario que trabaja en un tablero de Trello de su equipo, quiero pegar la URL del tablero, ver mis tarjetas en «Mis tareas» y elegir en bloque qué traer o enviar, para no ir casilla por casilla ni crear tarjetas por error en un tablero ajeno.
+
+Origen: prueba real del usuario con Squalo (2026-10-04, `squalo-app`, integración `squalo` en `sincronizar`, `auto: false`). Rama `trello-vista-previa` (sale de `develop`). Sin plan en `~/.claude/plans/`: las casillas de abajo son el contrato.
+
+### S41 — Conector Trello: URL del tablero y «mías» · **Sonnet** · rama `trello-vista-previa` · plugins: ninguno
+Se espera: Pegar la URL completa de un tablero de Trello funciona y cada tarjeta dice si es tuya; se comprueba con `node --test` en verde, sin red real.
+- [ ] [test] Pruebas de la URL y de «mías», ver cuántas fallan — `trello.test.mjs`: tabla de `normalizarTablero(texto)` (id solo; `https://trello.com/b/<id>/nombre`; sin `https`; barra final; espacios; `trello.com/c/…` o texto inválido → Error en español) y config con URL completa llama a `…/boards/<id>`; `leer` trae `asignado` y `mio` comparando `idMembers` con `members/me`; `config.test.mjs`: `validarIntegracion` guarda solo el id; `servidor.test.mjs`: `/api/integraciones/descubrir` y `/probar` devuelven `tablero` normalizado
+- [ ] Aceptar la URL del tablero en vez del id — `integraciones/trello.mjs`: exportar `normalizarTablero` y usarla en `cargar`/`descubrir`/`traducirError` (el error muestra el id, no la URL). Trampa: el id distingue mayúsculas (`fbMds4E0`), no pasarlo por `new URL().host`
+- [ ] Marcar qué tarjetas son mías — `trello.mjs` `leer`: pedir `idMembers`, `members/me` (cacheado como `quienSoy` de Azure) y `boards/<id>/members`; cada ítem con `asignado` y `mio`; `fixtures/integraciones/trello.json` ampliado (miembros, `me`, tarjeta asignada y otra no)
+- [ ] Guardar el id limpio al configurar — `integraciones/config.mjs` `validarIntegracion` de Trello guarda el id normalizado; `generar.mjs` `descubrir`/`probar` devuelven el `tablero` normalizado y `plantilla.html` lo reemplaza en el campo (como la organización de Azure)
+- [ ] Comprobar «Mis tareas» con Trello sin tocar la vista — `importarBacklog(…, soloMias)` usa `mio`; si no basta, anotarlo en S42. README: Trello acepta la URL; «mías» = tarjetas donde eres miembro. `node --test 2>&1 | tail -40`, commit
+
+Prompt:
+```text
+Lee `BACKLOG.md` (Estado + H15/S41) y trabaja solo esa sesión en la rama `trello-vista-previa`. Primero los tests, verlos fallar, luego el código. Nada de red real (fetch simulado con el fixture). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S42**
+
+### S42 — Vista previa: seleccionar todo, aviso al enviar y texto del botón · **Sonnet** · rama `trello-vista-previa` · plugins: ninguno
+Se espera: En la vista previa se marca todo un grupo de un clic, avisa cuántas tarjetas se crearían hacia afuera antes de aplicar, y el botón nombra el conector; se comprueba con `servidor.test.mjs` en verde.
+- [ ] [test] Pruebas de seleccionar todo, aviso y botón, ver cuántas fallan — `servidor.test.mjs`: `data-pv-todo` (todo/ninguno por grupo), aviso de envío (`data-pv-aviso-envio` o «Se crearían») y botón de importar sin «desde Azure» fijo
+- [ ] Seleccionar todo o ninguno por grupo — `plantilla.html` `vistaPrevia` (~l.971): en cada grupo (traer, enviar, cambios/conflictos) un control que marca/desmarca todas las casillas del grupo y actualiza el contador; teclado y 44 px en mobile. Pedido del usuario: importó 7+14 tarjetas de Squalo una por una
+- [ ] Avisar antes de crear hacia afuera — `plantilla.html`: si hay creaciones marcadas (no solo en la primera sincronía), mostrar sobre «Aplicar» «Se crearían N tarjetas/ítems en <tablero/proyecto>» y pedir confirmación en línea. Motivo: `squalo-app` sincroniza con un tablero del equipo y su `BACKLOG.md` tiene ~25 casillas propias; desde la segunda sincronía las creaciones vienen marcadas
+- [ ] El botón de importar nombra el conector — `plantilla.html` (~l.1089): «Crear backlog local desde <Trello|Azure DevOps|GitHub Projects>» según `integ.tipo` (`TIPOS_INTEG`)
+- [ ] Cerrar lo que S41 dejó pendiente de vista — `plantilla.html`; `node --test 2>&1 | tail -40`, commit
+
+Prompt:
+```text
+Lee `BACKLOG.md` (Estado + H15/S42) y trabaja solo esa sesión en la rama `trello-vista-previa`. Primero el test de plantilla, verlo fallar, luego `plantilla.html`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
+Después: **S43**
+
+### S43 — Cierre de H15 · **Sonnet**, con el usuario · rama `trello-vista-previa`
+Se espera: Con Squalo, la URL completa de Trello se guarda como id, «Mis tareas» muestra sus tarjetas y nada se envía sin confirmar; se comprueba a mano con el usuario y con `node --test` en verde.
+- [ ] Toda la suite en verde — `node --test 2>&1 | tail -40`
+- [ ] Probar con Squalo y el usuario — pegar la URL completa (se guarda `fbMds4E0`); «Mis tareas» muestra sus tarjetas; vista previa con «Seleccionar todo»; el aviso de envío sale si hay casillas locales y no se envía nada sin confirmar
+- [ ] Cerrar H15 — notas de cierre en este backlog, push y PR `trello-vista-previa` → `develop`
+
+Prompt:
+```text
+Lee `BACKLOG.md` (Estado + H15/S43) y trabaja solo esa sesión en la rama `trello-vista-previa`, con el usuario delante. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
 
 ## H11 — Retomar en lenguaje natural y «Qué se busca»
 
@@ -152,7 +431,7 @@ Prompt de arranque S35 (Opus, sin plugins/MCP):
 - [x] Al elegir `repo` en `proyecto`: rellenar `id`/`nombre`/`docs`/`notas` solo si están vacíos; `docs` como casillas de subcarpetas candidatas + «otra…»
 - [x] El campo de texto sigue (pegar ruta vale) con placeholder «Elige con el botón o pega la ruta»
 - [x] Mobile: filas de 44 px. CDP: crear proyecto desde una sugerencia sin escribir rutas → previa → crear → la guía marca repo/docs; `node --test 2>&1 | tail -40`, commit
-- [ ] Por probar a mano: el botón «Elegir…» en Editar proyecto y en `docs`/`notas`/`bitacora`; CDP solo cubrió Nuevo → repo, Explorar y la previa (añadido en S36)
+- [x] Por probar a mano: el botón «Elegir…» en Editar proyecto y en `docs`/`notas`/`bitacora`; CDP solo cubrió Nuevo → repo, Explorar y la previa (añadido en S36) — probado a mano por el usuario el 2026-10-04: funciona
 
 Prompt de arranque S36 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S36) y trabaja solo esa sesión en la rama `integraciones-vista`. Test de plantilla primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
@@ -194,7 +473,7 @@ Prompt de arranque S37b (Opus, sin plugins/MCP):
 - [x] `itemExterno` y `vistaMias`: en `participar`, «Asignarme»/«Quitarme» y `<select>` de estado con las `columnas`; confirmación en línea con el título; repintar con `datos` y aviso; en `lectura` sin controles, `title` explica cómo activar participar
 - [x] «Mis tareas»: «✓ Terminé» = `columnas.hecho[0]`; el ítem sale de la lista al confirmar (corregido: primer estado de `columnas` que tenga ítems `hecha`, `estadoHecho(integ)`)
 - [x] «ver descripción» plegable con `descripcion`, prioridad e iteración
-- [ ] CDP con `fetch` de Azure simulado por `--import`: asignarme → PATCH visto → chip con mi nombre; cambiar estado → columna nueva; `node --test 2>&1 | tail -40`, commit — NO hecho: queda la prueba en navegador (tests en verde, 165 pasan, `node --check` del script OK) → S40
+- [x] CDP con `fetch` de Azure simulado por `--import`: asignarme → PATCH visto → chip con mi nombre; cambiar estado → columna nueva; `node --test 2>&1 | tail -40`, commit — NO hecho: queda la prueba en navegador (tests en verde, 165 pasan, `node --check` del script OK) → S40; cubierto con la prueba real de S40 y con la prueba a mano del usuario en el navegador (2026-10-04: asignarme, estado, «✓ Terminé», descripción funcionan)
 
 Prompt de arranque S38 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S38) y trabaja solo esa sesión en la rama `integraciones-vista`. Test de plantilla primero. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
@@ -286,7 +565,7 @@ Hecho (commit en `integraciones-vista`). Trampa: `new URL` pasa el host a minús
 - [x] `integraciones/config.mjs`: `validarIntegracion` guarda solo el nombre (y no pisa un `proyecto` ya escrito). Prueba en `config.test.mjs`
 - [x] `generar.mjs`: `/api/integraciones/descubrir` y `/probar` devuelven `organizacion` normalizada. Prueba en `servidor.test.mjs`
 - [x] `plantilla.html`: el campo «Organización» se reemplaza con la normalizada al buscar/probar; el placeholder/ayuda dice «acepta la URL». Prueba: `node --test 2>&1 | tail -40`
-- [ ] Con tu org real: pegar `https://dev.azure.com/CodeFactory2026-2` y pulsar «Buscar proyectos» (debe listar EAP10) — **del usuario**; anotar el resultado aquí
+- [x] Con tu org real: pegar `https://dev.azure.com/CodeFactory2026-2` y pulsar «Buscar proyectos» (debe listar EAP10) — **del usuario**; confirmado en S24b («todo eso funciona»)
 
 Prompt de arranque S20 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S20) y trabaja solo esa sesión en la rama `integraciones-vista`. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
@@ -344,11 +623,13 @@ Prompt de arranque S24 (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S24) y trabaja solo esa sesión en la rama `integraciones-vista`, con el usuario delante (necesita su PAT y navegador). Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
 
 ### S24b — Resultados de la prueba real y cierre · **Sonnet**, con el usuario
+Se espera: Quedan anotados los resultados de la prueba real de EAP10 y el reinicio por código nuevo no corta peticiones en vuelo; se comprueba con `generar.test.mjs` en verde.
 El usuario revisó EAP10 en el navegador al final de S24 pero no dictó los resultados (el relevo se pidió sin ellos); hay que pedírselos.
 - [x] (el usuario confirmó «todo eso funciona»; sin detalle de equipos/`areaPath`) Preguntar al usuario y anotar aquí: ¿«Buscar proyectos» lista EAP10? ¿«Mías» coincide con Azure (`@Me`)? ¿EAP10 tiene más de un equipo (→ `areaPath`)? ¿org falsa y servidor detenido dieron los mensajes esperados? ¿causa real de «cargando»?
 - [x] (el usuario confirmó que todos están en el mismo equipo: no hace falta `areaPath`) Si hay más de un equipo: añadir sesión nueva con campo opcional `areaPath`
-- [ ] Opcional: `generar.mjs` ~l.773, el reinicio por código nuevo espera a que no haya peticiones en vuelo; prueba en `generar.test.mjs`
-- [ ] `git status` (ningún `.md` cambió salvo BACKLOG), `node --test 2>&1 | tail -40`, actualizar PR #9
+- [ ] [fix] El reinicio por código nuevo espera a las peticiones en curso — `generar.mjs` ~l.773, con prueba en `generar.test.mjs` (opcional)
+- [x] `git status` (ningún `.md` cambió salvo BACKLOG), `node --test 2>&1 | tail -40`, actualizar PR #9 — superada: PR #9 y #10 mergeados en `develop`, PR #11 `develop` → `main` abierto
+- [x] `git status` (ningún `.md` cambió salvo BACKLOG), `node --test 2>&1 | tail -40`, actualizar PR #9 — superada: PR #9 y #10 mergeados en `develop`, PR #11 `develop` → `main` abierto
 
 Prompt de arranque S24b (Sonnet, sin plugins/MCP):
 > Lee `BACKLOG.md` (Estado + S24b) y trabaja solo esa sesión en la rama `integraciones-vista`, con el usuario delante. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
@@ -560,9 +841,9 @@ Trampas: los tests del servidor comprueban que `datos` no contenga «token», as
 ## H3 — Integraciones: prueba real
 
 ### S5 — Prueba real de conectores · **Sonnet** · rama `integraciones` (~10 min, opcional)
-- [ ] Crear `~/.config/tablero/credenciales.json` (`chmod 600`)
-- [ ] Poner `tablero` (Trello) y `organizacion`/`proyecto` (ADO) en el `proyectos.json` local (ignorado por git)
-- [ ] `node generar.mjs --probar-conexiones` y corregir lo que aparezca
+- [x] Crear `~/.config/tablero/credenciales.json` (`chmod 600`) — con `azure-devops.pat` y `trello.key`/`trello.token` (2026-10-04)
+- [x] Poner `tablero` (Trello) y `organizacion`/`proyecto` (ADO) en el `proyectos.json` local (ignorado por git) — ADO: EAP10 (`participar`); Trello: tablero Squalo (`fbMds4E0`) en `squalo-app`
+- [x] `node generar.mjs --probar-conexiones` y corregir lo que aparezca — probado por el usuario desde la vista (2026-10-04): Trello conecta, lee 21 tarjetas en lectura, importa a backlog local y la primera sincronía trae sin enviar nada. Fallos encontrados → H15 (S41, S42)
 
 Hecho antes (parte D): `integraciones/trello.mjs` y `integraciones/azure-devops.mjs` registrados en `index.mjs`, fixtures y tests con `fetch` simulado, README con campos, credenciales y cómo hallar el `boardId`.
 

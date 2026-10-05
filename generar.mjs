@@ -22,7 +22,11 @@ import { validarIntegracion, aplicarCambio, anadirProyecto, editarProyecto, escr
 import { ADAPTADORES, NOMBRES } from './integraciones/index.mjs'
 import { normalizarOrganizacion } from './integraciones/azure-devops.mjs'
 import { desajustes, describir } from './coherencia.mjs'
-import { parsearBitacora, sidsPorProyecto, asociar, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
+import { auditoriaDe } from './auditoria.mjs'
+import { parsearBitacora, sidsPorProyecto, asociar, conFeatures, editarFila, hashBitacora, ErrorBitacora } from './bitacora.mjs'
+import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
+import { semaforoLlamadas, semaforoCtx, eficienciaDe } from './eficiencia.mjs'
+import { metodologia } from './metodologia.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
@@ -247,12 +251,15 @@ export function cambiosProyecto(cambios, actual) {
 export const plantillaBacklog = (nombre, fecha) => `# Backlog — ${nombre}
 
 ## Estado
-- ${fecha} · backlog creado desde el tablero.
+- ${fecha} · backlog creado desde el tablero. Siguiente: **S1**.
 - Para retomar (${fecha}): Backlog recién creado; aún no se empezó nada. Lo primero es describir la primera tarea de S1.
 
-## S1 — Primera sesión
+## H1 — Primer hito
 Historia: Como <quién>, quiero <qué>, para <para qué>.
-- [ ] Describe aquí la primera tarea
+
+### S1 — Primera sesión
+Se espera: <qué queda funcionando y cómo se comprueba>.
+- [ ] Describe aquí la primera tarea — <archivo, qué hacer y prueba esperada>
 `
 
 // Backlog secundario con nombre: «Sprint 3 — Diseño» → BACKLOG_SPRINT_3_DISENO.md (sin tildes; nunca el principal).
@@ -309,11 +316,27 @@ function contarCasillas(texto) {
 }
 
 // ---------- Estructura (vista «Mapa»): secciones ##/### con sus casillas anidadas ----------
-const RE_TITULO = /^(#{2,3})\s+(.+?)\s*#*\s*$/
+const RE_TITULO = /^(#{2,4})\s+(.+?)\s*#*\s*$/
 // «[~]» = en curso a mano (cuenta como pendiente); «[-]» = movida (fuera de los conteos).
 const RE_TAREA = /^(\s*)[-*] \[([ xX~-])\]\s?(.*)$/
 const RE_CERCA = /^\s*(```|~~~)/
 const RE_COMO = /c[oó]mo ejecutarlo/i
+// Clave de sesión o hito (FORMATO_BACKLOG.md): S44, E5b, H17, S-CI1b.
+const CLAVE = '[A-Z][A-Z0-9-]*\\d+[a-z]?'
+const RE_CLAVE_INICIO = new RegExp(`^\\**(${CLAVE})(?![A-Za-z0-9])`)
+const RE_CLAVE_EN = new RegExp(`(?<![A-Za-z0-9-])(${CLAVE})(?![A-Za-z0-9])`)
+const RE_MODELO_PAR = /\s*\(([^()]*\b(Opus|Sonnet|Haiku|Fable)\b[^()]*)\)\s*$/i
+const RE_SE_ESPERA = /^\s*(?:[-*]\s+)?\**Se espera\s*:\**\s*(.+)$/i
+const RE_RESULTADO = new RegExp(`^\\s*(?:[-*]\\s+)?\\**Resultado(?:\\s+(${CLAVE}))?\\s*(?:\\([^)]*\\))?\\s*:\\**\\s*(.+)$`)
+const RE_DESPUES = new RegExp(`^\\s*(?:[-*]\\s+)?\\**Despu[eé]s\\s*:\\**\\s*\\**(${CLAVE})\\b`)
+// Prompt en una línea: «Prompt de arranque (S4a): «…»» (vale para la clave que nombra; sin clave, para su sesión).
+const RE_PROMPT_LINEA = /^\s*(?:[-*]\s+)?\**(Prompt\b[^:«]*):\**\s*«(.+)»\s*\.?\s*$/i
+// Casilla del formato: «[tipo] <llano ≤ 12 palabras, sin backticks> — <técnico>»; si no cumple, es legada (todo texto).
+export function partesCasilla(texto) {
+  const m = String(texto).match(/^(?:\[(fix|test|doc|refactor)\]\s+)?(.+?)\s+—\s+(.+)$/)
+  if (!m || m[2].includes('`') || m[2].trim().split(/\s+/).length > 12) return null
+  return { tipo: m[1] || null, llano: plano(m[2]), tecnico: plano(m[3]) }
+}
 const RE_ITEM = /^ ?(\d+[.)]|[-*])\s+(?!\[[ xX~-]\])(.+)$/
 const RE_DURACION = /\s*\(([^()]*\b(?:d[ií]as?|d|semanas?|sem|horas?|h)\b[^()]*)\)\s*$/i
 // «Qué se busca»: línea «Historia:|Objetivo:|Para qué:» (también en viñeta o en negrita); la descripción es el primer
@@ -339,11 +362,13 @@ export function analizarTitulo(crudo) {
     resto = resto.trim().replace(/^\((.*)\)$/, '$1')
     if (resto) notas.push(resto)
   }
+  const par = titulo.match(RE_MODELO_PAR)
+  if (par) { meta.modelo ??= par[2][0].toUpperCase() + par[2].slice(1).toLowerCase(); notas.unshift(par[1].trim()); titulo = titulo.slice(0, par.index) }
   const dur = titulo.match(RE_DURACION)
   if (dur) { meta.duracion = dur[1].trim(); titulo = titulo.slice(0, dur.index) }
   if (notas.length) meta.nota = notas.join(' · ')
   titulo = titulo.trim()
-  return { titulo, clave: (titulo.match(/^\**([HS]\d+[a-z]?)\b/) || [])[1] || null, meta }
+  return { titulo, clave: (titulo.match(RE_CLAVE_INICIO) || [])[1] || null, meta }
 }
 
 function cerrarSeccion(s) {
@@ -365,14 +390,14 @@ const textoDeCita = (lineas) => lineas.map((l) => l.replace(/^\s*>\s?/, '').trim
 // Árbol de secciones: [{ id, linea, titulo, tituloCrudo, clave, nivel, meta, hechas, total, estado, tareas:[{texto,hecha,linea,hijas,marcas?}], items, prompts:[{etiqueta,texto,clave,modelo}], hijas:[sección] }]
 export function estructura(texto) {
   const raiz = []
-  let padre = null, actual = null, pila = [], cerca = null, cita = null, rotulo = null, n = 0, intro = false
+  let padre = null, sesion = null, actual = null, pila = [], cerca = null, cita = null, rotulo = null, n = 0, intro = false
   const cuenta = () => RE_COMO.test(plano(actual.titulo)) || (actual.nivel === 3 && padre && RE_COMO.test(plano(padre.titulo)))
   const emitir = (lineas, rot, esCita) => {
     const texto = esCita ? textoDeCita(lineas) : lineas.join('\n')
     if (!actual || !texto.trim() || !(cuenta() || /prompt/i.test(rot || ''))) return
     const etiqueta = (/prompt/i.test(rot || '') ? plano(rot) : '').replace(/^(?:[-*]|\d+[.)])\s+/, '').replace(/\s*:\s*$/, '').slice(0, 80) || 'Prompt'
     const modelo = (etiqueta.match(/\b(Opus|Sonnet|Haiku|Fable)\b/i) || [])[1]
-    actual.prompts.push({ etiqueta, texto: texto.slice(0, 20000), clave: (etiqueta.match(/\b([A-Z]\d+[a-z]?)\b/) || [])[1] || null, ...(modelo ? { modelo: modelo[0].toUpperCase() + modelo.slice(1).toLowerCase() } : {}) })
+    actual.prompts.push({ etiqueta, texto: texto.slice(0, 20000), clave: (etiqueta.match(RE_CLAVE_EN) || [])[1] || null, ...(modelo ? { modelo: modelo[0].toUpperCase() + modelo.slice(1).toLowerCase() } : {}) })
   }
   for (const [i, linea] of String(texto).replace(/\t/g, '    ').split('\n').entries()) {
     if (RE_CERCA.test(linea)) {
@@ -395,8 +420,12 @@ export function estructura(texto) {
     if (t) {
       const nivel = t[1].length
       const s = { id: `s${n++}`, nivel, linea: i, tituloCrudo: t[2], ...analizarTitulo(t[2]), tareas: [], items: [], prompts: [], hijas: [] }
-      if (nivel === 3 && padre) padre.hijas.push(s)
+      // «####» es sub-sesión de la «###» en curso.
+      if (nivel === 4 && (sesion || padre)) (sesion || padre).hijas.push(s)
+      else if (nivel >= 3 && padre) padre.hijas.push(s)
       else { raiz.push(s); if (nivel === 2) padre = s }
+      if (nivel === 2) sesion = null
+      if (nivel === 3) sesion = s
       actual = s; pila = []; rotulo = null; intro = true
       continue
     }
@@ -406,6 +435,13 @@ export function estructura(texto) {
       if (!linea.trim()) { if (actual.descripcion) intro = false }
       else if (esParrafo(linea)) actual.descripcion = actual.descripcion ? `${actual.descripcion} ${plano(linea)}` : plano(linea)
       else intro = false
+    }
+    if (actual) {
+      const e = linea.match(RE_SE_ESPERA), r = linea.match(RE_RESULTADO), d = linea.match(RE_DESPUES), pr = linea.match(RE_PROMPT_LINEA)
+      if (e) actual.seEspera ??= plano(e[1])
+      if (r && (!r[1] || r[1] === actual.clave)) actual.resultado ??= plano(r[2])
+      if (d) actual.despues ??= d[1]
+      if (pr) actual.prompts.push({ etiqueta: plano(pr[1]).slice(0, 80), texto: pr[2].trim(), clave: (pr[1].match(RE_CLAVE_EN) || [])[1] || null })
     }
     const m = actual && linea.match(RE_TAREA)
     if (actual && !actual.plan) { const pl = linea.match(/plans\/([A-Za-z0-9_-]+\.md)/); if (pl) actual.plan = pl[1] }
@@ -423,7 +459,7 @@ export function estructura(texto) {
     }
     const sangria = m[1].length
     const { texto: limpio, marcas } = extraerMarcas(m[3].trim())
-    const tarea = { texto: limpio.slice(0, 1500), hecha: /x/i.test(m[2]), linea: i, hijas: [], ...(/[~-]/.test(m[2]) ? { marca: m[2] } : {}), ...(Object.keys(marcas).length ? { marcas } : {}) }
+    const tarea = { texto: limpio.slice(0, 1500), hecha: /x/i.test(m[2]), linea: i, hijas: [], ...partesCasilla(limpio), ...(/[~-]/.test(m[2]) ? { marca: m[2] } : {}), ...(Object.keys(marcas).length ? { marcas } : {}) }
     while (pila.length && pila.at(-1).sangria >= sangria) pila.pop()
     ;(pila.length ? pila.at(-1).tarea.hijas : actual.tareas).push(tarea)
     pila.push({ sangria, tarea })
@@ -439,6 +475,56 @@ export function estructura(texto) {
   return raiz
 }
 export const aplanar = (arbol) => arbol.flatMap((s) => [s, ...aplanar(s.hijas)])
+
+// Sesiones del backlog según «Lo que devuelven los parsers» de FORMATO_BACKLOG.md: títulos «###»/«####» con clave
+// (y «##» que no sean hitos H…) más las viñetas legadas de IEP «- **S3c — título (Fable, …)**, rama `x`».
+const RE_SESION_VINETA = new RegExp(`^(\\s*)[-*]\\s+\\*\\*(${CLAVE})\\s*[—–-]\\s*(.+?)\\*\\*(.*)$`)
+const vistaTarea = (t) => ({ hecha: t.hecha, tipo: t.tipo ?? null, llano: t.llano ?? null, tecnico: t.tecnico ?? null, texto: t.texto, linea: t.linea })
+const sinClave = (titulo, clave) => plano(titulo).replace(new RegExp(`^${clave.replace(/-/g, '\\-')}\\s*[—–:-]?\\s*`), '').trim()
+export function sesiones(texto) {
+  const arbol = estructura(texto)
+  const todas = aplanar(arbol)
+  const prompts = todas.flatMap((s) => s.prompts)
+  const promptDe = (clave, propios) => (prompts.find((p) => p.clave === clave) || propios.find((p) => !p.clave))?.texto.trim() ?? null
+  const res = []
+  for (const s of todas) {
+    if (!s.clave || (s.nivel === 2 && /^H\d/.test(s.clave))) continue
+    res.push({
+      clave: s.clave, titulo: sinClave(s.titulo, s.clave), modelo: s.meta.modelo ?? null, rama: s.meta.rama ?? null,
+      seEspera: s.seEspera ?? null, resultado: s.resultado ?? null, prompt: promptDe(s.clave, s.prompts),
+      hechas: s.hechas, total: s.total, tareas: s.tareas.map(vistaTarea),
+      subsesiones: s.hijas.filter((h) => h.nivel === 4 && h.clave).map((h) => h.clave), despues: s.despues ?? null, linea: s.linea,
+    })
+  }
+  // Viñetas legadas: su bloque son las líneas con más sangría que la viñeta (hasta un título).
+  const lineas = String(texto).replace(/\t/g, '    ').split('\n')
+  lineas.forEach((l, i) => {
+    const v = l.match(RE_SESION_VINETA)
+    if (!v || res.some((s) => s.clave === v[2])) return
+    const { titulo, meta } = analizarTitulo(v[3])
+    const s = { clave: v[2], titulo: sinClave(titulo, v[2]), modelo: meta.modelo ?? null, rama: meta.rama ?? v[4].match(/rama\s+`([^`]+)`/)?.[1] ?? null,
+      seEspera: null, resultado: null, prompt: null, hechas: 0, total: 0, tareas: [], subsesiones: [], despues: null, linea: i }
+    const propios = []
+    for (let j = i + 1; j < lineas.length && !RE_TITULO.test(lineas[j]) && (!lineas[j].trim() || sangria(lineas[j]) > v[1].length); j++) {
+      const t = lineas[j].match(RE_TAREA), e = lineas[j].match(RE_SE_ESPERA), r = lineas[j].match(RE_RESULTADO), pr = lineas[j].match(RE_PROMPT_LINEA)
+      if (t && t[2] !== '-') {
+        const tx = extraerMarcas(t[3].trim()).texto
+        s.tareas.push(vistaTarea({ hecha: /x/i.test(t[2]), texto: tx, linea: j, ...partesCasilla(tx) }))
+      } else if (e) s.seEspera ??= plano(e[1])
+      else if (r && (!r[1] || r[1] === s.clave)) s.resultado ??= plano(r[2])
+      else if (pr && !RE_CLAVE_EN.test(pr[1])) propios.push({ clave: null, texto: pr[2] })
+    }
+    s.total = s.tareas.length; s.hechas = s.tareas.filter((t) => t.hecha).length
+    s.prompt = promptDe(s.clave, propios)
+    res.push(s)
+  })
+  // «Resultado S3c (…): …» fuera de la sesión (p. ej. bajo la tarea madre) también cuenta.
+  for (const l of lineas) {
+    const r = l.match(RE_RESULTADO), s = r?.[1] && res.find((x) => x.clave === r[1])
+    if (s) s.resultado ??= plano(r[2])
+  }
+  return res.sort((a, b) => a.linea - b.linea)
+}
 // «Qué se busca» de un plan de Claude: el primer párrafo bajo «## Context» o «## Contexto».
 export const contextoDePlan = (arbol) => aplanar(arbol).find((s) => /^contexto?\b/i.test(plano(s.titulo)))?.descripcion ?? null
 
@@ -485,7 +571,7 @@ export function estasAqui(arbol, estadoTxt = '') {
 
 // Frente activo: dónde se está editando de verdad, según el historial del backlog (la entrada más reciente manda).
 // Devuelve { seccion, tarea, subsesiones, plan } del hito tocado si aún tiene casillas abiertas; si no, null (manda «estás aquí»).
-const RE_SUB = /^\s*[-*]\s+\*\*(S\d+[a-z]?)\b\s*[—–-]?\s*(.*?)\*\*(.*)$/
+const RE_SUB = new RegExp(`^\\s*(?:[-*]\\s+\\*\\*|####\\s+)(${CLAVE})(?![A-Za-z0-9])\\s*[—–-]?\\s*(.*?)(?:\\*\\*(.*))?$`)
 const RE_CASILLA = /^\s*[-*] \[([ xX-])\]\s?(.*)$/
 const sangria = (l) => l.match(/^\s*/)[0].length
 const abierta = (s) => s.estado === 'en-curso' || s.estado === 'pendiente'
@@ -1062,7 +1148,27 @@ function leerBitacoras() {
   if (!rutas.length) return new Map()
   const jsonl = new Map()
   const mapa = sidsPorProyecto(proyectos, TRANSCRIPCIONES, jsonl)
-  return new Map(rutas.map((ruta) => [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa, jsonl) }]))
+  const metricas = leerMetricasSesion()
+  return new Map(rutas.map((ruta) => {
+    const bit = asociar(parsearBitacora(readFileSync(ruta, 'utf8')), mapa, jsonl)
+    bit.registro = conFeatures(bit.registro, proyectos) // «Costo por feature»: hN- de la rama o `features` del proyecto
+    // Columnas «llamadas/prompt» y «ctx final» (solo filas con <sid>.metricas.json) y panel de eficiencia.
+    const porSid = new Map(metricas.map((m) => [String(m.sid).slice(0, 8), m]))
+    for (const f of bit.registro) {
+      const m = f.sid && porSid.get(f.sid)
+      if (!m || !m.prompts) continue
+      const llamadasPorPrompt = Math.round((m.llamadas / m.prompts) * 10) / 10
+      Object.assign(f, { llamadasPorPrompt, semaforoLlamadas: semaforoLlamadas(llamadasPorPrompt), ctxFinalK: Math.round(m.ctxFinal / 1000), semaforoCtx: semaforoCtx(m.ctxFinal), grandes: m.resultadosGrandes?.length || 0 })
+    }
+    const texto = readFileSync(ruta, 'utf8')
+    return [ruta, { ruta, modificado: statSync(ruta).mtime.toISOString(), ...bit, eficiencia: eficienciaDe(metricas, bit.registro), auditoria: auditoriaDe(TRANSCRIPCIONES, texto) }]
+  }))
+}
+
+// <sid>.metricas.json que escribe registrar_sesion.sh en session-metrics (llamadas, ctxFinal, % de 5 h/7 d…).
+function leerMetricasSesion(dir = join(homedir(), '.claude', 'session-metrics')) {
+  if (!existsSync(dir)) return []
+  return readdirSync(dir).filter((f) => f.endsWith('.metricas.json')).flatMap((f) => { try { return [JSON.parse(readFileSync(join(dir, f), 'utf8'))] } catch { return [] } })
 }
 
 // Guía «Configurar este proyecto»: un paso por pieza, con lo que ya hay a mano (sin red: GitHub sale de p.git, que ya leyó gh).
@@ -1302,7 +1408,13 @@ async function recolectar(opciones = {}) {
     const configuracion = estadoConfiguracion(p, { git, backlogs })
     const retomar = hechosRetomar({ transcripciones: p.transcripciones, git }, backlogs.find((b) => !b.esPlan) || null)
     const kanban = backlogs.filter((b) => !b.esPlan).flatMap((b) => columnasKanban(b, { git }, opciones.sesiones?.[p.id] || []))
-    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora: bitacoras.get(p.bitacora) || null, integraciones, configuracion, editable: p.editable, retomar, kanban }
+    // Badge «≠ plan»: el modelo de la fila (foto de la statusline) frente al que pedía el prompt de esa sesión.
+    const bitacora = bitacoras.get(p.bitacora) || null
+    for (const f of bitacora?.registro || []) if (f.proyecto === p.id) {
+      const plan = modeloPlanDe(f.tarea, backlogs)
+      if (plan) Object.assign(f, { modeloPlan: plan, modeloDistinto: modeloDistinto(plan, f.modelo) })
+    }
+    return { id: p.id, nombre: p.nombre, repo: p.repo, backlogs, historial, planes, git, notas: leerNotas(p), bitacora, integraciones, configuracion, editable: p.editable, retomar, kanban }
   }))
 }
 
@@ -1378,6 +1490,12 @@ export function huellaCodigo(dir = AQUI) {
   return CODIGO.map((f) => statSync(join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0).join(':')
 }
 const CODIGO_ARRANQUE = huellaCodigo()
+// Metodología viva (S50): repo con instalar.sh; los proyectos aportan sesiones, backlogs, notas y bitácora.
+const METODOLOGIA_REPO = process.env.TABLERO_METODOLOGIA_REPO || join(AQUI, '..', '..', 'metodologia-claude-code')
+const proyectosMetodologia = (vista) => proyectos.map((p) => {
+  const v = vista.find((x) => x.id === p.id)
+  return { id: p.id, nombre: p.nombre, transcripciones: p.transcripciones || (p.repo ? transcripcionesDe(p.repo) : null), backlogs: v?.backlogs?.length || 0, notas: v?.notas?.ruta, bitacora: v?.bitacora?.ruta }
+})
 const local = (dir) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(dir)
 // Manejador HTTP (exportado para los tests: puerto y adaptadores inyectables).
 export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alUsar = () => {}, codigo = CODIGO_ARRANQUE, alSalir = () => {} } = {}) {
@@ -1430,6 +1548,7 @@ export function crearManejador({ puerto = PUERTO, adaptadores = ADAPTADORES, alU
       if (req.method === 'GET' && ruta === '/api/ping') return enviar(res, 200, { tablero: true })
       if (req.method === 'GET' && ruta === '/api/version') return enviar(res, 200, { version: huella(), codigo })
       if (req.method === 'GET' && ruta === '/api/datos') return enviar(res, 200, (await fresco(true)).datos)
+      if (req.method === 'GET' && ruta === '/api/metodologia') return enviar(res, 200, metodologia({ home: HOME, repo: METODOLOGIA_REPO, transcripciones: TRANSCRIPCIONES, proyectos: proyectosMetodologia((await fresco()).datos.proyectos) }))
       // Barato (sondeo cada 5 s): solo cabeza/cola de los .jsonl recientes y columnas sobre los datos ya construidos.
       if (req.method === 'GET' && ruta === '/api/sesiones') {
         const sesiones = sesionesActivas(proyectos)
@@ -1754,12 +1873,25 @@ function hookInicio() {
   process.stdout.write(lineas.join('\n') + '\n')
 }
 
+// `--auditoria <AAAA-MM-DD> [--modelos]` (auditoria.mjs): gasto del día desde las transcripciones; con --modelos, Opus frente a Sonnet en la bitácora.
+async function auditoriaCli() {
+  const { auditar, leerTranscripciones, textoAuditoria, porModelo, textoModelos } = await import('./auditoria.mjs')
+  const dia = args[args.indexOf('--auditoria') + 1]
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia || '')) { console.error('Uso: tablero --auditoria <AAAA-MM-DD> [--modelos]'); process.exitCode = 1; return }
+  console.log(textoAuditoria(auditar(leerTranscripciones(dia), { dia, utc: args.includes('--utc') }), dia))
+  if (args.includes('--modelos')) {
+    const i = args.indexOf('--bitacora'), b = i >= 0 ? args[i + 1] : join(AQUI, '..', 'BITACORA.md')
+    console.log('\n' + (existsSync(b) ? textoModelos(porModelo(readFileSync(b, 'utf8'))) : 'Sin BITACORA.md en ' + b))
+  }
+}
+
 // Solo corre al ejecutarse como programa (los tests importan el parser sin generar nada).
 let esPrincipal = false
 try { esPrincipal = realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)) } catch {}
 if (!esPrincipal) { /* importado */ }
 else if (!existsSync(CONFIG) && (console.error('Falta proyectos.json: copia proyectos.ejemplo.json a proyectos.json y edítalo (ver README.md).'), true)) process.exitCode = 1
 else if (['--tareas', '--asignarme', '--estado'].some((f) => args.includes(f))) await tareasCli()
+else if (args.includes('--auditoria')) await auditoriaCli()
 else if (args.includes('--hook-inicio')) hookInicio()
 else if (args.includes('--servir')) servir()
 else if (args.includes('--probar-conexiones')) await probarConexiones()

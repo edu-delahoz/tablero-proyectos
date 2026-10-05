@@ -1,0 +1,23 @@
+{
+  "sesiones": [
+    {
+      "clave": "S3c", "titulo": "re-auditoría corta", "modelo": "Fable", "rama": "h3-personas-s2",
+      "seEspera": null,
+      "resultado": "APROBADA sin cambios obligatorios; notas I1–I5.",
+      "prompt": null, "hechas": 1, "total": 1, "subsesiones": [], "despues": null,
+      "tareas": [
+        { "hecha": true, "tipo": null, "llano": null, "tecnico": null }
+      ]
+    },
+    {
+      "clave": "S4a", "titulo": "fichas con la N:M", "modelo": "Sonnet", "rama": "h3-personas-s2",
+      "seEspera": null, "resultado": null,
+      "prompt": "Sesión S4a de BACKLOG_MVP.md. Lee la sección Estado + la de tu sesión. Rama `h3-personas-s2`.",
+      "hechas": 1, "total": 2, "subsesiones": [], "despues": null,
+      "tareas": [
+        { "hecha": true, "tipo": null, "llano": null, "tecnico": null },
+        { "hecha": false, "tipo": null, "llano": null, "tecnico": null }
+      ]
+    }
+  ]
+}

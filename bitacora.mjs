@@ -1,7 +1,7 @@
 // Bitácora de sesiones (BITACORA.md de metodologia-claude): parser, asociación a proyectos y
 // edición de una sola fila. Formato de fila: el que escribe ../registrar_sesion.sh (hook SessionEnd):
 // | Fecha | Tarea (sid8) | Modo | Modelo | ~N min | $X | ctx Ak→Bk 🟢 | Calidad | Seguridad | Notas |
-import { existsSync, readdirSync, statSync, openSync, readSync, closeSync } from 'node:fs'
+import { existsSync, readdirSync, statSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 
@@ -100,7 +100,9 @@ export function sidsPorProyecto(proyectos, dirTranscripciones, rutas = new Map()
   return mapa
 }
 
-// Primer `gitBranch` no vacío en las ~50 primeras líneas del .jsonl (o null). Cache por ruta y mtime.
+// Rama de la sesión: la más usada (líneas con `gitBranch`) en todo el .jsonl; las de tronco (develop/main/HEAD)
+// solo cuentan si no hay otra; empate → la primera que aparece. null si no hay ninguna. Cache por ruta y mtime.
+export const TRONCO = /^(main|master|develop|HEAD)$/
 const cacheRamas = new Map()
 export function ramaDeTranscripcion(ruta) {
   let mtime
@@ -109,18 +111,31 @@ export function ramaDeTranscripcion(ruta) {
   if (c && c.mtime === mtime) return c.rama
   let rama = null
   try {
-    const fd = openSync(ruta, 'r')
-    try {
-      const buf = Buffer.alloc(256 * 1024)
-      const n = readSync(fd, buf, 0, buf.length, 0)
-      for (const l of buf.toString('utf8', 0, n).split('\n').slice(0, 50)) {
-        const m = l.match(/"gitBranch"\s*:\s*"([^"]+)"/)
-        if (m) { rama = m[1]; break }
-      }
-    } finally { closeSync(fd) }
+    const cuenta = new Map()
+    for (const m of readFileSync(ruta, 'utf8').matchAll(/"gitBranch"\s*:\s*"([^"]+)"/g)) cuenta.set(m[1], (cuenta.get(m[1]) || 0) + 1)
+    const lista = [...cuenta].filter(([r]) => !TRONCO.test(r))
+    for (const [r, n] of lista.length ? lista : [...cuenta]) if (!rama || n > cuenta.get(rama)) rama = r
   } catch { rama = null }
   cacheRamas.set(ruta, { mtime, rama })
   return rama
+}
+
+// Feature de una fila: mapa explícito del proyecto (`features: { rama: 'Feature' }`) → prefijo `hN-` de la rama
+// («proyecto · HN») → en tronco o sin rama, el hito de la tarea (`BACKLOG_HN/…` o «hN» suelto) → si no, la rama
+// misma (o null si es tronco/sin rama: va a «sin rama»).
+export function featureDe(f, mapa = {}) {
+  const rama = f.rama || null
+  if (rama && mapa[rama]) return mapa[rama]
+  const hito = (n) => (f.proyecto ? `${f.proyecto} · H${n}` : `H${n}`)
+  const pref = rama && rama.match(/^h(\d+)[-_]/i)
+  if (pref) return hito(pref[1])
+  if (rama && !TRONCO.test(rama)) return rama
+  const t = String(f.tarea || '').match(/BACKLOG_H(\d+)\b|\bh(\d+)\b/i)
+  return t ? hito(t[1] || t[2]) : null
+}
+export const conFeatures = (registro, proyectos = []) => {
+  const mapas = new Map(proyectos.map((p) => [p.id, p.features || {}]))
+  return registro.map((f) => ({ ...f, feature: featureDe(f, mapas.get(f.proyecto) || {}) }))
 }
 
 export const asociar = (bit, mapa, rutas = new Map()) => ({
@@ -139,23 +154,29 @@ export function semanaISO(fecha) {
 // «Opus 5.5» → «Opus»; vacío → null.
 export const normalizarModelo = (m) => { const t = String(m ?? '').trim().replace(/[\s-]*v?\d+(?:[.,]\d+)*.*$/, ''); return t || null }
 
-// Agrega el registro por 'dia'|'semana'|'mes'|'rama'|'modelo' → { grupos: [{ clave, costo, minutos, sesiones }], excluidas }.
-// Se excluyen (y se cuentan en `excluidas`) las filas con costo «?» y, por tiempo, las de fecha incompleta;
-// por rama, las sin rama. Orden: por clave en fechas; por costo descendente en rama/modelo.
+// Agrega el registro por 'dia'|'semana'|'mes'|'rama'|'feature'|'modelo' → { grupos: [{ clave, costo, minutos, sesiones }], excluidas }.
+// Se excluyen (y se cuentan en `excluidas`) las filas con costo «?» y, por tiempo, las de fecha incompleta.
+// Por rama/feature nada más se excluye: lo que no tiene va a «sin rama»; en feature cada grupo trae `ramas` (desglose).
+// Orden: por clave en fechas; por costo descendente en el resto.
+export const SIN_RAMA = 'sin rama'
 export function agregar(registro, { por }) {
   const tiempo = { dia: (f) => f, semana: semanaISO, mes: (f) => f.slice(0, 7) }[por]
-  if (!tiempo && por !== 'rama' && por !== 'modelo') throw new Error(`agregar: «por» desconocido (${por})`)
+  if (!tiempo && !['rama', 'feature', 'modelo'].includes(por)) throw new Error(`agregar: «por» desconocido (${por})`)
   const grupos = new Map()
   let excluidas = 0
   for (const f of registro) {
     const fecha = (String(f.fecha).match(/^\d{4}-\d{2}-\d{2}/) || [])[0]
-    const clave = tiempo ? (fecha && tiempo(fecha)) : por === 'rama' ? f.rama : normalizarModelo(f.modelo)
+    const clave = tiempo ? (fecha && tiempo(fecha)) : por === 'rama' ? f.rama || SIN_RAMA
+      : por === 'feature' ? ('feature' in f ? f.feature : featureDe(f)) || SIN_RAMA : normalizarModelo(f.modelo)
     if (!clave || f.costo == null) { excluidas++; continue }
-    const g = grupos.get(clave) || { clave, costo: 0, minutos: 0, sesiones: 0 }
+    const g = grupos.get(clave) || { clave, costo: 0, minutos: 0, sesiones: 0, ...(por === 'feature' && { ramas: new Map() }) }
     g.costo += f.costo; g.minutos += f.minutos ?? 0; g.sesiones++
+    if (g.ramas) { const r = g.ramas.get(f.rama || SIN_RAMA) || { clave: f.rama || SIN_RAMA, costo: 0, sesiones: 0 }; r.costo += f.costo; r.sesiones++; g.ramas.set(r.clave, r) }
     grupos.set(clave, g)
   }
-  const lista = [...grupos.values()].map((g) => ({ ...g, costo: Math.round(g.costo * 100) / 100 }))
+  const redondo = (n) => Math.round(n * 100) / 100
+  const lista = [...grupos.values()].map((g) => ({ ...g, costo: redondo(g.costo),
+    ...(g.ramas && { ramas: [...g.ramas.values()].map((r) => ({ ...r, costo: redondo(r.costo) })).sort((a, b) => b.costo - a.costo) }) }))
   lista.sort(tiempo ? (a, b) => a.clave.localeCompare(b.clave) : (a, b) => b.costo - a.costo)
   return { grupos: lista, excluidas }
 }

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer, request } from 'node:http'
+import vm from 'node:vm'
 
 const dir = mkdtempSync(join(tmpdir(), 'tablero-srv-'))
 const BACKLOG = join(dir, 'BACKLOG_PRUEBA.md')
@@ -35,6 +36,11 @@ process.env.TABLERO_DATOS = join(dir, 'datos')
 // Credenciales: siempre un archivo del temporal, nunca ~/.config/tablero.
 const CRED = join(dir, 'config', 'credenciales.json')
 process.env.TABLERO_CREDENCIALES = CRED
+// Metodología (S50): repo de mentira y un settings.json con un secreto en el home temporal.
+process.env.TABLERO_METODOLOGIA_REPO = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'metodologia', 'repo')
+mkdirSync(join(dir, '.claude', 'hooks'), { recursive: true })
+writeFileSync(join(dir, '.claude', 'hooks', 'vigilar_contexto.sh'), '')
+writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify({ env: { API_KEY: 'sk-SECRETO-SRV' }, hooks: { PostToolUse: [{ hooks: [{ type: 'command', command: '~/.claude/hooks/vigilar_contexto.sh' }] }] } }))
 
 const fuera = new Map([['E1', { id: 'E1', titulo: 'Desde afuera', hecha: false, columna: 'Todo', url: 'https://x/E1' }]])
 let n = 0
@@ -565,7 +571,7 @@ test('crear backlog: sin docs, nombre con ruta o fuera del patrón → 400; exis
   assert.equal(pv.estado, 200, pv.json.error)
   assert.equal(pv.json.archivo, 'BACKLOG.md')
   assert.match(pv.json.contenido, /^# Backlog — Nuevo\n\n## Estado\n- \d{4}-\d{2}-\d{2} · /)
-  assert.match(pv.json.contenido, /\n## S1 — .*\nHistoria: .*\n- \[ \] /)
+  assert.match(pv.json.contenido, /\n## H1 — .*\nHistoria: .*\n\n### S1 — .*\nSe espera: .*\n- \[ \] .+ — /)
   assert.ok(!existsSync(join(docsNuevo, 'BACKLOG.md')))
   const r = await post('/api/backlog/crear', { proyecto: 'nuevo' })
   assert.equal(r.estado, 200, r.json.error)
@@ -801,4 +807,62 @@ test('participar (S37): asignar y estado solo en «participar» (400 en lectura/
   assert.equal(readFileSync(CONF, 'utf8'), antesConf)
   assert.equal(readFileSync(BACKLOG, 'utf8'), antesMd)
   assert.ok(!existsSync(join(dir, 'datos', 'sync-part-ado.json')))
+})
+
+test('vista del formato: llano visible, técnico desplegable, «Se espera» frente a «Resultado», etiquetas y prompt siguiente', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  for (const marca of ['function casillaFormato', 'class="llano"', 'class="tecnico"', 'Se espera', 'Resultado', 'function bloqueEspera', 'class="etq-formato"', 'Épica', 'Historia', 'Tarea', 'data-copiar', 'bloqueEspera(']) assert.ok(html.includes(marca), `falta «${marca}» en la vista`)
+})
+
+test('vista del formato: la casilla legada (sin « — ») se muestra como hoy', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  assert.ok(/function casillaFormato[\s\S]{0,600}if \(!f\) return inline\(/.test(html), 'casillaFormato debe devolver el texto de siempre si no hay « — »')
+  assert.ok(html.includes('class="prompt-siguiente"'), 'el prompt siguiente va en un sitio fijo')
+})
+
+test('metodología (S50): GET /api/metodologia da el grafo sin secretos ni rutas del home', async () => {
+  const r = await fetch(`http://127.0.0.1:${puerto}/api/metodologia`)
+  assert.equal(r.status, 200)
+  const t = await r.text()
+  const g = JSON.parse(t)
+  assert.ok(g.etapas.length === 6 && g.piezas.length > 15)
+  assert.equal(g.piezas.find((p) => p.id === 'hook:vigilar_contexto.sh').estado, 'activa')
+  assert.ok(g.proyectos.some((p) => p.id === 'prueba' && p.conectado), '«prueba» tiene sesiones en TABLERO_TRANSCRIPCIONES')
+  assert.ok(g.piezas.find((p) => p.id === 'bitacora').proyectos.includes('prueba'))
+  assert.doesNotMatch(t, /SECRETO|API_KEY/)
+  assert.ok(!t.includes(dir), 'rutas del home con ~')
+  const ajeno = await new Promise((ok, mal) => request({ host: '127.0.0.1', port: puerto, path: '/api/metodologia', headers: { host: `evil.com:${puerto}` } }, (x) => { x.resume(); ok(x.statusCode) }).on('error', mal).end())
+  assert.equal(ajeno, 403)
+})
+
+// Metodología viva (S51): la pestaña dibuja el flujo con los datos de /api/metodologia.
+function funcionDe(html, nombre) {
+  const i = html.indexOf(`function ${nombre}(`)
+  assert.ok(i >= 0, `falta function ${nombre} en plantilla.html`)
+  const f = html.indexOf('\n}\n', i)
+  return html.slice(i, f + 2)
+}
+test('metodología (S51): la pestaña pinta un nodo por etapa con su estado y el detalle de la pieza', async () => {
+  const html = await (await fetch(`http://127.0.0.1:${puerto}/`)).text()
+  assert.ok(/\['metodologia', 'Metodolog[ií]a'\]/.test(html), 'pestaña «Metodología» en PESTANAS')
+  assert.ok(html.includes('/api/metodologia'), 'la vista pide /api/metodologia')
+  assert.ok(/metodologia:\s*vistaMetodologia/.test(html), 'registrada en VISTAS')
+  const g = await (await fetch(`http://127.0.0.1:${puerto}/api/metodologia`)).json()
+  const ctx = { esc: (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]) }
+  vm.createContext(ctx)
+  vm.runInContext(funcionDe(html, 'htmlMetodologia'), ctx)
+  const pieza = g.piezas.find((p) => p.id === 'bitacora')
+  const out = ctx.htmlMetodologia(g, pieza.id)
+  assert.match(out, /<svg/, 'flujo en SVG en línea')
+  for (const e of g.etapas) {
+    assert.ok(out.includes(`data-etapa="${e.id}"`), `nodo de la etapa ${e.id}`)
+    assert.match(out, new RegExp(`data-etapa="${e.id}"[^>]*class="[^"]*\\bnodo-${{ ok: 'verde', parcial: 'ambar', falta: 'rojo' }[e.estado]}\\b`), `${e.id} en ${e.estado}`)
+  }
+  assert.ok(out.includes(pieza.descripcion.slice(0, 20)), 'qué hace la pieza elegida')
+  assert.ok(out.includes('prueba'), 'proyectos que la usan')
+  for (const est of ['activa', 'instalada', 'falta']) {
+    const p = g.piezas.find((x) => x.estado === est)
+    if (p) assert.match(ctx.htmlMetodologia(g, p.id), new RegExp(`pieza-${{ activa: 'verde', instalada: 'ambar', falta: 'rojo' }[est]}`), `pieza ${est}`)
+  }
+  assert.match(out, /class="meta-lista"/, 'lista vertical para móvil')
 })

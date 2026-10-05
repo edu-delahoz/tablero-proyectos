@@ -1,0 +1,25 @@
+{
+  "sesiones": [
+    {
+      "clave": "E5b", "titulo": "Costo por feature: no perder sesiones y sumar ramas hermanas", "modelo": "Opus", "rama": null,
+      "seEspera": null,
+      "resultado": "casi nada sale del total; el problema es atribución.",
+      "prompt": null, "hechas": 2, "total": 3, "subsesiones": [], "despues": null,
+      "tareas": [
+        { "hecha": true, "tipo": null, "llano": null, "tecnico": null },
+        { "hecha": true, "tipo": null, "llano": null, "tecnico": null },
+        { "hecha": false, "tipo": null, "llano": null, "tecnico": null }
+      ]
+    },
+    {
+      "clave": "S41", "titulo": "Conector Trello: URL del tablero y «mías»", "modelo": "Sonnet", "rama": null,
+      "seEspera": null, "resultado": null,
+      "prompt": "Lee `BACKLOG.md` (Estado + H15/S41) y trabaja solo esa sesión en la rama `trello-vista-previa`. Al terminar, ejecuta /relevo.",
+      "hechas": 0, "total": 2, "subsesiones": [], "despues": null,
+      "tareas": [
+        { "hecha": false, "tipo": null, "llano": null, "tecnico": null },
+        { "hecha": false, "tipo": null, "llano": null, "tecnico": null }
+      ]
+    }
+  ]
+}

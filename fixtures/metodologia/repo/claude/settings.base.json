@@ -1,0 +1,105 @@
+{
+  "model": "sonnet",
+  "theme": "dark",
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  },
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/metodologia/registrar_sesion.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/tablero/generar.mjs\" --silencioso",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "s=\"$HOME/.claude/session-metrics/.ultimo-resumen\"; if [ ! -f \"$s\" ] || [ -n \"$(find \"$s\" -mmin +10080 2>/dev/null)\" ]; then \"$HOME/.claude/metodologia/resumen_semanal.sh\" >/dev/null 2>&1 & fi; exit 0",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/tablero/generar.mjs\" --hook-inicio",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/vigilar_contexto.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/acotar_lectura.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/tablero/verificar_backlog.mjs\" --hook",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/acotar_lectura.mjs\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/acotar_lectura.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "session-report@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    }
+  },
+  "env": {
+    "CLAUDE_CODE_PLUGIN_DIRS": ""
+  }
+}
