@@ -439,7 +439,8 @@ nav#pestanas button[aria-current="page"]::before, nav#pestanas button[aria-curre
 .k-tarjeta.guardando { opacity: .55; }
 .k-pie { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-top: 4px; font-size: .85em; }
 .k-pie select { font: inherit; max-width: 100%; }
-.k-tarjeta.sesion { cursor: pointer; }
+.k-tarjeta.sesion { display: block; cursor: pointer; }
+.k-tarjeta.sesion .k-etq { white-space: nowrap; }
 .k-tarjeta.sesion.abierta { outline: 2px solid var(--acento); }
 .ci-punto { display: inline-block; width: .7em; height: .7em; border-radius: 50%; background: var(--suave); }
 .ci-ok { background: var(--verde, #2a9d4a); } .ci-mal { background: var(--rojo, #d1342f); } .ci-espera { background: var(--ambar, #d9a21b); }
@@ -1770,7 +1771,7 @@ function vistaKanban() {
     ${hitos.length > 1 ? `<label>Hito <select data-k-filtro="hito"><option value="">Todos</option>${hitos.map((h) => `<option${kf.hito === h ? ' selected' : ''}>${esc(h)}</option>`).join('')}</select></label>` : ''}
     ${backs.length > 1 ? `<label>Backlog <select data-k-filtro="backlog"><option value="">Todos</option>${backs.map((h) => `<option${kf.backlog === h ? ' selected' : ''}>${esc(h)}</option>`).join('')}</select></label>` : ''}
     ${nMov ? `<label><input type="checkbox" data-k-filtro="movidas"${kf.movidas ? ' checked' : ''}> ver movidas (${nMov})</label>` : ''}
-    <span class="suave">${editable() ? 'Arrastra una tarjeta o usa «Mover a…».' : 'Abre el tablero con el servidor para mover tarjetas.'}</span></div>
+    <span class="suave">${editable() ? 'Toca una sesión para ver su prompt y sus casillas.' : 'Abre el tablero con el servidor para ver commits y marcar casillas.'}</span></div>
   ${visibles.length ? '' : `<div class="k-vacio" role="status">Ninguna sesión con ${[kf.hito && `el hito ${esc(kf.hito)}`, kf.backlog && `el backlog ${esc(kf.backlog)}`].filter(Boolean).join(' y ')}. Cambia o quita un filtro.</div>`}
   <div class="k-cols">${KCOLS.map(col).join('')}</div>${abierta ? panelSesion(abierta, kDetalle.get(kClave(abierta)), gastoSesion(abierta)) : ''}
   ${kf.movidas && movidas.length ? `<h3>Movidas</h3>${movidas.map(tarjetaKanban).join('')}` : ''}`;

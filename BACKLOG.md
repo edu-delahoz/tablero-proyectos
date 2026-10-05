@@ -137,7 +137,7 @@ Se espera: En la pestaña Tablero cada tarjeta es una sesión con una línea en 
 - [x] Panel de detalle al tocar la tarjeta — `plantilla.html`: lateral (pantalla completa ≤700px), orden prompt → Se espera/Resultado → casillas marcables (`POST /api/guardar`) → rama/PR/CI → commits y archivos (`/api/sesion-detalle` al abrir) → costo/tiempo (reusar `gasto` de `enCurso`)
 - [x] Filtros en cascada — `plantilla.html`: elegir hito limita los backlogs; combinación vacía lo dice
 - [x] Prompt actual a la vista — `plantilla.html`: botón «⧉ Prompt de SX» junto a «❯ estás aquí» (`:727`, `:799`, tarjetas de `:1840`) y arriba en `tarjetaEnCurso` (`:2015`)
-- [-] Mirarlo en el navegador con datos del IEP → S54b — 1200 y 390 px; `node --test 2>&1 | tail -40` en verde
+- [x] Mirarlo en el navegador con datos del IEP (hecho en S54b) — 1200 y 390 px; `node --test 2>&1 | tail -40` en verde
 Resultado: parcial. Tarjeta, panel, cascada de filtros y «⧉ Prompt de SX» hechos; `node --test` 338 ok / 0 fallos. Sin revisar en navegador (1200/390 px) — queda esa casilla. Se quitó el arrastre y «Mover a…» de las sesiones (tests viejos ajustados); los manejadores de arrastre quedan inertes.
 Prompt:
 ```text
@@ -152,8 +152,9 @@ Decisiones con Eduardo: motor = Claude Code local (`claude -p`, solo lectura, su
 
 ### S54b — Kanban por sesión: revisión visual · **Sonnet** · rama `kanban-sesiones` · ~25k
 Se espera: El Tablero del IEP se ve bien a 1200 y 390 px: tarjetas legibles, panel lateral (pantalla completa en móvil), «Copiar» funciona y el botón «Prompt de SX» aparece. Se comprueba abriendo el tablero con el servidor y mirando ambas anchuras.
-- [ ] [doc] Mirarlo con datos del IEP — abrir el tablero local, pestaña Tablero del IEP, 1200 y 390 px; anotar lo que falle como casillas «(añadido en S54b)»
-- [ ] [fix] Corregir lo que se vea mal — `plantilla.html` CSS `.k-panel`, `.k-tarjeta.sesion`; `node --test 2>&1 | tail -40` en verde
+- [x] [doc] Mirarlo con datos del IEP — abrir el tablero local, pestaña Tablero del IEP, 1200 y 390 px; anotar lo que falle como casillas «(añadido en S54b)»
+- [x] [fix] Corregir lo que se vea mal — `plantilla.html` CSS `.k-panel`, `.k-tarjeta.sesion`; `node --test 2>&1 | tail -40` en verde
+Resultado: revisado con Chrome headless a 1200 y 390 px: panel lateral (pantalla completa en móvil), «Copiar» y «Prompt de S3b» funcionan. Fallo hallado y corregido: otra regla `.sesion` daba `display:inline-flex` a la tarjeta y el pie quedaba en columna estrecha; ahora `display:block` y chips `nowrap`. Rótulo viejo «Arrastra una tarjeta…» cambiado. Suite 338 pasan, 2 omitidos.
 Prompt:
 ```text
 Modelo: Sonnet. Sesión S54b de /Users/edudelahoz/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (lee «Estado» con `grep -n` y tu sección con `node ~/Desktop/Desarrollo/metodologia-claude/tablero/backlog.mjs seccion S54b BACKLOG.md`). Rama `kanban-sesiones`. Plugins/MCP: ninguno. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
