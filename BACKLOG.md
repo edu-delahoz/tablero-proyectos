@@ -1,6 +1,8 @@
 # Backlog — Tablero de proyectos
 
 ## Estado
+- 2026-10-19 · S66 cerrada (Opus) · rama `backlog-worktrees` (sale de `develop`), PR #26 abierto (sin mergear) · Squalo mostraba H1 como «en curso» porque el tablero leía rama y backlog de la carpeta principal del repo, quieta 10 días en `perf/causa-global`. Nuevo `worktrees.mjs`: de cada backlog toma la copia más reciente entre los worktrees y la rama es la del último commit; lo usan `generar.mjs` y `verificar_backlog.mjs`. Tests primero (fallaban 5 de 5); suite 400 pasan / 1 falla (`CLI --auditoria`, que ya fallaba en `develop` sin el cambio). Parche mientras tanto: en `proyectos.json` (ignorado por git), `docs` de Squalo apunta a `squalo-app/.claude/merge-develop/docs`. Trampas: (1) abrir el PR con gh por GraphQL dio «rate limit» aunque quedaba cupo; se abrió por REST (`gh api repos/…/pulls`). (2) Con el parche, el hook de PR revisa el backlog de `develop`, donde las sesiones de una rama sin mergear siguen abiertas: puede bloquear falsamente abrir PRs en Squalo hasta S66b. (3) El hook de PR salta si el texto de un comando contiene la orden de crear PR (aunque sea dentro de un heredoc). Siguiente: **S66b**.
+- Para retomar (2026-10-19): el tablero ya sabe leer el backlog del worktree donde de verdad se trabaja, no de la carpeta principal que se queda atrasada; el arreglo está en un PR sin mergear. Mientras tanto, Squalo se ve bien gracias a un parche en la configuración que apunta al worktree de develop. Falta mergear, traer el cambio a la carpeta del tablero que sirve la página y quitar el parche.
 - 2026-10-05 · S64 cerrada (Opus) · PR #20 tablero y #5 `metodologia-claude-code` mergeados · E2 explicada: 26 de 27 avisos de `acotar_lectura` son imágenes → definida **E2b**; arreglado el falso aviso de `vigilar_prompt` tras `/clear` (18 tests; suite 385 pasan / 0 fallan / 2 omitidos). Prueba manual → **S65**. Trampa: otra sesión trabaja en el checkout `tablero/` (rama `oficina-pixel`); E2b va en el worktree `../.wt-e2b`. Si faltan datos para la suite en el worktree, copiar `proyectos.json` del checkout principal (trampa de S58). Decisión de Eduardo: S65, S61b, E2 (revisión) y S63 quedan para otro día; hoy solo E2b.
 - Para retomar (2026-10-05): el aviso de «este prompt parece de otra sesión» está terminado y ya no salta después de un /clear; falta que Eduardo lo pruebe a mano cuando quiera. Lo siguiente es que el vigilante de lecturas grandes deje de quejarse por las capturas de pantalla, que hoy son casi todos sus avisos; va en una copia aparte del repo porque otra ventana trabaja la oficina pixel. Después, cuando haya días de datos, se decide si ese vigilante pasa a bloquear.
 - 2026-10-05 · rama `alerta-prompt` (sale de `develop` con el PR #19) · S62 hecha salvo la prueba real en ventana nueva: hook `vigilar_prompt.mjs` instalado (symlink + `UserPromptSubmit`), tests primero (fallaban 17 de 17, ahora pasan); suite 384 pasan / 0 fallan / 2 omitidos, formato OK. Commits locales sin push ni PR (también en `metodologia-claude-code`, rama `oficina-agentes`).
@@ -143,6 +145,27 @@
 - 2026-10-04 · rama `busqueda-favoritos` (sale de `backlog-coherencia`) · S6 hecha: búsqueda en Backlogs/Planes y sesiones favoritas (`POST /api/favoritos`). Pendiente: PR y que el usuario la pruebe en el tablero real (`node generar.mjs --abrir`).
 - 2026-10-04 · rama `bitacora` (sale de `mejoras-ui`, aún sin fusionar en `main`) · S3 hecha: `bitacora.mjs` (parser, asociación por sid, `editarFila`), `datos.proyectos[i].bitacora`, `POST /api/bitacora`. Pendiente de `mejoras-ui`: comprobar en el navegador y fusionar. Siguiente: S4 en `bitacora`.
 - `integraciones` sigue sin fusionar en `main`; `mejoras-ui` sale de `backlog-mejoras` para tener este backlog y el código de integraciones.
+
+## H24 — El tablero sigue el trabajo en los worktrees (2026-10-19)
+Historia: Como Eduardo, quiero que el tablero muestre el backlog y la rama donde de verdad estoy trabajando aunque sea en un worktree, para no ver como «en curso» un hito viejo.
+Origen: captura de Squalo (2026-10-19) con H1 «en curso» al 52 % mientras se trabajaba el H5 en `.claude/worktrees/mis-tiempos`. Plugins/MCP: ninguno.
+
+### S66 — Backlogs y rama activa a través de los worktrees · **Opus** · rama `backlog-worktrees` (sale de `develop`) · ~40k
+Se espera: Con `docs` apuntando a la carpeta principal de un repo con worktrees, el tablero y `verificar_backlog` leen la copia más reciente de cada backlog y la cabecera muestra la rama del último commit. Se comprueba con `worktrees.test.mjs` y con el repo real de Squalo.
+Resultado (2026-10-19, Opus): hecho. Con la configuración vieja de Squalo toma `.claude/worktrees/mis-tiempos/docs/BACKLOG.md` en `feat/vte-alertas` y desaparecen los 3 avisos falsos (P3, P4, C1). PR #26 abierto, sin mergear.
+- [x] [test] Pruebas de worktrees, vistas fallar — `worktrees.test.mjs`: 5 casos con un repo temporal y un worktree anidado (fallaban 5 de 5)
+- [x] [código] Copia más reciente de cada backlog y rama activa — `worktrees.mjs` (`worktreesDe`, `copiasDe`, `archivosVivos`, `ramaActiva`); `generar.mjs` `leerBacklogs`, rama de la cabecera y vigilante de cambios; `verificar_backlog.mjs` `leerBacklogs`
+- [x] [entrega] PR hacia `develop` — #26 (por REST: GraphQL limitado)
+
+### S66b — Mergear, llevar al tablero en uso y quitar el parche · **Sonnet** · rama `backlog-worktrees` · ~20k
+Se espera: El tablero que sirve la página (carpeta `tablero/`) ya trae `worktrees.mjs` y Squalo sigue mostrando el H5 con `docs` de vuelta en `squalo-app/docs`. Se comprueba recargando el tablero y con `node verificar_backlog.mjs --todo ~/Desktop/Desarrollo/SQUALO/squalo-app` sin avisos falsos.
+- [ ] [entrega] Mergear el PR #26 a `develop` cuando Eduardo lo apruebe — merge local `--no-ff` o el que use este repo; borrar el worktree `../.wt-backlog-worktrees`
+- [ ] [entrega] Traer el cambio a la carpeta `tablero/` — hoy está en `relevo-barato` (1 commit sin mergear, E2c): preguntar a Eduardo si mergear `relevo-barato` primero o hacer `git merge develop` en ella; reiniciar `generar.mjs --servir` (los hooks también corren desde esa carpeta)
+- [ ] [config] Quitar el parche — `proyectos.json`: `docs` de `squalo-app` vuelve a `~/Desktop/Desarrollo/SQUALO/squalo-app/docs`; comprobar en el tablero que sale el H5 y la rama de trabajo actual
+Prompt:
+```text
+Modelo: Sonnet. Sesión S66b del backlog del tablero. Lee ~/Desktop/Desarrollo/metodologia-claude/tablero/BACKLOG.md (node ~/.claude/tablero/backlog.mjs arranque S66b <ruta>) y trabaja solo esa sesión. Pide OK a Eduardo antes de mergear. Al terminar, o si recibes el aviso de contexto, ejecuta /relevo.
+```
 
 ## H23 — Pendientes de las pruebas de Eduardo (2026-10-05)
 Historia: Como Eduardo, quiero que lo que noté al probar Tablero, Estudio, Oficina y móvil quede anotado, para atenderlo cuando toque y no ahora.
