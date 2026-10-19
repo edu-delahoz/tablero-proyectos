@@ -8,13 +8,14 @@
 //   node verificar_backlog.mjs --formato [carpeta] → lo que no cumple FORMATO_BACKLOG.md en las sesiones abiertas
 //                                           (sin «Se espera», casilla sin « — », sin prompt). Exit 1 si hay algo.
 // Escape legítimo: marcar la casilla `[-]` con nota («→ pasa a S5b») si se movió o descartó.
-import { readFileSync, existsSync, readdirSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { bloqueosDeRama, desajustes, describir } from './coherencia.mjs'
 import { avisosFormato } from './formato.mjs'
+import { archivosVivos } from './worktrees.mjs'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const CONFIG = process.env.TABLERO_PROYECTOS || join(AQUI, 'proyectos.json')
@@ -31,7 +32,8 @@ export function leerBacklogs(p) {
   const lista = []
   for (const dir of p.docs || []) {
     if (!existsSync(dir)) continue
-    for (const f of readdirSync(dir)) if (patron.test(f)) lista.push({ archivo: f, ruta: join(dir, f), contenido: readFileSync(join(dir, f), 'utf8') })
+    // La copia más reciente de cada backlog entre los worktrees del repo, como el tablero.
+    for (const { archivo, ruta } of archivosVivos(dir, patron, p.repo)) lista.push({ archivo, ruta, contenido: readFileSync(ruta, 'utf8') })
   }
   return lista
 }

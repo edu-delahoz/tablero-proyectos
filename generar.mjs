@@ -27,6 +27,7 @@ import { parsearBitacora, sidsPorProyecto, asociar, conFeatures, editarFila, has
 import { modeloPlanDe, modeloDistinto } from './metricas_jsonl.mjs'
 import { semaforoLlamadas, semaforoCtx, eficienciaDe } from './eficiencia.mjs'
 import { metodologia } from './metodologia.mjs'
+import { worktreesDe, copiasDe, archivosVivos, ramaActiva } from './worktrees.mjs'
 import { estadoOficina, VIGENCIA, sesionDe, etiquetaDe, aparienciaDe, distribuirOficina } from './oficina.mjs'
 import { MARCA_ESTUDIO, argsEstudio, promptEstudio, preguntaDe, lanzarEstudio, sesionValida, rutaGuia, anadirAGuia } from './estudio.mjs'
 
@@ -716,15 +717,14 @@ function seccionEstado(texto) {
 }
 function leerBacklogs(p) {
   const patron = new RegExp(p.patronBacklogs || '^BACKLOG.*\\.md$', 'i')
-  const lista = []
+  const lista = [], worktrees = worktreesDe(p.repo)
   for (const dir of p.docs) {
     if (!existsSync(dir)) continue
-    for (const f of readdirSync(dir)) {
-      if (!patron.test(f)) continue
-      const ruta = join(dir, f)
+    // De cada backlog, la copia más reciente entre los worktrees del repo (la carpeta principal puede ir atrasada).
+    for (const { archivo: f, ruta, rama } of archivosVivos(dir, patron, p.repo, worktrees)) {
       const contenido = readFileSync(ruta, 'utf8')
       lista.push({
-        archivo: f, ruta, modificado: statSync(ruta).mtime.toISOString(), contenido,
+        archivo: f, ruta, ramaCopia: rama, modificado: statSync(ruta).mtime.toISOString(), contenido,
         ...contarCasillas(contenido), estado: seccionEstado(contenido), esPlan: /^PLAN/i.test(f),
       })
       const ult = lista.at(-1)
@@ -900,7 +900,7 @@ function leerGit(p) {
     const [oid, padres, fecha, autor, titulo, refs] = l.split('\x1f')
     return { oid, padres: padres ? padres.split(' ') : [], fecha, autor, titulo, refs }
   })
-  const rama = (sh('git', ['branch', '--show-current'], p.repo) || '').trim()
+  const rama = ramaActiva(p.repo) // la del worktree con el último commit, no la de la carpeta principal
   const sinPush = (sh('git', ['log', '--branches', '--not', '--remotes', '--pretty=%H'], p.repo) || '').split('\n').filter(Boolean)
   // Ramas locales sin fusionar en la principal (origin/HEAD, si no main): las casillas hechas en ellas van «En prueba».
   const principal = principalDe(p.repo)
@@ -1607,7 +1607,8 @@ function huella() {
   ver(rutaFavoritos())
   for (const p of proyectos) {
     const patron = new RegExp(p.patronBacklogs || '^BACKLOG.*\\.md$', 'i')
-    for (const d of p.docs) carpeta(d, (f) => patron.test(f))
+    const wts = worktreesDe(p.repo)
+    for (const d of p.docs) for (const c of copiasDe(d, wts)) carpeta(c.dir, (f) => patron.test(f))
     if (p.notas) ver(p.notas)
     if (p.bitacora) ver(expandir(p.bitacora))
     if (p.repo) {
